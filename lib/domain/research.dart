@@ -1,3 +1,4 @@
+import 'assistant.dart';
 import 'odds.dart';
 
 /// Fixed teaching fixture, not a live event or calibrated predictive model.
@@ -104,12 +105,16 @@ class SavedResearch {
     required this.assumptions,
     this.name = '',
     this.context = const ResearchContext(),
+    this.assistant,
   });
   final DateTime savedAt;
   final String thesis;
   final ResearchAssumptions assumptions;
   final String name;
   final ResearchContext context;
+
+  /// Model commentary. Never mixed into [thesis] or [assumptions].
+  final AssistantNote? assistant;
   double get ev => assumptions.evAt(context.price);
   String get title => name.isEmpty ? context.label : name;
   Map<String, dynamic> toJson() => {
@@ -129,6 +134,7 @@ class SavedResearch {
     'winProbability': assumptions.probability,
     'expectedValue': ev,
     'assumptions': assumptions.toJson(),
+    if (assistant != null) 'assistant': assistant!.toJson(),
   };
   factory SavedResearch.fromJson(Map<String, dynamic> j) {
     if (j['schema'] == 2) {
@@ -144,6 +150,11 @@ class SavedResearch {
         name: j['name'] ?? '',
         assumptions: ResearchAssumptions.fromJson(j['assumptions']),
         context: ResearchContext.fromJson(j['context']),
+        assistant: j['assistant'] == null
+            ? null
+            : AssistantNote.fromJson(
+                Map<String, dynamic>.from(j['assistant'] as Map),
+              ),
       );
       if (result.name.length > 100 || result.thesis.length > 1000) {
         throw const FormatException('Research text too long');

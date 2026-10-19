@@ -70,3 +70,45 @@ totals and the previous three completed seasons. Regular season and postseason
 stay distinct. Totals/averages show observed-statistic counts and unavailable
 history stays explicit. Source and refresh details: [Player explorer](docs/PLAYER_STATS.md).
 
+## Transparent research assistant
+
+Proof Lab can explain or challenge the research on screen. The wording is
+labeled AI-generated and is saved apart from your notes and assumptions. The
+Windows and iOS app never calls xAI and never holds the key. Only the backend
+reads `XAI_API_KEY`.
+
+You can ignore this feature. Odds research still runs, and the panel then says
+assistant unavailable.
+
+When you want it, create an API key at <https://console.x.ai/>. Using the key
+can create charges on your xAI account. Then open PowerShell and run these
+commands. Replace the quoted key with the one you copied. The first command
+moves into the project folder. The second remembers the key only until you
+close this window. The third starts the backend:
+
+```powershell
+cd C:\Users\vince\development\odds_edge
+$env:XAI_API_KEY = "paste-your-key-here"
+$env:XAI_MODEL = "grok-4.7"
+& C:\Users\vince\flutter\bin\dart.bat run backend/server.dart
+```
+
+Leave the window open while you use the app. You should see a line that the
+research assistant is configured. It does not print the key. `XAI_MODEL` is
+optional; without it the server uses `grok-4.7`.
+
+In the app, choose **Connect local backend**, open Proof Lab, and use
+**Explain / challenge this research**. Ask it to explain or challenge the
+frozen quote, your assumptions, and any team or player evidence that screen
+was given. It is not supposed to invent statistics or promise a winning bet.
+
+If you would rather not paste the key every time, search Windows Settings for
+"environment variables", open **Environment Variables**, and add a user
+variable named `XAI_API_KEY`. Close PowerShell, open it again, and run only
+the `cd` and `dart.bat` commands above. A user variable is readable by anyone
+who can sign in to this Windows account. Do not put the key in the project
+folder, in the Flutter app, or in a message.
+
+More route detail is in `backend/README.md`. Copy `.env.example` only as a
+reminder of the names; do not commit a file that contains the real key.
+
