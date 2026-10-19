@@ -151,7 +151,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
     super.dispose();
   }
 
-  Future<void> refresh() async {
+  Future<void> refresh({bool onDemand = false}) async {
     if (loading) return;
     setState(() {
       loading = true;
@@ -159,7 +159,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
     });
     try {
       final next = backend
-          ? await repository.board()
+          ? await repository.board(refresh: onDemand)
           : demoBoard(DateTime.now().toUtc());
       if (!mounted) return;
       setState(() {
@@ -198,6 +198,17 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
   bool get inPlay => event != null && !event!.startsAt.isAfter(now);
   String stamp(DateTime time) =>
       '${time.toUtc().toIso8601String().replaceFirst('T', ' ').split('.').first} UTC';
+  String quoteFreshness(OddsQuote quote) {
+    if (error != null) return 'connection lost';
+    final value = quote.freshness(now, inPlay: inPlay);
+    if (!board.demo && value == 'stale') return 'snapshot';
+    return value;
+  }
+
+  bool canResearch(OddsQuote quote) =>
+      error == null &&
+      (quote.eligible(now, inPlay: inPlay) ||
+          quoteFreshness(quote) == 'snapshot');
   String pct(double p) => '${(p * 100).toStringAsFixed(1)}%';
 
   @override
@@ -323,7 +334,9 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                               if (page != 4)
                                 IconButton(
                                   tooltip: 'Refresh odds',
-                                  onPressed: loading ? null : refresh,
+                                  onPressed: loading
+                                      ? null
+                                      : () => refresh(onDemand: true),
                                   icon: loading
                                       ? const SizedBox(
                                           width: 18,
@@ -521,9 +534,14 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
         ),
         const SizedBox(height: 8),
         Text(
+          'Snapshot as of ${stamp(board.fetchedAt)}',
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 4),
+        Text(
           board.demo
-              ? 'Synthetic NFL fixtures and odds · no live feed or predictive model connected.'
-              : 'Current means source and collection ages ≤120s before kickoff or ≤20s after kickoff. This is not a real-time guarantee.',
+              ? 'Synthetic NFL fixtures and odds · no live feed or predictive model connected. This sample is a snapshot, not a live stream.'
+              : 'These odds are a saved snapshot, not a live stream. A quote counts as current only when the sportsbook time and our collection time are both within 120 seconds before kickoff or 20 seconds after kickoff.',
           style: const TextStyle(color: Colors.white60, fontSize: 12),
         ),
         if (preferenceNotice != null)
@@ -562,6 +580,8 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       return error == null &&
           q.eligible(now, inPlay: e != null && !e.startsAt.isAfter(now));
     }).length;
+    final showingSnapshot =
+        !board.demo && eligible == 0 && board.quotes.isNotEmpty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -588,9 +608,17 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                 c.maxWidth,
               ),
               metric(
-                board.demo ? 'ELIGIBLE DEMO QUOTES' : 'CURRENT QUOTES',
-                '$eligible',
-                'Stale and suspended excluded',
+                board.demo
+                    ? 'ELIGIBLE DEMO QUOTES'
+                    : showingSnapshot
+                    ? 'SNAPSHOT QUOTES'
+                    : 'CURRENT QUOTES',
+                showingSnapshot
+                    ? '${board.quotes.where((q) => q.status == 'open').length}'
+                    : '$eligible',
+                showingSnapshot
+                    ? 'Saved snapshot, not a live stream'
+                    : 'Stale and suspended excluded',
                 c.maxWidth,
               ),
             ],
@@ -804,9 +832,14 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
               ? <OddsQuote>[]
               : comparableQuotes(board.quotes, s, books: enabledBooks)
           ..sort((a, b) => b.decimal.compareTo(a.decimal));
-    final best = s == null || error != null
+    final liveBest = s == null || error != null
         ? null
         : bestQuote(board.quotes, s, now, books: enabledBooks, inPlay: inPlay);
+    final snapshotBest = s == null || error != null
+        ? null
+        : bestSnapshotQuote(board.quotes, s, now, books: enabledBooks);
+    final best = liveBest ?? snapshotBest;
+    final pricedFromSnapshot = liveBest == null && snapshotBest != null;
     final active = rows.where(
       (q) => error == null && q.eligible(now, inPlay: inPlay),
     );
@@ -899,6 +932,8 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                 Text(
                   best == null
                       ? 'No eligible best price'
+                      : pricedFromSnapshot
+                      ? 'Best price in this snapshot   ${americanLabel(best.decimal)}'
                       : '${board.demo ? 'Best demo price' : 'Best observed price'}   ${americanLabel(best.decimal)}',
                   style: const TextStyle(
                     fontSize: 24,
@@ -909,8 +944,15 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                 const SizedBox(height: 8),
                 Text(
                   best == null
-                      ? 'Stale, suspended, unverified, and inaccessible quotes cannot win.'
+                      ? 'Stale, suspended, unverified, and inaccessible quotes cannot win a live badge.'
+                      : pricedFromSnapshot
+                      ? '${best.book} · ${s.label} · snapshot price, not a live offer'
                       : '${best.book} · ${s.label} · ${pct(impliedProbability(best.decimal))} break-even probability',
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Snapshot as of ${stamp(board.fetchedAt)}. Not a live stream.',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -957,7 +999,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                         ],
                       ),
                       Text(
-                        '${pct(impliedProbability(q.decimal))} break-even · ${error != null ? 'connection lost' : q.freshness(now, inPlay: inPlay)}',
+                        '${pct(impliedProbability(q.decimal))} break-even · ${quoteFreshness(q)}',
                       ),
                       Text(
                         'Profit on \$100 win: \$${((q.decimal - 1) * 100).toStringAsFixed(2)}',
@@ -975,10 +1017,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                         ],
                       ),
                       TextButton(
-                        onPressed:
-                            error == null && q.eligible(now, inPlay: inPlay)
-                            ? () => investigate(q)
-                            : null,
+                        onPressed: canResearch(q) ? () => investigate(q) : null,
                         child: const Text('Research this price'),
                       ),
                     ],
@@ -1011,9 +1050,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                       DataColumn(label: Text(label)),
                   ],
                   rows: rows.map((q) {
-                    final status = error != null
-                        ? 'connection lost'
-                        : q.freshness(now, inPlay: inPlay);
+                    final status = quoteFreshness(q);
                     final eligible =
                         error == null && q.eligible(now, inPlay: inPlay);
                     return DataRow(
@@ -1044,7 +1081,11 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                         DataCell(
                           badge(
                             status.toUpperCase(),
-                            eligible ? mint : Colors.orangeAccent,
+                            eligible
+                                ? mint
+                                : status == 'snapshot'
+                                ? Colors.amber
+                                : Colors.orangeAccent,
                           ),
                         ),
                         DataCell(Text(stamp(q.sourceAt))),
@@ -1059,7 +1100,9 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                         DataCell(
                           IconButton(
                             tooltip: 'Research this price',
-                            onPressed: eligible ? () => investigate(q) : null,
+                            onPressed: canResearch(q)
+                                ? () => investigate(q)
+                                : null,
                             icon: const Icon(Icons.science_outlined),
                           ),
                         ),

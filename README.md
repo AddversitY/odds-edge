@@ -32,6 +32,23 @@ dart run backend/server.dart
 Then choose Connect local backend in the app. This remains demonstration mode
 until a licensed feed is explicitly configured on the server.
 
+## Free Odds API key
+
+A free account from [The Odds API](https://the-odds-api.com/) is enough for
+saved NFL snapshots. It is not a live stream. The app shows when the snapshot
+was taken.
+
+1. Create a free account and copy the key.
+2. On the computer that runs the backend, set `ODDS_PROVIDER` to `the-odds-api`
+   and `THE_ODDS_API_KEY` to that key. The other settings are listed in
+   `.env.example`.
+3. Start `dart run backend/server.dart` again and choose Connect local backend.
+
+Do not put the key in the app, in a screenshot, or in git. The free plan is
+500 credits a month. The backend spends them on a daily snapshot plus refreshes
+about an hour and about 10 minutes before kickoff. Details and the optional
+$30/month upgrade are in [docs/PROVIDERS.md](docs/PROVIDERS.md).
+
 ## Verify
 
 ```powershell
