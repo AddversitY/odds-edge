@@ -10,6 +10,14 @@ import 'package:odds_edge/domain/research.dart';
 final xaiResponsesEndpoint = Uri.https('api.x.ai', '/v1/responses');
 
 const defaultXaiModel = 'grok-4.7';
+const defaultReasoningEffort = 'low';
+const reasoningEfforts = {'none', 'low', 'medium', 'high'};
+
+String xaiReasoningEffort(String? raw) {
+  final effort = (raw ?? '').trim().toLowerCase();
+  if (reasoningEfforts.contains(effort)) return effort;
+  return defaultReasoningEffort;
+}
 
 const assistantInstructions = '''
 You are the Odds Edge transparent research assistant. You explain or challenge research using only the JSON inputs in the user message.
@@ -69,9 +77,11 @@ Future<AssistantHttpResult> postWithHttpClient(AssistantHttpCall call) async {
     call.headers.forEach(request.headers.set);
     request.headers.contentType = ContentType.json;
     request.write(call.body);
-    final response = await request.close().timeout(const Duration(seconds: 20));
+    final response = await request.close().timeout(
+      const Duration(seconds: 120),
+    );
     final bytes = BytesBuilder(copy: false);
-    await for (final chunk in response.timeout(const Duration(seconds: 20))) {
+    await for (final chunk in response.timeout(const Duration(seconds: 120))) {
       bytes.add(chunk);
       if (bytes.length > 1000000) {
         throw StateError('Assistant request failed or timed out.');
@@ -95,13 +105,15 @@ class XaiAssistant {
   XaiAssistant({
     required String apiKey,
     String? model,
+    String? reasoningEffort,
     Uri? endpoint,
     this.post = postWithHttpClient,
   }) : apiKey = apiKey.trim(),
        model = xaiModel(model),
+       reasoningEffort = xaiReasoningEffort(reasoningEffort),
        endpoint = endpoint ?? xaiResponsesEndpoint;
 
-  final String apiKey, model;
+  final String apiKey, model, reasoningEffort;
   final Uri endpoint;
   final Future<AssistantHttpResult> Function(AssistantHttpCall call) post;
   bool get configured => apiKey.isNotEmpty;
@@ -124,7 +136,7 @@ class XaiAssistant {
             'input': [
               {'role': 'user', 'content': user},
             ],
-            'search_parameters': {'mode': 'off'},
+            'reasoning': {'effort': reasoningEffort},
             'store': false,
             'temperature': 0.2,
           }),
@@ -133,7 +145,7 @@ class XaiAssistant {
       if (call.uri.query.isNotEmpty) {
         throw StateError('Assistant request failed or timed out.');
       }
-      final result = await post(call).timeout(const Duration(seconds: 25));
+      final result = await post(call).timeout(const Duration(seconds: 130));
       if (result.statusCode != 200) return AssistantReply.unavailable;
       final text = extractAssistantOutputText(jsonDecode(result.body));
       final parsed = _parseModelJson(text, prepared.providedIds);

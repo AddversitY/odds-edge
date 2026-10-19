@@ -416,11 +416,18 @@ class _ResearchWorkspaceState extends State<ResearchWorkspace> {
               ),
             ],
           ),
-          if (asking)
+          if (asking) ...[
             const Padding(
               padding: EdgeInsets.only(top: 12),
               child: LinearProgressIndicator(),
             ),
+            const SizedBox(height: 8),
+            const Text('thinking…'),
+            const Text(
+              'A reasoning reply can take a minute. Only the inputs on this screen are being used.',
+              style: TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+          ],
           if (assistantStatus.isNotEmpty) ...[
             const SizedBox(height: 12),
             Text(assistantStatus),

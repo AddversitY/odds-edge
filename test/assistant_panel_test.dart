@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:odds_edge/domain/assistant.dart';
@@ -115,5 +117,23 @@ void main() {
     expect(saved.assistant!.cited, ['assumptions', 'frozen_quote']);
     expect(saved.assumptions.toJson().toString().contains(answer), isFalse);
     expect(saved.toJson()['assistant']['answer'], answer);
+  });
+
+  testWidgets('panel shows thinking while a reply is still running', (
+    tester,
+  ) async {
+    final store = MemoryResearchStore();
+    final gate = Completer<AssistantReply>();
+    await pump(tester, store, assistant: (_) => gate.future);
+    await tester.ensureVisible(find.text('Explain this research'));
+    await tester.tap(find.text('Explain this research'));
+    await tester.pump();
+    expect(find.text('thinking…'), findsOneWidget);
+    expect(find.textContaining('assistant unavailable'), findsNothing);
+    gate.complete(AssistantReply.unavailable);
+    await tester.pumpAndSettle();
+    expect(find.text('thinking…'), findsNothing);
+    expect(find.textContaining('assistant unavailable'), findsOneWidget);
+    expect(store.records, isEmpty);
   });
 }

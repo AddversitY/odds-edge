@@ -95,7 +95,10 @@ $env:XAI_MODEL = "grok-4.7"
 
 Leave the window open while you use the app. You should see a line that the
 research assistant is configured. It does not print the key. `XAI_MODEL` is
-optional; without it the server uses `grok-4.7`.
+optional; without it the server uses `grok-4.7`. `XAI_REASONING_EFFORT` is
+also optional and defaults to `low` (`none`, `low`, `medium`, or `high`).
+Low keeps the reply shorter and cheaper. The panel shows **thinking…** while
+it waits; a reply can take about a minute.
 
 In the app, choose **Connect local backend**, open Proof Lab, and use
 **Explain / challenge this research**. Ask it to explain or challenge the

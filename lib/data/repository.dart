@@ -66,12 +66,12 @@ class BackendRepository {
       request.headers.contentType = ContentType.json;
       request.write(jsonEncode(body));
       final response = await request.close().timeout(
-        const Duration(seconds: 30),
+        const Duration(seconds: 150),
       );
       final text = await utf8.decoder
           .bind(response)
           .join()
-          .timeout(const Duration(seconds: 20));
+          .timeout(const Duration(seconds: 150));
       if (response.statusCode != 200) {
         throw StateError('Backend unavailable (${response.statusCode}).');
       }

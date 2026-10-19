@@ -59,8 +59,9 @@ $env:XAI_MODEL = "grok-4.7"
 ```
 
 `$env:XAI_MODEL` is optional. If you omit it, the server uses `grok-4.7`.
-Closing the window forgets the key. Do not put the key in the Flutter app,
-in `--dart-define`, in a screenshot, or in a file you commit.
+`$env:XAI_REASONING_EFFORT` is optional and defaults to `low` (`none`, `low`,
+`medium`, or `high`). Closing the window forgets the key. Do not put the key
+in the Flutter app, in `--dart-define`, in a screenshot, or in a file you commit.
 
 To keep the key for later PowerShell windows, open Windows Settings, search
 for "environment variables", choose **Environment Variables**, and under
@@ -68,11 +69,12 @@ for "environment variables", choose **Environment Variables**, and under
 Anyone who can use that Windows account can read that variable.
 
 Then in the app choose **Connect local backend**, open Proof Lab, and use
-**Explain / challenge this research**. The panel is labeled AI-generated.
-Its text is stored separately from your notes and assumptions. It is not a
-forecast and it does not guarantee a result. With no key, or if the model
-cannot be reached, the panel says assistant unavailable and leaves your
-research unchanged.
+**Explain / challenge this research**. The panel is labeled AI-generated and
+shows **thinking…** while a reply is in progress. A reasoning reply can take
+about a minute. Its text is stored separately from your notes and assumptions.
+It is not a forecast and it does not guarantee a result. With no key, or if the
+model cannot be reached, the panel says assistant unavailable and leaves your
+research unchanged. Web search is not requested.
 
 `POST /v1/assistant` accepts JSON the app already has: `mode` (`explain` or
 `challenge`), an optional `question`, the on-screen `selection`, a frozen
@@ -80,9 +82,9 @@ research unchanged.
 `teamEvidence` and `playerEvidence` lists. The reply is
 `available`, `answer`, and `cited` (which of those inputs the answer used).
 The model is instructed to use only that payload, not to invent stats or odds,
-to flag uncertainty, and not to guarantee a wager. Web search is turned off
-for the call. The key is sent only on the server, in the Authorization header,
-never in the URL.
+to flag uncertainty, and not to guarantee a wager. The request does not send
+web search. The key is sent only on the server, in the Authorization header,
+never in the URL. `reasoning.effort` defaults to `low`.
 
 ## Service contract and freshness
 

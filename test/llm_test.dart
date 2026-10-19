@@ -185,7 +185,8 @@ void main() {
     final sent = jsonDecode(seen!.body) as Map;
     expect(sent['model'], defaultXaiModel);
     expect(sent['instructions'], contains('Never invent statistics, odds'));
-    expect(sent['search_parameters'], {'mode': 'off'});
+    expect(sent.containsKey('search_parameters'), isFalse);
+    expect(sent['reasoning'], {'effort': 'low'});
     expect(sent['store'], isFalse);
     expect(sent['input'], isA<List>());
     final user = (sent['input'] as List).single as Map;
@@ -203,6 +204,41 @@ void main() {
     ]);
     expect(reply.toJson().toString().contains(secret), isFalse);
   });
+
+  test(
+    'reasoning effort is sent and unknown values fall back to low',
+    () async {
+      Future<Map<String, dynamic>> sentEffort(String? effort) async {
+        AssistantHttpCall? seen;
+        final assistant = XaiAssistant(
+          apiKey: secret,
+          reasoningEffort: effort,
+          post: (call) async {
+            seen = call;
+            return AssistantHttpResult(
+              statusCode: 200,
+              body: jsonEncode(
+                grok('{"answer":"Grounded.","cited":["assumptions"]}'),
+              ),
+            );
+          },
+        );
+        final reply = await assistant.answer(payload(withEvidence: false));
+        expect(reply.available, isTrue);
+        expect(seen, isNotNull);
+        expect(seen!.body.contains('search_parameters'), isFalse);
+        return Map<String, dynamic>.from(jsonDecode(seen!.body) as Map);
+      }
+
+      expect((await sentEffort(null))['reasoning'], {'effort': 'low'});
+      expect((await sentEffort('high'))['reasoning'], {'effort': 'high'});
+      expect((await sentEffort('  MEDIUM '))['reasoning'], {
+        'effort': 'medium',
+      });
+      expect((await sentEffort('turbo'))['reasoning'], {'effort': 'low'});
+      expect(xaiReasoningEffort('none'), 'none');
+    },
+  );
 
   test('failures and uncited evidence do not leak the key or the query', () async {
     final assistant = XaiAssistant(

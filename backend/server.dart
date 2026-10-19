@@ -40,6 +40,7 @@ Future<void> main() async {
   final assistant = XaiAssistant(
     apiKey: env['XAI_API_KEY'] ?? '',
     model: xaiModel(env['XAI_MODEL']),
+    reasoningEffort: env['XAI_REASONING_EFFORT'],
   );
   final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 8787);
   stdout.writeln(
@@ -47,7 +48,7 @@ Future<void> main() async {
   );
   stdout.writeln(
     assistant.configured
-        ? 'Research assistant: configured with model ${assistant.model}. The key stays on this server.'
+        ? 'Research assistant: configured with model ${assistant.model}, reasoning ${assistant.reasoningEffort}. The key stays on this server.'
         : 'Research assistant: assistant unavailable until XAI_API_KEY is set on the server.',
   );
   await for (final request in server) {
