@@ -1,0 +1,72 @@
+# Odds Edge development
+
+Flutter SDK: `C:\Users\vince\flutter`, added to the user PATH. Reopen terminals
+after changing PATH. Initial installed versions: Flutter 3.47.7, Dart 3.13.5.
+
+Free Visual Studio 2022 Build Tools 17.14.42 and Windows SDK 10.0.26100.0 are
+installed; Flutter doctor passes Windows toolchain checks. Android SDK and Chrome
+were absent and are not needed for this Windows build. An earlier optional Edge
+debug launch failed to connect.
+
+From `C:\Users\vince\development\odds_edge`:
+
+```powershell
+flutter doctor -v
+flutter run -d windows
+flutter test
+flutter analyze
+dart run backend/server.dart
+```
+
+The counter starter has been replaced by the Odds Edge MVP. The app launches in
+explicit offline demonstration mode. The separate backend also defaults to demo;
+choose Connect local backend to exercise its cache and persistent history.
+Provider credentials belong only in backend environment settings.
+
+Tests cover odds conversions, EV with pushes, exact selection matching, best
+prices, stale/suspended/future observations, provider normalization, outages,
+cache coalescing, history persistence, replay timestamp boundaries, and mobile
+and desktop interaction/layout.
+
+See `backend/README.md` for real-feed activation, refresh limits, HTTPS deployment,
+iOS endpoint configuration, and known MVP gaps. No paid services are configured.
+
+The generated application identifiers still use example defaults. Choose
+production identifiers before distribution. iOS builds require macOS and Xcode:
+https://docs.flutter.dev/platform-integration/ios/setup.
+
+Proof Lab now includes a synthetic Detroit–Green Bay moneyline exercise, editable percentage-point assumptions, sensitivity comparisons, and immutable local research snapshots. Records use LOCALAPPDATA on Windows; the iOS sandbox support-folder approach still requires validation on macOS/iOS. No native storage plugin or Windows Developer Mode change is required. The live fixture and model remain unconnected; all lab numbers are explicitly illustrative.
+# Saved research comparison
+
+Proof Lab now offers a comparison after two research snapshots have been saved.
+Choose Snapshot A and Snapshot B to compare notes, input assumptions, assumed
+win probability, and hypothetical EV. Differences are B minus A, expressed in
+percentage points. The view identifies when EV crosses break-even without
+claiming that a higher estimate improves forecast accuracy. It uses the same
+fixed synthetic Detroit–Green Bay exercise and leaves saved records unchanged.
+Selectors stack on narrow screens; the comparison needs no new package or feed.
+
+# Connected workflow and field theme
+
+Current implementation details: [Research workflow](docs/RESEARCH_WORKFLOW.md) and
+[NFL field theme](docs/FIELD_THEME.md). NFL matchups now includes real scoring and
+results evidence, with side-by-side season-to-date, last-three-week and latest-week
+windows. Odds remain demo until a licensed feed is connected. The new
+`ResearchWorkspace` replaces the original Proof Lab screen and adds draft recovery,
+named/searchable snapshots, backup/export/import, captured quote provenance and
+a sticky conclusion. The old `proof_lab.dart` is retained but no longer routed.
+
+Verification: 23 automated tests passed, including the real dataset on a narrow
+phone layout with larger text, week boundaries, byes, storage recovery and the
+quote-to-research journey. Windows build and visual inspection completed. iOS
+hardware verification and native 4K artwork remain outstanding; the generated
+field asset is 1672 x 941. No paid provider or validated forecast model is enabled.
+
+## Individual player research
+
+Player stats is a fifth workspace section (Players on mobile), with searchable
+stable player identities, last-three-recorded-game box scores, current-season
+totals and the previous three completed seasons. Regular season and postseason
+stay distinct. Totals/averages show observed-statistic counts and unavailable
+history stays explicit. Source and refresh details: [Player explorer](docs/PLAYER_STATS.md).
+
