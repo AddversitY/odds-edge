@@ -35,7 +35,9 @@ class BackendRepository {
     }
   }
 
-  Future<OddsBoard> board() async => OddsBoard.fromJson(await _get('/v1/odds'));
+  Future<OddsBoard> board({bool refresh = false}) async => OddsBoard.fromJson(
+    await _get(refresh ? '/v1/odds?refresh=1' : '/v1/odds'),
+  );
   Future<List<OddsQuote>> history(Selection s) async =>
       ((await _get(
                 '/v1/history?selection=${Uri.encodeComponent(s.key)}',

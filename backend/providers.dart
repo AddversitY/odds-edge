@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:odds_edge/domain/odds.dart';
 import 'package:odds_edge/data/demo.dart';
 
+import 'quota.dart';
+
 abstract interface class OddsProvider {
   String get id;
   Future<OddsBoard> fetch(DateTime now);
@@ -68,33 +70,30 @@ String? canonicalTeam(String name) {
   }[normalized];
 }
 
-class TheOddsApiProvider implements OddsProvider {
-  TheOddsApiProvider(this.apiKey, {this.verifiedRuleBooks = const {}});
-  final String apiKey;
-  // Populate only after confirming equivalent NFL full-game settlement rules.
-  final Set<String> verifiedRuleBooks;
-  DateTime? _retryAfter;
-  @override
-  String get id => 'the-odds-api';
+abstract interface class OddsApiTransport {
+  Future<OddsApiResponse> get(Uri uri);
+}
 
+class OddsApiResponse {
+  OddsApiResponse({
+    required this.statusCode,
+    required this.body,
+    Map<String, String> headers = const {},
+  }) : headers = {
+         for (final entry in headers.entries)
+           entry.key.toLowerCase(): entry.value,
+       };
+
+  final int statusCode;
+  final String body;
+  final Map<String, String> headers;
+
+  String? header(String name) => headers[name.toLowerCase()];
+}
+
+class IoOddsApiTransport implements OddsApiTransport {
   @override
-  Future<OddsBoard> fetch(DateTime now) async {
-    if (_retryAfter != null && now.isBefore(_retryAfter!)) {
-      throw StateError(
-        'Provider rate limited; retry after ${_retryAfter!.toIso8601String()}',
-      );
-    }
-    final uri = Uri.https(
-      'api.the-odds-api.com',
-      '/v4/sports/americanfootball_nfl/odds',
-      {
-        'apiKey': apiKey,
-        'regions': 'us,us2',
-        'markets': 'h2h,spreads,totals',
-        'oddsFormat': 'decimal',
-        'dateFormat': 'iso',
-      },
-    );
+  Future<OddsApiResponse> get(Uri uri) async {
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
     try {
       final request = await client
@@ -103,28 +102,142 @@ class TheOddsApiProvider implements OddsProvider {
       final response = await request.close().timeout(
         const Duration(seconds: 12),
       );
-      if (response.statusCode == 429) {
-        final seconds =
-            int.tryParse(response.headers.value('retry-after') ?? '') ?? 60;
-        _retryAfter = now.add(Duration(seconds: seconds.clamp(30, 3600)));
-        throw StateError('Provider rate limited; backing off.');
-      }
-      if (response.statusCode != 200) {
-        throw StateError('Provider HTTP ${response.statusCode}');
-      }
+      final headers = <String, String>{};
+      response.headers.forEach((name, values) {
+        if (values.isNotEmpty) headers[name] = values.first;
+      });
       final body = await utf8.decoder
           .bind(response)
           .join()
           .timeout(const Duration(seconds: 12));
-      return parse(jsonDecode(body) as List, DateTime.now().toUtc());
+      return OddsApiResponse(
+        statusCode: response.statusCode,
+        body: body,
+        headers: headers,
+      );
+    } finally {
+      client.close(force: true);
+    }
+  }
+}
+
+class TheOddsApiProvider implements OddsProvider {
+  TheOddsApiProvider(
+    this.apiKey, {
+    this.verifiedRuleBooks = const {},
+    List<String>? bookmakers,
+    List<String>? markets,
+    this.sport = 'americanfootball_nfl',
+    OddsApiTransport? transport,
+  }) : bookmakers = resolveBookmakers(bookmakers),
+       markets = resolveMarkets(markets),
+       transport = transport ?? IoOddsApiTransport();
+
+  final String apiKey;
+  // Populate only after confirming equivalent NFL full-game settlement rules.
+  final Set<String> verifiedRuleBooks;
+  final List<String> bookmakers;
+  final List<String> markets;
+  final String sport;
+  final OddsApiTransport transport;
+  DateTime? _retryAfter;
+  CreditObservation? lastObservation;
+
+  @override
+  String get id => 'the-odds-api';
+
+  /// Credits the next odds call is expected to cost. Events calls cost nothing.
+  int get estimatedCost => oddsRequestCost(
+    markets: markets.length,
+    bookmakers: bookmakers.isNotEmpty,
+  );
+
+  Uri oddsUri() => Uri.https('api.the-odds-api.com', '/v4/sports/$sport/odds', {
+    'apiKey': apiKey,
+    'bookmakers': bookmakers.join(','),
+    'markets': markets.join(','),
+    'oddsFormat': 'decimal',
+    'dateFormat': 'iso',
+  });
+
+  /// Kickoff list. The Odds API does not charge credits for `/events`.
+  Uri eventsUri() => Uri.https(
+    'api.the-odds-api.com',
+    '/v4/sports/$sport/events',
+    {'apiKey': apiKey, 'dateFormat': 'iso'},
+  );
+
+  @override
+  Future<OddsBoard> fetch(DateTime now) async {
+    final response = await _send(oddsUri(), now);
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is! List) {
+        throw StateError('Provider response was not a list.');
+      }
+      return parse(decoded, now.toUtc());
+    } on StateError {
+      rethrow;
+    } catch (_) {
+      throw StateError('Provider request failed or timed out.');
+    }
+  }
+
+  Future<List<DateTime>> fetchKickoffs(DateTime now) async {
+    final response = await _send(eventsUri(), now);
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is! List) {
+        throw StateError('Provider response was not a list.');
+      }
+      return parseKickoffs(decoded);
+    } on StateError {
+      rethrow;
+    } catch (_) {
+      throw StateError('Provider request failed or timed out.');
+    }
+  }
+
+  List<DateTime> parseKickoffs(List raw) {
+    final times = <DateTime>{};
+    for (final item in raw) {
+      try {
+        if (item is! Map) continue;
+        times.add(DateTime.parse(item['commence_time'] as String).toUtc());
+      } catch (_) {
+        /* Skip an event whose kickoff cannot be read. */
+      }
+    }
+    final sorted = times.toList()..sort();
+    return sorted;
+  }
+
+  Future<OddsApiResponse> _send(Uri uri, DateTime now) async {
+    if (_retryAfter != null && now.isBefore(_retryAfter!)) {
+      throw StateError(
+        'Provider rate limited; retry after ${_retryAfter!.toIso8601String()}',
+      );
+    }
+    lastObservation = null;
+    final OddsApiResponse response;
+    try {
+      response = await transport.get(uri);
     } on StateError {
       rethrow;
     } catch (_) {
       // Never include URLs or underlying HTTP errors: they may contain API keys.
       throw StateError('Provider request failed or timed out.');
-    } finally {
-      client.close(force: true);
     }
+    lastObservation = CreditObservation.fromHeaders(response.headers);
+    if (response.statusCode == 429) {
+      final seconds = int.tryParse(response.header('retry-after') ?? '') ?? 60;
+      _retryAfter = now.add(Duration(seconds: seconds.clamp(30, 3600)));
+      throw StateError('Provider rate limited; backing off.');
+    }
+    if (response.statusCode != 200) {
+      throw StateError('Provider HTTP ${response.statusCode}');
+    }
+    return response;
   }
 
   OddsBoard parse(List raw, DateTime collectedAt) {
