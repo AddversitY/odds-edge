@@ -35,6 +35,38 @@ The generated application identifiers still use example defaults. Choose
 production identifiers before distribution. iOS builds require macOS and Xcode:
 https://docs.flutter.dev/platform-integration/ios/setup.
 
+GitHub Actions (`.github/workflows/ios-build.yml`) builds the app on a Mac in
+the cloud on every push and pull request to `main`, and when someone starts
+the workflow by hand. It uses Flutter stable 3.47.7, which ships Dart 3.13.5
+and satisfies the `sdk: ^3.13.5` constraint in `pubspec.yaml`. The job runs
+`flutter pub get`, `flutter analyze`, `flutter test`, then
+`flutter build ios --release --no-codesign` and a simulator build. It also
+builds the Windows app. Downloadable artifacts are an unsigned iPhone app, a
+simulator app, and the Windows release. No Apple certificate, provisioning
+profile, or API key is used. The unsigned iPhone app cannot be installed on a
+phone.
+
+The iOS project already sets the deployment target to 15.0, which is what the
+Flutter 3.47 engine requires. The app has no native iOS plugins, so nothing
+asks for a newer target. The bundle id is still the example placeholder
+`com.example.oddsEdge` (and `com.example.oddsEdge.RunnerTests` for the empty
+Xcode test target). Do not invent a production id in the repo; replace that
+placeholder with an id you own before any store upload.
+
+## Later: TestFlight
+
+TestFlight is not wired up. To put a build on a phone later you will need:
+
+- An Apple Developer Program account, and an app created in App Store Connect.
+- A unique bundle identifier. Replace `com.example.oddsEdge`. Apple rejects
+  `com.example`.
+- An App Store Connect API key (a `.p8` file plus its key id and issuer id),
+  saved only as GitHub Actions secrets. Suggested names:
+  `APP_STORE_CONNECT_API_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`, and
+  `APP_STORE_CONNECT_API_KEY_BASE64`. Do not commit the key.
+
+Signing and the TestFlight upload stay out of the workflow until those exist.
+
 Proof Lab now includes a synthetic Detroit–Green Bay moneyline exercise, editable percentage-point assumptions, sensitivity comparisons, and immutable local research snapshots. Records use LOCALAPPDATA on Windows; the iOS sandbox support-folder approach still requires validation on macOS/iOS. No native storage plugin or Windows Developer Mode change is required. The live fixture and model remain unconnected; all lab numbers are explicitly illustrative.
 # Saved research comparison
 
