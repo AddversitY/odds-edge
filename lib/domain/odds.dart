@@ -219,6 +219,25 @@ OddsQuote? bestQuote(
   return eligible.isEmpty ? null : eligible.first;
 }
 
+/// Highest open price in a saved snapshot. Age does not exclude it.
+/// This is not a live best price: callers must say which snapshot it came from.
+OddsQuote? bestSnapshotQuote(
+  Iterable<OddsQuote> quotes,
+  Selection selection,
+  DateTime now, {
+  Set<String>? books,
+}) {
+  final eligible = comparableQuotes(quotes, selection, books: books).where((q) {
+    if (q.status != 'open') return false;
+    if (q.sourceAt.isAfter(now.add(const Duration(seconds: 5))) ||
+        q.collectedAt.isAfter(now.add(const Duration(seconds: 5)))) {
+      return false;
+    }
+    return true;
+  }).toList()..sort((a, b) => b.decimal.compareTo(a.decimal));
+  return eligible.isEmpty ? null : eligible.first;
+}
+
 class OddsBoard {
   const OddsBoard({
     required this.events,

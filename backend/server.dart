@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -6,45 +7,71 @@ import 'package:odds_edge/domain/assistant.dart';
 
 import 'llm.dart';
 import 'providers.dart';
+import 'quota.dart';
 import 'service.dart';
 
 Future<void> main() async {
   final env = Platform.environment;
-  final mode = env['ODDS_PROVIDER'] ?? 'demo';
-  final key = env['THE_ODDS_API_KEY'] ?? '';
-  if (!['demo', 'the-odds-api'].contains(mode) ||
-      (mode != 'demo' && key.isEmpty)) {
-    stderr.writeln(
-      'Set ODDS_PROVIDER to demo or the-odds-api. Real mode needs THE_ODDS_API_KEY on the server.',
-    );
+  final OddsBackendConfig config;
+  try {
+    config = OddsBackendConfig.fromEnvironment(env);
+  } on FormatException catch (error) {
+    stderr.writeln(error.message);
     exitCode = 64;
     return;
   }
-  final providers = <OddsProvider>[
-    mode == 'demo'
-        ? DemoProvider()
-        : TheOddsApiProvider(
-            key,
-            verifiedRuleBooks: (env['VERIFIED_NFL_RULE_BOOKS'] ?? '')
-                .split(',')
-                .where((s) => s.isNotEmpty)
-                .toSet(),
-          ),
-  ];
-  final seconds = int.tryParse(env['ODDS_REFRESH_SECONDS'] ?? '') ?? 60;
+  final live = config.live
+      ? TheOddsApiProvider(
+          config.apiKey,
+          verifiedRuleBooks: config.verifiedRuleBooks,
+          bookmakers: config.bookmakers,
+          markets: config.markets,
+        )
+      : null;
+  final providers = <OddsProvider>[live ?? DemoProvider()];
+  final ledger = CreditLedger(
+    reserve: config.creditReserve,
+    file: File('backend/data/credits.json'),
+  );
+  if (live != null) await ledger.load();
   final service = OddsService(
     providers,
     SnapshotStore(File('backend/data/snapshots.jsonl')),
-    refreshInterval: Duration(seconds: seconds.clamp(30, 3600)),
+    refreshInterval: config.demoRefreshInterval,
+    freeTier: live == null
+        ? null
+        : FreeTierPlan(
+            schedule: OddsRefreshSchedule(
+              dailyUtc: config.dailyUtc,
+              leadTimes: config.leadTimes,
+              grace: config.scheduleGrace,
+              coalesce: config.coalesce,
+            ),
+            ledger: ledger,
+            estimatedCost: live.estimatedCost,
+            cooldown: config.onDemandCooldown,
+            eventsMaxAge: config.eventsMaxAge,
+            bookmakers: live.bookmakers,
+            markets: live.markets,
+          ),
   );
   final assistant = XaiAssistant(
     apiKey: env['XAI_API_KEY'] ?? '',
     model: xaiModel(env['XAI_MODEL']),
     reasoningEffort: env['XAI_REASONING_EFFORT'],
   );
+  if (live != null) {
+    await service.restore();
+    // The timer keeps the shared snapshot current even when nobody has the
+    // app open. It only calls The Odds API when a planned slot is due.
+    unawaited(service.maintain());
+    Timer.periodic(const Duration(minutes: 1), (_) {
+      unawaited(service.maintain());
+    });
+  }
   final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 8787);
   stdout.writeln(
-    'Odds Edge backend: http://127.0.0.1:8787 ($mode). Loopback development server only.',
+    'Odds Edge backend: http://127.0.0.1:8787 (${config.mode}). Loopback development server only.',
   );
   stdout.writeln(
     assistant.configured
@@ -55,7 +82,7 @@ Future<void> main() async {
     try {
       await handleRequest(
         request,
-        providerMode: mode,
+        providerMode: config.mode,
         service: service,
         assistant: assistant,
       );
@@ -83,9 +110,11 @@ Future<void> handleRequest(
     Object result;
     switch (request.uri.path) {
       case '/health':
-        result = {'status': 'ok', 'mode': providerMode};
+        result = {'status': 'ok', 'mode': providerMode, ...service.status()};
       case '/v1/odds':
-        result = (await service.getBoard()).toJson();
+        result = (await service.getBoard(
+          onDemand: request.uri.queryParameters['refresh'] == '1',
+        )).toJson();
       case '/v1/history':
         final selection = request.uri.queryParameters['selection'];
         if (selection == null) {

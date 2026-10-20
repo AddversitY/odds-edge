@@ -12,6 +12,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(OddsEdgeApp(researchStore: MemoryResearchStore()));
     expect(find.text('DEMO'), findsOneWidget);
+    expect(find.textContaining('Snapshot as of'), findsWidgets);
     await tester.tap(find.text('Odds', skipOffstage: false));
     await tester.pumpAndSettle();
     expect(find.textContaining('Best demo price'), findsOneWidget);

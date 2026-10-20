@@ -434,7 +434,11 @@ void main() {
       expect(invalid.status, 400);
       expect(invalid.body.contains(secret), isFalse);
       final health = await _get(base.replace(path: '/health'));
-      expect(jsonDecode(health.body)['status'], 'ok');
+      final healthBody = jsonDecode(health.body) as Map;
+      expect(healthBody['status'], 'ok');
+      expect(healthBody['mode'], 'demo');
+      expect(healthBody['refresh'], 'interval');
+      expect(healthBody.containsKey('snapshotAsOf'), isTrue);
     },
   );
 

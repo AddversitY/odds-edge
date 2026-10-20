@@ -74,6 +74,41 @@ coverage and refresh limits. Keep live odds comparison in the MVP architecture.
 Any paid tier still needs explicit approval, even an inexpensive one. Preserve
 the broad multi-sport goal while making initial feed gaps explicit.
 
+### Free tier running in the app
+
+The Odds API adapter now stays inside the free 500-credit month. No paid plan
+is enabled. A refresh asks for three NFL markets (moneyline, spread, total)
+from a configurable list of up to 10 books. The Odds API bills that bookmaker
+list as one region, so one refresh costs 3 credits. The previous `us` + `us2`
+request cost 6.
+
+The backend does not poll every minute. It takes one daily snapshot, then
+another about an hour before kickoff and about 10 minutes before kickoff.
+Kickoff times come from the free `/events` endpoint. Games that start together
+share one refresh. A typical NFL month of Thursday, Sunday, and Monday games
+is about 70–80 planned refreshes, roughly 240 credits, leaving room for manual
+refreshes and a credit reserve.
+
+Manual refresh is shared by every user of the backend and then cools down
+(10 minutes by default). Between refreshes the last snapshot is served.
+Response headers `x-requests-remaining`, `x-requests-used`, and
+`x-requests-last` are saved and shown on `GET /health`. When remaining credits
+would fall below `ODDS_CREDIT_RESERVE` (default 50), manual refresh stops.
+Scheduled snapshots can still use that reserve. If a call would cost more than
+the credits left, the backend serves the cached snapshot instead.
+
+The app labels prices `Snapshot as of <time>`. The 120-second pregame and
+20-second in-play freshness rules are unchanged, so a free-tier snapshot does
+not receive a live best-price badge.
+
+Upgrade path, still requiring explicit approval: The Odds API's $30/month plan
+includes 20,000 credits. That is enough to refresh about every 60 seconds
+while games are being played. Featured markets on that plan update about every
+60 seconds before kickoff and about every 40 seconds in play. Do not switch
+the free plan to a 60-second poll; three markets every minute would spend the
+500 credits in roughly 80 minutes. Settings and the key variable are in
+`.env.example` and [backend/README.md](../backend/README.md).
+
 ### Published-price shortlist (October 18, 2026)
 
 These are advertised monthly USD prices, not verified total production costs.
@@ -110,9 +145,10 @@ API adapters are implemented; no claims of working adapters for the other two.
 Before spending, compare sample NFL responses, match exact selections, measure
 missing quotes and timestamp ages during games, verify available/suspended
 semantics, establish support/SLA terms, and calculate a realistic monthly budget.
-For example, a US+US2, three-market request costs multiple credits; polling
-continuously every minute can exceed entry-plan quotas. App refresh uses a
-shared backend cache so each user does not trigger independent upstream polling.
+A US+US2, three-market request costs 6 credits; the free-tier adapter avoids
+that by sending at most 10 bookmakers, which costs 3. The shared backend cache
+means each user does not trigger an independent upstream call. Continuous
+one-minute polling is not used on the free plan.
 
 The current 20-second in-play freshness requirement is deliberately stricter
 than a 40-second upstream cycle: many observations will be marked stale. A

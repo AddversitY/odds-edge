@@ -1,0 +1,128 @@
+# Builds Odds Edge without an Apple Developer account or a local Mac.
+# The iOS app is unsigned. It proves the project compiles; it cannot be
+# installed on a phone or sent to TestFlight from this workflow.
+name: iOS and Windows builds
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios:
+    name: iOS unsigned build
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          # pubspec.yaml requires Dart SDK ^3.13.5 (>=3.13.5 <4.0.0).
+          # Flutter 3.47.7 is the stable release in .metadata and DEVELOPMENT.md.
+          # That release ships Dart 3.13.5, so it satisfies the constraint.
+          flutter-version: "3.47.7"
+          cache: true
+
+      - name: Show Flutter version
+        run: flutter --version
+
+      - name: Install Dart packages
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Build iOS release without code signing
+        run: flutter build ios --release --no-codesign
+
+      - name: Build iOS simulator app
+        run: flutter build ios --simulator
+
+      - name: Zip iOS app bundles
+        run: |
+          mkdir -p artifacts
+          ditto -c -k --keepParent build/ios/iphoneos/Runner.app artifacts/odds-edge-ios-iphoneos-unsigned.zip
+          ditto -c -k --keepParent build/ios/iphonesimulator/Runner.app artifacts/odds-edge-ios-simulator.zip
+
+      - name: Upload unsigned iPhone build
+        uses: actions/upload-artifact@v5
+        with:
+          name: odds-edge-ios-unsigned
+          path: artifacts/odds-edge-ios-iphoneos-unsigned.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload iOS simulator build
+        uses: actions/upload-artifact@v5
+        with:
+          name: odds-edge-ios-simulator
+          path: artifacts/odds-edge-ios-simulator.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      # TestFlight is not set up. Do not add Apple certificates or API keys here.
+      # When a phone install is needed later:
+      # 1. Enroll in the Apple Developer Program and create the app in App Store Connect.
+      # 2. Replace the placeholder bundle id com.example.oddsEdge with a unique id
+      #    you own. Apple rejects ids that start with com.example.
+      # 3. Create an App Store Connect API key and store it only as GitHub Actions
+      #    secrets, for example APP_STORE_CONNECT_API_KEY_ID,
+      #    APP_STORE_CONNECT_ISSUER_ID, and APP_STORE_CONNECT_API_KEY_BASE64.
+      #    Never commit the .p8 file.
+      # 4. Add a separate signing and upload job that reads those secrets.
+      # This workflow does not declare or read any secrets.
+
+  windows:
+    name: Windows release build
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          # Same pin as the iOS job: Dart SDK ^3.13.5, Flutter stable 3.47.7.
+          flutter-version: "3.47.7"
+          cache: true
+
+      - name: Show Flutter version
+        run: flutter --version
+
+      - name: Install Dart packages
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Build Windows release
+        run: flutter build windows --release
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v5
+        with:
+          name: odds-edge-windows
+          path: build/windows/x64/runner/Release/
+          if-no-files-found: error
+          retention-days: 14
