@@ -2,6 +2,7 @@ import 'package:odds_edge/data/research_store.dart';
 import 'package:odds_edge/domain/research.dart';
 import 'package:odds_edge/domain/autopsy.dart';
 import 'package:odds_edge/domain/player_investigation.dart';
+import 'package:odds_edge/domain/bets.dart';
 
 class MemoryResearchStore extends ResearchStore {
   final List<PlayerInvestigation> investigations = [];
@@ -50,6 +51,19 @@ class MemoryResearchStore extends ResearchStore {
   @override
   Future<SavedResearch?> loadDraft({String? selectionKey}) async =>
       selectionKey == null ? latest : drafts[selectionKey];
+  final List<TrackedBet> bets = [];
+  @override
+  Future<void> saveBet(TrackedBet bet) async {
+    bets.removeWhere((existing) => existing.id == bet.id);
+    bets.add(bet);
+  }
+
+  @override
+  Future<List<TrackedBet>> loadBets() async {
+    final copy = [...bets]..sort((a, b) => b.placedAt.compareTo(a.placedAt));
+    return copy;
+  }
+
   @override
   Future<Set<String>?> loadBooks() async => books;
   @override
