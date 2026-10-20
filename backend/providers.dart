@@ -261,6 +261,7 @@ class TheOddsApiProvider implements OddsProvider {
             .firstWhere((e) => e.value == away)
             .key;
         events.add(NflEvent(eventId, awayName, homeName, start));
+        // A requested book that sends nothing is omitted. That is not an error.
         for (final book in item['bookmakers'] as List) {
           final rawBook = book['key'] as String;
           // State-specific operators deliberately remain distinct.

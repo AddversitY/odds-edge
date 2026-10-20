@@ -21,6 +21,9 @@ int oddsRequestCost({
 }
 
 /// Ten major US books on The Odds API. Offshore skins are intentionally absent.
+///
+/// Caesars (`williamhill_us`) and Fanatics are on this list, but a free-tier
+/// NFL response may simply omit them. A missing book is not an error.
 const defaultUsBookmakers = <String>[
   'draftkings',
   'fanduel',
@@ -214,8 +217,32 @@ class CreditObservation {
   }
 }
 
-/// Remembers credits from response headers and the reserve that manual
-/// refreshes must not cross.
+/// Credits that must stay untouched so the rest of this billing month's
+/// scheduled snapshots can still run, plus a small buffer.
+int scheduledCreditHold({
+  required int scheduledRefreshes,
+  required int cost,
+  required int buffer,
+}) {
+  if (scheduledRefreshes < 0 || cost < 0 || buffer < 0) {
+    throw ArgumentError('Credit hold inputs cannot be negative.');
+  }
+  return scheduledRefreshes * cost + buffer;
+}
+
+/// Start of the next billing period. [resetDay] is the UTC day the allowance
+/// renews (1 means a calendar month). Days after 28 are not used, so every
+/// month has the boundary.
+DateTime billingPeriodEnd(DateTime now, {int resetDay = 1}) {
+  final current = now.toUtc();
+  final day = resetDay.clamp(1, 28);
+  final thisMonth = DateTime.utc(current.year, current.month, day);
+  if (current.isBefore(thisMonth)) return thisMonth;
+  return DateTime.utc(current.year, current.month + 1, day);
+}
+
+/// Remembers credits from response headers and the buffer that sits on top
+/// of the credits reserved for scheduled snapshots.
 class CreditLedger {
   CreditLedger({this.reserve = 50, this.file});
 
@@ -226,23 +253,40 @@ class CreditLedger {
   int? lastCost;
   DateTime? updatedAt;
 
-  /// [essential] snapshots (the schedule, and the first snapshot) may use the
-  /// reserve. Manual refreshes must leave at least [reserve] credits.
-  bool allowSpend({required int cost, required bool essential}) {
+  /// [essential] snapshots may spend the last credits. Manual refreshes must
+  /// leave at least [protect] credits, or [reserve] when [protect] is omitted.
+  bool allowSpend({required int cost, required bool essential, int? protect}) {
     if (cost <= 0) return true;
     final left = remaining;
     if (left == null) return true;
     if (left < cost) return false;
-    if (!essential && left - cost < reserve) return false;
+    final floor = protect ?? reserve;
+    if (!essential && left - cost < floor) return false;
     return true;
   }
 
-  void apply(CreditObservation observation, {required DateTime at}) {
+  void apply(
+    CreditObservation observation, {
+    required DateTime at,
+    bool updateLastCost = true,
+  }) {
     if (!observation.hasAny) return;
-    if (observation.remaining != null) remaining = observation.remaining;
-    if (observation.used != null) used = observation.used;
-    if (observation.lastCost != null) lastCost = observation.lastCost;
-    updatedAt = at.toUtc();
+    var changed = false;
+    if (observation.remaining != null) {
+      remaining = observation.remaining;
+      changed = true;
+    }
+    if (observation.used != null) {
+      used = observation.used;
+      changed = true;
+    }
+    // The free events call also reports x-requests-last, usually 0. Only an
+    // odds call should replace the last charged amount.
+    if (updateLastCost && observation.lastCost != null) {
+      lastCost = observation.lastCost;
+      changed = true;
+    }
+    if (changed) updatedAt = at.toUtc();
   }
 
   Future<void> load() async {
@@ -302,6 +346,8 @@ class OddsBackendConfig {
     required this.dailyUtc,
     required this.leadTimes,
     required this.demoRefreshInterval,
+    required this.onDemandDailyCap,
+    required this.billingResetDay,
   });
 
   final String mode;
@@ -317,6 +363,12 @@ class OddsBackendConfig {
   final Duration dailyUtc;
   final List<Duration> leadTimes;
   final Duration demoRefreshInterval;
+
+  /// Manual refreshes allowed per UTC day. Zero means no daily cap.
+  final int onDemandDailyCap;
+
+  /// UTC day of the month when the credit allowance renews.
+  final int billingResetDay;
 
   bool get live => mode == 'the-odds-api';
 
@@ -378,6 +430,20 @@ class OddsBackendConfig {
       dailyUtc: _dailyUtc(env['ODDS_DAILY_SNAPSHOT_UTC']),
       leadTimes: _leadTimes(env['ODDS_KICKOFF_LEADS']),
       demoRefreshInterval: Duration(seconds: seconds.clamp(30, 3600)),
+      onDemandDailyCap: _intEnv(
+        env,
+        'ODDS_ON_DEMAND_DAILY_CAP',
+        6,
+        min: 0,
+        max: 500,
+      ),
+      billingResetDay: _intEnv(
+        env,
+        'ODDS_BILLING_RESET_DAY',
+        1,
+        min: 1,
+        max: 28,
+      ),
     );
   }
 }

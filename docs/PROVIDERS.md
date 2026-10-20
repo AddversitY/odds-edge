@@ -90,12 +90,29 @@ is about 70–80 planned refreshes, roughly 240 credits, leaving room for manual
 refreshes and a credit reserve.
 
 Manual refresh is shared by every user of the backend and then cools down
-(10 minutes by default). Between refreshes the last snapshot is served.
+(10 minutes by default). It is also limited to 6 times per UTC day
+(`ODDS_ON_DEMAND_DAILY_CAP`). Between refreshes the last snapshot is served.
 Response headers `x-requests-remaining`, `x-requests-used`, and
-`x-requests-last` are saved and shown on `GET /health`. When remaining credits
-would fall below `ODDS_CREDIT_RESERVE` (default 50), manual refresh stops.
-Scheduled snapshots can still use that reserve. If a call would cost more than
-the credits left, the backend serves the cached snapshot instead.
+`x-requests-last` are saved and shown on `GET /health`. The free events call
+does not replace the last odds cost, even though that header is often 0.
+
+Manual refresh must leave enough credits for the scheduled snapshots still
+left in the billing month (calendar month unless `ODDS_BILLING_RESET_DAY` is
+set), plus `ODDS_CREDIT_RESERVE` (default 50) as a cushion. Scheduled
+snapshots can still use those credits. If a call would cost more than the
+credits left, the backend serves the cached snapshot instead. A planned
+snapshot is tried at most twice. If the API reports a charge
+(`x-requests-last` greater than 0) the slot is finished even when the response
+cannot be read, so a parse failure cannot keep spending credits until midnight.
+
+Demonstration and live snapshots are stored in separate files
+(`snapshots-demonstration.jsonl` and `snapshots-the-odds-api.jsonl`). A saved
+board is restored only when its provider and demo flag match the running
+mode. Otherwise the next request fetches a fresh board.
+
+Caesars (`williamhill_us`) and Fanatics stay on the default book list, but a
+free-tier NFL response may include neither. The app omits a book that sent no
+prices. That is not an error and does not change the 3-credit cost.
 
 The app labels prices `Snapshot as of <time>`. The 120-second pregame and
 20-second in-play freshness rules are unchanged, so a free-tier snapshot does

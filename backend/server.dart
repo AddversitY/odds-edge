@@ -31,7 +31,7 @@ Future<void> main() async {
   if (live != null) await ledger.load();
   final service = OddsService(
     providers,
-    SnapshotStore(File('backend/data/snapshots.jsonl')),
+    SnapshotStore(File(snapshotJournalPath(providers.single.id))),
     refreshInterval: config.demoRefreshInterval,
     freeTier: live == null
         ? null
@@ -48,6 +48,8 @@ Future<void> main() async {
             eventsMaxAge: config.eventsMaxAge,
             bookmakers: live.bookmakers,
             markets: live.markets,
+            dailyOnDemandCap: config.onDemandDailyCap,
+            billingResetDay: config.billingResetDay,
           ),
   );
   if (live != null) {

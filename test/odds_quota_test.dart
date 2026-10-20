@@ -279,6 +279,8 @@ void main() {
     expect(config.markets, ['h2h', 'spreads', 'totals']);
     expect(config.creditReserve, 50);
     expect(config.onDemandCooldown, const Duration(minutes: 10));
+    expect(config.onDemandDailyCap, 6);
+    expect(config.billingResetDay, 1);
     expect(config.leadTimes, const [Duration(hours: 1), Duration(minutes: 10)]);
     expect(config.dailyUtc, const Duration(hours: 15));
     expect(
@@ -562,6 +564,333 @@ void main() {
       bestSnapshotQuote(quotes, selection, now, books: {'a'})?.decimal,
       2.1,
     );
+  });
+
+  test('demo and live snapshots use different journals', () {
+    expect(
+      snapshotJournalPath('demonstration'),
+      'backend/data/snapshots-demonstration.jsonl',
+    );
+    expect(
+      snapshotJournalPath('the-odds-api'),
+      'backend/data/snapshots-the-odds-api.jsonl',
+    );
+    expect(
+      snapshotJournalPath('demonstration'),
+      isNot(snapshotJournalPath('the-odds-api')),
+    );
+    expect(
+      billingPeriodEnd(DateTime.utc(2026, 10, 19)),
+      DateTime.utc(2026, 11, 1),
+    );
+    expect(
+      billingPeriodEnd(DateTime.utc(2026, 10, 10), resetDay: 15),
+      DateTime.utc(2026, 10, 15),
+    );
+    expect(scheduledCreditHold(scheduledRefreshes: 10, cost: 3, buffer: 5), 35);
+  });
+
+  test(
+    'live mode refetches instead of restoring demonstration prices',
+    () async {
+      final dir = await Directory.systemTemp.createTemp('odds-mismatch');
+      addTearDown(() => dir.delete(recursive: true));
+      final file = File('${dir.path}/history.jsonl');
+      final takenAt = DateTime.utc(2026, 10, 18, 12);
+      const selection = Selection(
+        eventId: 'game',
+        market: 'h2h',
+        outcome: 'Bills',
+      );
+      await SnapshotStore(file).append(
+        OddsBoard(
+          events: const [],
+          quotes: [
+            OddsQuote(
+              selection: selection,
+              bookId: 'fanduel',
+              book: 'FanDuel',
+              provider: 'demonstration',
+              decimal: 2,
+              sourceAt: takenAt,
+              collectedAt: takenAt,
+              demo: true,
+            ),
+          ],
+          fetchedAt: takenAt,
+          demo: false,
+        ),
+      );
+      final provider = _ClockProvider();
+      final service = OddsService(
+        [provider],
+        SnapshotStore(file),
+        freeTier: _plan(kickoffs: [DateTime.utc(2026, 10, 18, 17)]),
+        clock: () => DateTime.utc(2026, 10, 18, 12, 30),
+      );
+      await service.restore();
+      final board = await service.getBoard();
+      expect(provider.calls, 1);
+      expect(board.demo, isFalse);
+      expect(board.quotes.single.provider, 'clock');
+      expect(board.quotes.single.demo, isFalse);
+      expect(snapshotMatchesProvider(board, provider), isTrue);
+    },
+  );
+
+  test('restore keeps settlement notices for a matching snapshot', () async {
+    final dir = await Directory.systemTemp.createTemp('odds-notices');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/history.jsonl');
+    final takenAt = DateTime.utc(2026, 10, 18, 12);
+    const selection = Selection(
+      eventId: 'game',
+      market: 'h2h',
+      outcome: 'Bills',
+    );
+    const settlement =
+        'Settlement rules need verification before affected books can enter best-price comparisons.';
+    await SnapshotStore(file).append(
+      OddsBoard(
+        events: const [],
+        quotes: [
+          OddsQuote(
+            selection: selection,
+            bookId: 'fanduel',
+            book: 'FanDuel',
+            provider: 'clock',
+            decimal: 2,
+            sourceAt: takenAt,
+            collectedAt: takenAt,
+          ),
+        ],
+        fetchedAt: takenAt,
+        notices: [settlement, collectedHistoryNotice],
+      ),
+    );
+    final provider = _ClockProvider();
+    final service = OddsService(
+      [provider],
+      SnapshotStore(file),
+      freeTier: _plan(kickoffs: [DateTime.utc(2026, 10, 18, 17)]),
+      clock: () => DateTime.utc(2026, 10, 18, 12, 30),
+    );
+    await service.restore();
+    final board = await service.getBoard();
+    expect(provider.calls, 0);
+    expect(board.notices, contains(settlement));
+    expect(
+      board.notices.where((notice) => notice == collectedHistoryNotice),
+      hasLength(1),
+    );
+  });
+
+  test(
+    'a planned snapshot is attempted twice, then left until the next slot',
+    () async {
+      final dir = await Directory.systemTemp.createTemp('odds-slot-attempts');
+      addTearDown(() => dir.delete(recursive: true));
+      var now = DateTime.utc(2026, 10, 18, 15);
+      final provider = _ClockProvider()..fail = true;
+      final service = OddsService(
+        [provider],
+        SnapshotStore(File('${dir.path}/history.jsonl')),
+        freeTier: _plan(kickoffs: [DateTime.utc(2026, 10, 18, 17)]),
+        clock: () => now,
+      );
+      await service.getBoard();
+      expect(provider.calls, 1);
+      now = DateTime.utc(2026, 10, 18, 15, 4);
+      await service.getBoard();
+      expect(provider.calls, 1);
+      now = DateTime.utc(2026, 10, 18, 15, 5);
+      await service.getBoard();
+      expect(provider.calls, 2);
+      now = DateTime.utc(2026, 10, 18, 23);
+      await service.getBoard();
+      expect(provider.calls, 2);
+      provider.fail = false;
+      now = DateTime.utc(2026, 10, 18, 16);
+      final next = await service.getBoard();
+      expect(provider.calls, 3);
+      expect(next.quotes.single.status, 'open');
+    },
+  );
+
+  test('a charged unreadable response finishes the scheduled slot', () async {
+    final dir = await Directory.systemTemp.createTemp('odds-charged');
+    addTearDown(() => dir.delete(recursive: true));
+    var calls = 0;
+    final provider = TheOddsApiProvider(
+      'test-key',
+      transport: _ScriptedTransport((uri) {
+        calls++;
+        return OddsApiResponse(
+          statusCode: 200,
+          body: '{"not":"a list"}',
+          headers: const {
+            'x-requests-remaining': '497',
+            'x-requests-used': '3',
+            'x-requests-last': '3',
+          },
+        );
+      }),
+    );
+    var now = DateTime.utc(2026, 10, 18, 15);
+    final ledger = CreditLedger(reserve: 50)..remaining = 500;
+    final service = OddsService(
+      [provider],
+      SnapshotStore(File('${dir.path}/history.jsonl')),
+      freeTier: FreeTierPlan(
+        schedule: const OddsRefreshSchedule(),
+        ledger: ledger,
+        estimatedCost: provider.estimatedCost,
+        fixedKickoffs: [DateTime.utc(2026, 10, 18, 17)],
+      ),
+      clock: () => now,
+    );
+    await service.getBoard();
+    expect(calls, 1);
+    expect(ledger.lastCost, 3);
+    now = DateTime.utc(2026, 10, 18, 23);
+    await service.getBoard();
+    expect(calls, 1);
+    expect(ledger.lastCost, 3);
+  });
+
+  test(
+    'on-demand refresh preserves credits for the rest of the month',
+    () async {
+      final dir = await Directory.systemTemp.createTemp('odds-hold');
+      addTearDown(() => dir.delete(recursive: true));
+      final ledger = CreditLedger(reserve: 0)..remaining = 95;
+      var now = DateTime.utc(2026, 10, 1, 12);
+      final provider = _ClockProvider();
+      final service = OddsService(
+        [provider],
+        SnapshotStore(File('${dir.path}/history.jsonl')),
+        freeTier: FreeTierPlan(
+          schedule: const OddsRefreshSchedule(),
+          ledger: ledger,
+          estimatedCost: 3,
+          cooldown: Duration.zero,
+          fixedKickoffs: const [],
+          dailyOnDemandCap: 0,
+        ),
+        clock: () => now,
+      );
+      await service.getBoard();
+      expect(provider.calls, 1);
+      expect(service.status()['scheduledRefreshesRemaining'], 31);
+      expect(service.status()['creditReserve'], 93);
+      final blocked = await service.getBoard(onDemand: true);
+      expect(provider.calls, 1);
+      expect(blocked.notices.join(), contains('Credit reserve'));
+      ledger.remaining = 96;
+      await service.getBoard(onDemand: true);
+      expect(provider.calls, 2);
+      ledger.remaining = 3;
+      now = DateTime.utc(2026, 10, 1, 15);
+      await service.getBoard();
+      expect(provider.calls, 3);
+    },
+  );
+
+  test(
+    'manual refreshes stop after the daily cap until the next UTC day',
+    () async {
+      final dir = await Directory.systemTemp.createTemp('odds-daily-cap');
+      addTearDown(() => dir.delete(recursive: true));
+      final ledger = CreditLedger(reserve: 0)..remaining = 500;
+      var now = DateTime.utc(2026, 10, 18, 12);
+      final provider = _ClockProvider();
+      final service = OddsService(
+        [provider],
+        SnapshotStore(File('${dir.path}/history.jsonl')),
+        freeTier: FreeTierPlan(
+          schedule: const OddsRefreshSchedule(),
+          ledger: ledger,
+          estimatedCost: 3,
+          cooldown: Duration.zero,
+          fixedKickoffs: const [],
+          dailyOnDemandCap: 2,
+        ),
+        clock: () => now,
+      );
+      await service.getBoard();
+      await service.getBoard(onDemand: true);
+      await service.getBoard(onDemand: true);
+      expect(provider.calls, 3);
+      final capped = await service.getBoard(onDemand: true);
+      expect(provider.calls, 3);
+      expect(capped.notices.join(), contains('Daily refresh limit'));
+      now = DateTime.utc(2026, 10, 19, 12);
+      await service.getBoard(onDemand: true);
+      expect(provider.calls, 4);
+    },
+  );
+
+  test('a free events refresh does not clear the last odds cost', () async {
+    final dir = await Directory.systemTemp.createTemp('odds-last-cost');
+    addTearDown(() => dir.delete(recursive: true));
+    final transport = _ScriptedTransport((uri) {
+      if (uri.path.endsWith('/events')) {
+        return OddsApiResponse(
+          statusCode: 200,
+          body: '[{"commence_time":"2026-10-19T17:00:00Z"}]',
+          headers: const {
+            'x-requests-remaining': '497',
+            'x-requests-used': '3',
+            'x-requests-last': '0',
+          },
+        );
+      }
+      return OddsApiResponse(
+        statusCode: 200,
+        body:
+            '[{"home_team":"Kansas City Chiefs","away_team":"Buffalo Bills",'
+            '"commence_time":"2026-10-19T17:00:00Z","bookmakers":[]}]',
+        headers: const {
+          'x-requests-remaining': '497',
+          'x-requests-used': '3',
+          'x-requests-last': '3',
+        },
+      );
+    });
+    final ledger = CreditLedger(reserve: 0)..remaining = 500;
+    final service = OddsService(
+      [TheOddsApiProvider('test-key', transport: transport)],
+      SnapshotStore(File('${dir.path}/history.jsonl')),
+      freeTier: FreeTierPlan(
+        schedule: const OddsRefreshSchedule(),
+        ledger: ledger,
+        estimatedCost: 3,
+        eventsMaxAge: Duration.zero,
+        dailyOnDemandCap: 0,
+      ),
+      clock: () => DateTime.utc(2026, 10, 18, 12),
+    );
+    await service.getBoard();
+    expect(ledger.lastCost, 3);
+    final oddsCalls = transport.uris
+        .where((uri) => uri.path.endsWith('/odds'))
+        .length;
+    await service.getBoard();
+    expect(ledger.lastCost, 3);
+    expect(
+      transport.uris.where((uri) => uri.path.endsWith('/odds')),
+      hasLength(oddsCalls),
+    );
+    expect(
+      transport.uris.where((uri) => uri.path.endsWith('/events')).length,
+      greaterThan(1),
+    );
+    ledger.apply(
+      const CreditObservation(remaining: 497, used: 3, lastCost: 0),
+      at: DateTime.utc(2026, 10, 18, 13),
+      updateLastCost: false,
+    );
+    expect(ledger.lastCost, 3);
   });
 }
 
