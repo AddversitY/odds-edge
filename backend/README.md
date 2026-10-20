@@ -68,13 +68,17 @@ server reloads the last saved snapshot instead of spending a credit just to
 start. `ODDS_REFRESH_SECONDS` now applies only to demonstration mode (clamped
 to 30–3600 seconds) and does not control live polling.
 
-Manual refresh is shared. While credits are above the reserve (default 50,
-`ODDS_CREDIT_RESERVE`), a manual refresh is allowed after the cooldown. At or
-inside the reserve, manual refresh is skipped. Scheduled snapshots may use the
-reserve, but nothing is requested when the remaining credits cannot pay for the
-call. The screen keeps showing the cached snapshot. Credit headers
+Manual refresh is shared. It waits out the cooldown and stops after the daily
+cap (`ODDS_ON_DEMAND_DAILY_CAP`, default 6). It also leaves enough credits for
+the scheduled snapshots still left in the billing month, plus
+`ODDS_CREDIT_RESERVE` (default 50) as a cushion. Scheduled snapshots may use
+that cushion, but nothing is requested when the remaining credits cannot pay
+for the call. Each planned snapshot is attempted at most twice. If The Odds
+API reports a charge, that slot is finished even when the body cannot be
+parsed. The screen keeps showing the cached snapshot. Credit headers
 `x-requests-remaining`, `x-requests-used`, and `x-requests-last` are stored in
-`backend/data/credits.json` and returned by `/health`.
+`backend/data/credits.json` and returned by `/health`. The free events call
+does not overwrite the last odds cost.
 
 The app shows `Snapshot as of <time>` so a saved price is not presented as a
 live stream. Quotes older than 120 seconds before kickoff, or 20 seconds after
@@ -97,13 +101,20 @@ timestamps >5 seconds in the future are excluded. The client rechecks every
 freshness, not guaranteed executable availability. With no final-status feed,
 events past kickoff conservatively retain the stricter threshold.
 
-Snapshots append to ignored `backend/data/snapshots.jsonl` on successful
-collection. History is retained on restart; the hot cache is not. Charts show
-first/latest observed prices, never inferred opening/closing prices. Local demo
-history is synthetic and must never be mixed with actual market history. Storage
-is a single-process development journal; migrate to indexed database storage,
-retention controls and scheduler before deployment. Collection currently occurs
-while clients poll, not continuously when the application is closed.
+Snapshots append to an ignored per-provider journal,
+`backend/data/snapshots-<provider>.jsonl`, on successful collection. Demo and
+live odds never share a file. Restart reloads the latest line only when its
+provider id and demo flag match the running mode; a mismatch fetches again
+instead of showing sample prices as live. Provider notices, including the
+settlement-rules warning, are kept. The older shared `snapshots.jsonl` file is
+not read. Charts show first/latest observed prices, never inferred
+opening/closing prices. Local demo history is synthetic and must never be mixed
+with actual market history. Storage is a single-process development journal;
+migrate to indexed database storage, retention controls and scheduler before
+deployment. The server also checks the schedule once a minute while it is
+running. Caesars and Fanatics are on the default book list, but a free-tier
+response may omit them. A missing book is left out of the board and is not
+reported as a failure.
 
 ## Windows and iOS
 
