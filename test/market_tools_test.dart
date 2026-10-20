@@ -757,6 +757,32 @@ void main() {
     expect(started.emptyReason, contains('already started'));
     expect(started.emptyReason, isNot(contains('Suspended')));
 
+    final kickoff = now.add(const Duration(hours: 2));
+    final pregameSnapshot = board(
+      [freshBills, freshChiefs],
+      start: kickoff,
+      fetched: now,
+    );
+    final openedBefore = scanMarkets(
+      pregameSnapshot,
+      kickoff.subtract(const Duration(seconds: 1)),
+    );
+    expect(openedBefore.markets, isNotEmpty);
+    final openedAfter = scanMarkets(pregameSnapshot, kickoff);
+    expect(openedAfter.markets, isEmpty);
+    expect(openedAfter.arbitrage, isEmpty);
+    expect(openedAfter.middles, isEmpty);
+    expect(openedAfter.emptyReason, contains('already started'));
+    expect(
+      usableSnapshotQuotes(
+        pregameSnapshot.quotes,
+        kickoff,
+        events: pregameSnapshot.events,
+        fetchedAt: pregameSnapshot.fetchedAt,
+      ),
+      isEmpty,
+    );
+
     final kickingOff = scanMarkets(
       board([
         freshBills,
@@ -923,6 +949,39 @@ void main() {
     expect(formatSignedPercent(-0.001), '-0.1%');
     expect(formatPlainPercent(0.055), '5.5%');
     expect(formatPlainPercent(0.055).startsWith('+'), isFalse);
+
+    final scan = scanMarkets(
+      board([
+        quote(outcome: 'Buffalo Bills', book: 'a', decimal: 1.9992),
+        quote(outcome: 'Kansas City Chiefs', book: 'a', decimal: 1.9992),
+        quote(
+          outcome: 'Buffalo Bills',
+          book: 'a',
+          decimal: 1.91,
+          market: 'spreads',
+          point: 3.5,
+        ),
+        quote(
+          outcome: 'Kansas City Chiefs',
+          book: 'b',
+          decimal: 1.91,
+          market: 'spreads',
+          point: -3.5,
+        ),
+      ]),
+      now,
+    );
+    final edge = scan.markets
+        .singleWhere((market) => market.market == 'h2h')
+        .sides
+        .first
+        .marketEv!;
+    expect(edge, isNegative);
+    expect(formatSignedPercent(edge), '0.0%');
+    expect(
+      scan.markets.singleWhere((market) => market.market == 'spreads').detail,
+      'Buffalo Bills +3.5 · Kansas City Chiefs -3.5',
+    );
   });
 
   test('Kelly stays within the bankroll for a valid chance', () {

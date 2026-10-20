@@ -69,7 +69,9 @@ Those books use that rules label, they are not mixed into the unverified
 group, and they do not show the note. Unverified prices still cannot win the
 live best-price badge on Odds comparison.
 
-Games that have already started are left out of those three tools. So is a
+Games that have already started are left out of those three tools. Kickoff is
+checked against the snapshot time and against the clock when the screen is
+opened, so a pre-kickoff snapshot opened after kickoff is left out too. So is a
 price whose source time is more than 30 minutes older than the moment it was
 saved. An in-game line and a stale pregame line are not treated as an edge.
 Neither check requests new odds. If nothing usable remains, the empty state
@@ -87,7 +89,7 @@ says why, instead of blaming suspended lines.
 | Alternate lines | OddsJam; Unabated alternate calculator and prop alts | Partial | If both sides of an alternate are in the snapshot, the same fee and fair-price math runs. The free snapshot asks only for the main line. | Main-line request is already scheduled. Alternates cost more credits or a paid plan. | Paid odds feed if we request them. |
 | Player-prop prices | OddsJam; Outlier Prop Finder; Unabated prop screen; Rithmm props | Missing | Prop history works from box scores and a line you type. The app does not download prop prices. | The Odds API props/alternates are outside the free three-market request. | Paid odds feed. |
 | Futures, quarters, halves | OddsJam futures; Unabated partial-game and futures simulators | Missing | Not built. Main-line math does not transfer to season-long rules. | Separate markets and, for futures, a season simulator. | Paid odds feed. |
-| Prediction markets and exchanges | Rithmm lists Kalshi, Polymarket, Novig; Unabated lists exchanges and prediction markets | Missing | Left out on purpose. The free feed is 10 US books. | A different feed and a rules review. | Paid odds feed. |
+| Prediction markets and exchanges | Rithmm lists Kalshi, Polymarket, Novig; Unabated lists exchanges and prediction markets | Missing | Left out on purpose. The free feed requests 10 US books. In testing, the free tier returned 8 (no Caesars, no Fanatics). | A different feed and a rules review. | Paid odds feed. |
 | One-click bet placement or deep link | Outlier homepage; Pikkit autofill; Rithmm "send the slip" | Missing | You place the bet at the sportsbook. Linking accounts is out of scope. | Account linking or book-specific URLs. | Account linking. |
 | Reorder books and colors | OddsJam odds-screen guide | Missing | "My accessible books" already hides books you cannot use. Colors are not needed for that. | $0. | No. |
 

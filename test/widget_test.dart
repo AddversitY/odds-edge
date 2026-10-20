@@ -342,4 +342,72 @@ void main() {
     expect(find.textContaining('Suspended lines are left out'), findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('A spread card names the team and a tiny loss shows as 0.0%', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(430, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final at = DateTime.utc(2026, 10, 18, 12);
+    await tester.pumpWidget(
+      toolsHarness(
+        OddsBoard(
+          events: [
+            SportEvent(
+              'g',
+              'Buffalo Bills',
+              'Kansas City Chiefs',
+              at.add(const Duration(days: 1)),
+            ),
+          ],
+          quotes: [
+            toolQuote(
+              outcome: 'Buffalo Bills',
+              book: 'draftkings',
+              decimal: 1.9992,
+              status: 'open',
+              rules: 'includes_overtime_push_on_tie',
+            ),
+            toolQuote(
+              outcome: 'Kansas City Chiefs',
+              book: 'draftkings',
+              decimal: 1.9992,
+              status: 'open',
+              rules: 'includes_overtime_push_on_tie',
+            ),
+            toolQuote(
+              outcome: 'Buffalo Bills',
+              book: 'draftkings',
+              decimal: 1.91,
+              market: 'spreads',
+              point: 3.5,
+              status: 'open',
+              rules: 'includes_overtime_push_on_tie',
+            ),
+            toolQuote(
+              outcome: 'Kansas City Chiefs',
+              book: 'fanduel',
+              decimal: 1.91,
+              market: 'spreads',
+              point: -3.5,
+              status: 'open',
+              rules: 'includes_overtime_push_on_tie',
+            ),
+          ],
+          fetchedAt: at,
+        ),
+      ),
+    );
+    await tester.tap(find.text('Best price'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Buffalo Bills +3.5 · Kansas City Chiefs -3.5'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Versus that market: 0.0% per'), findsWidgets);
+    expect(find.textContaining('-0.0%'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 }

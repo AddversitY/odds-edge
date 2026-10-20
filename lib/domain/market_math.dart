@@ -484,8 +484,21 @@ String _sideKey(Selection selection) {
 String _sliceKey(Selection selection) =>
     '${selection.market}|${selection.period}|${comparisonRules(selection.rules)}';
 
-bool _eventAlreadyStarted(SportEvent event, DateTime fetchedAt) =>
-    !event.startsAt.isAfter(fetchedAt);
+/// True when kickoff is at or before [asOf].
+///
+/// Callers pass the snapshot time and the clock supplied when the tools
+/// render. A snapshot taken before kickoff is not a pregame price once that
+/// clock has reached kickoff.
+bool _eventAlreadyStarted(SportEvent event, DateTime asOf) =>
+    !event.startsAt.isAfter(asOf);
+
+bool _gameHasStarted(
+  SportEvent event, {
+  required DateTime? fetchedAt,
+  required DateTime now,
+}) =>
+    _eventAlreadyStarted(event, now) ||
+    (fetchedAt != null && _eventAlreadyStarted(event, fetchedAt));
 
 bool _quoteUsable(
   OddsQuote quote,
@@ -503,9 +516,12 @@ bool _quoteUsable(
   if (quote.collectedAt.difference(quote.sourceAt) > snapshotPriceLag) {
     return false;
   }
-  if (events != null && fetchedAt != null) {
+  if (events != null) {
     final event = events[quote.selection.eventId];
-    if (event != null && _eventAlreadyStarted(event, fetchedAt)) return false;
+    if (event != null &&
+        _gameHasStarted(event, fetchedAt: fetchedAt, now: now)) {
+      return false;
+    }
   }
   return true;
 }
@@ -579,7 +595,8 @@ String _explainEmptySnapshot(
       continue;
     }
     final event = events[quote.selection.eventId];
-    if (event != null && _eventAlreadyStarted(event, board.fetchedAt)) {
+    if (event != null &&
+        _gameHasStarted(event, fetchedAt: board.fetchedAt, now: now)) {
       started++;
       continue;
     }
@@ -624,6 +641,9 @@ String _explainEmptySnapshot(
   return 'No usable prices in this snapshot. ${parts.join('; ')}.';
 }
 
+/// [now] is the clock when the tools render. Tests pass a fixed time.
+/// A game with startsAt at or before [now] is left out even when the
+/// snapshot itself was taken before kickoff.
 MarketScan scanMarkets(OddsBoard board, DateTime now, {Set<String>? books}) {
   final quotes = usableSnapshotQuotes(
     board.quotes,
