@@ -88,7 +88,8 @@ class StakeSuggestion {
   });
 
   /// Fraction of the bankroll. Zero when the price is not better than the
-  /// win chance. This can exceed 1 when the inputs are extreme.
+  /// win chance. With a possible win and push, this stays within the
+  /// bankroll: it reaches 1 only when there is no chance of a loss.
   final double fraction;
   final double half;
   final double quarter;
@@ -308,6 +309,7 @@ class PricedMarket {
     required this.tieNotPriced,
     required this.removalMethodsDisagree,
     required this.complete,
+    required this.rulesUnverified,
   });
 
   final String eventId, matchup, market, detail;
@@ -320,6 +322,10 @@ class PricedMarket {
   final bool tieNotPriced;
   final bool removalMethodsDisagree;
   final bool complete;
+
+  /// True when the prices were grouped without an independent rules check.
+  /// The card has to say so. Books with different confirmed rules stay apart.
+  final bool rulesUnverified;
 
   double? get bestMarketEv {
     final values = sides.map((side) => side.marketEv).whereType<double>();
@@ -345,6 +351,7 @@ class ArbitrageOpportunity {
     required this.sameBook,
     required this.tieNotPriced,
     required this.wholeNumberLine,
+    required this.rulesUnverified,
   });
 
   final String matchup, detail;
@@ -353,6 +360,41 @@ class ArbitrageOpportunity {
   /// Profit as a fraction of the combined stake, before any rejected bet.
   final double roi;
   final bool sameBook, tieNotPriced, wholeNumberLine;
+  final bool rulesUnverified;
+}
+
+/// Profit and loss for $100 staked on each side of a middle.
+class MiddlePayoff {
+  const MiddlePayoff({
+    required this.stakePerSide,
+    required this.hitProfit,
+    required this.missIfFirstWins,
+    required this.missIfSecondWins,
+    required this.breakEvenIfFirstCovers,
+    required this.breakEvenIfSecondCovers,
+  });
+
+  final double stakePerSide;
+
+  /// Profit if both bets win.
+  final double hitProfit;
+
+  /// Result if the first bet wins and the second loses. Negative is a loss.
+  final double missIfFirstWins;
+
+  /// Result if the second bet wins and the first loses. Negative is a loss.
+  final double missIfSecondWins;
+
+  /// Hit rate that breaks even when every miss is a win for the first bet.
+  /// Zero when that miss does not lose money.
+  final double breakEvenIfFirstCovers;
+
+  /// Hit rate that breaks even when every miss is a win for the second bet.
+  final double breakEvenIfSecondCovers;
+
+  /// Hit rate that breaks even against the larger of the two decided losses.
+  double get breakEvenHitRate =>
+      math.max(breakEvenIfFirstCovers, breakEvenIfSecondCovers);
 }
 
 class MiddleOpportunity {
@@ -363,11 +405,44 @@ class MiddleOpportunity {
     required this.second,
     required this.window,
     required this.pushPossible,
+    required this.payoff,
+    required this.rulesUnverified,
   });
 
   final String matchup, market, window;
   final OddsQuote first, second;
   final bool pushPossible;
+  final MiddlePayoff payoff;
+  final bool rulesUnverified;
+}
+
+/// Shown on a card whose books were not listed in VERIFIED_NFL_RULE_BOOKS.
+const unverifiedRulesNote =
+    'House rules not independently verified. Standard full-game prices are grouped by market and number so books can be compared. A book that settles overtime, a tie, or a push differently is a different bet.';
+
+/// A saved price older than this, relative to the time it was collected, is
+/// left out of the snapshot tools. This does not request a new price.
+const snapshotPriceLag = Duration(minutes: 30);
+
+enum MarketSort { comparison, lowestFee }
+
+/// [MarketSort.comparison] keeps the scan order (best market comparison first).
+/// [MarketSort.lowestFee] puts the smallest sportsbook fee first.
+List<PricedMarket> sortPricedMarkets(
+  List<PricedMarket> markets,
+  MarketSort sort,
+) {
+  if (sort == MarketSort.comparison) return markets;
+  final copy = [...markets]
+    ..sort((a, b) {
+      final hold = (a.bestHold ?? double.infinity).compareTo(
+        b.bestHold ?? double.infinity,
+      );
+      if (hold != 0) return hold;
+      final game = a.matchup.compareTo(b.matchup);
+      return game != 0 ? game : a.detail.compareTo(b.detail);
+    });
+  return copy;
 }
 
 class MarketScan {
@@ -377,6 +452,7 @@ class MarketScan {
     required this.middles,
     required this.snapshotAt,
     required this.demo,
+    this.emptyReason,
   });
 
   final List<PricedMarket> markets;
@@ -384,28 +460,178 @@ class MarketScan {
   final List<MiddleOpportunity> middles;
   final DateTime snapshotAt;
   final bool demo;
+
+  /// Why [markets] is empty. Null when the snapshot still has a priced market.
+  final String? emptyReason;
+}
+
+/// Shared bucket for books whose settlement rules were not confirmed.
+/// A per-book suffix such as `unverified:draftkings:h2h` is the same bucket.
+String comparisonRules(String rules) =>
+    rules == 'unverified' || rules.startsWith('unverified:')
+    ? 'unverified'
+    : rules;
+
+bool rulesLookUnverified(OddsQuote quote) =>
+    quote.status == 'unverified' ||
+    comparisonRules(quote.selection.rules) == 'unverified';
+
+String _sideKey(Selection selection) {
+  final point = selection.point?.toStringAsFixed(3) ?? '';
+  return '${selection.market}|${selection.period}|${selection.participant}|${selection.outcome}|$point|${comparisonRules(selection.rules)}';
+}
+
+String _sliceKey(Selection selection) =>
+    '${selection.market}|${selection.period}|${comparisonRules(selection.rules)}';
+
+bool _eventAlreadyStarted(SportEvent event, DateTime fetchedAt) =>
+    !event.startsAt.isAfter(fetchedAt);
+
+bool _quoteUsable(
+  OddsQuote quote,
+  DateTime now, {
+  Set<String>? books,
+  Map<String, SportEvent>? events,
+  DateTime? fetchedAt,
+}) {
+  if (quote.status != 'open' && quote.status != 'unverified') return false;
+  if (books != null && !books.contains(quote.bookId)) return false;
+  final limit = now.add(const Duration(seconds: 5));
+  if (quote.sourceAt.isAfter(limit) || quote.collectedAt.isAfter(limit)) {
+    return false;
+  }
+  if (quote.collectedAt.difference(quote.sourceAt) > snapshotPriceLag) {
+    return false;
+  }
+  if (events != null && fetchedAt != null) {
+    final event = events[quote.selection.eventId];
+    if (event != null && _eventAlreadyStarted(event, fetchedAt)) return false;
+  }
+  return true;
 }
 
 List<OddsQuote> usableSnapshotQuotes(
   Iterable<OddsQuote> quotes,
   DateTime now, {
   Set<String>? books,
+  Iterable<SportEvent>? events,
+  DateTime? fetchedAt,
 }) {
+  final byId = events == null
+      ? null
+      : {for (final event in events) event.id: event};
   return deduplicateQuotes(
-    quotes.where((quote) {
-      if (quote.status != 'open') return false;
-      if (books != null && !books.contains(quote.bookId)) return false;
-      final limit = now.add(const Duration(seconds: 5));
-      if (quote.sourceAt.isAfter(limit) || quote.collectedAt.isAfter(limit)) {
-        return false;
-      }
-      return true;
-    }),
+    quotes.where(
+      (quote) => _quoteUsable(
+        quote,
+        now,
+        books: books,
+        events: byId,
+        fetchedAt: fetchedAt,
+      ),
+    ),
   );
 }
 
+/// Plain reason the snapshot tools have nothing to price. Null when at least
+/// one price is still usable. Does not call the odds provider.
+String? snapshotEmptyReason(
+  OddsBoard board,
+  DateTime now, {
+  Set<String>? books,
+}) {
+  if (usableSnapshotQuotes(
+    board.quotes,
+    now,
+    books: books,
+    events: board.events,
+    fetchedAt: board.fetchedAt,
+  ).isNotEmpty) {
+    return null;
+  }
+  return _explainEmptySnapshot(board, now, books: books);
+}
+
+String _explainEmptySnapshot(
+  OddsBoard board,
+  DateTime now, {
+  Set<String>? books,
+}) {
+  if (board.quotes.isEmpty) return 'No prices in this snapshot.';
+  final events = {for (final event in board.events) event.id: event};
+  var wrongBook = 0, future = 0, closed = 0, stale = 0, started = 0;
+  for (final quote in board.quotes) {
+    if (books != null && !books.contains(quote.bookId)) {
+      wrongBook++;
+      continue;
+    }
+    final limit = now.add(const Duration(seconds: 5));
+    if (quote.sourceAt.isAfter(limit) || quote.collectedAt.isAfter(limit)) {
+      future++;
+      continue;
+    }
+    if (quote.status != 'open' && quote.status != 'unverified') {
+      closed++;
+      continue;
+    }
+    if (quote.collectedAt.difference(quote.sourceAt) > snapshotPriceLag) {
+      stale++;
+      continue;
+    }
+    final event = events[quote.selection.eventId];
+    if (event != null && _eventAlreadyStarted(event, board.fetchedAt)) {
+      started++;
+      continue;
+    }
+  }
+  final reasons = [
+    started > 0,
+    stale > 0,
+    closed > 0,
+    future > 0,
+    wrongBook > 0,
+  ].where((hit) => hit).length;
+  if (reasons <= 1) {
+    if (started > 0) {
+      return 'No usable prices in this snapshot. The games have already started, so in-game lines are left out.';
+    }
+    if (stale > 0) {
+      return 'No usable prices in this snapshot. Every price was more than 30 minutes old when it was saved.';
+    }
+    if (closed > 0) {
+      return 'No usable prices in this snapshot. Suspended lines are left out.';
+    }
+    if (future > 0) {
+      return 'No usable prices in this snapshot. The prices are dated after the snapshot.';
+    }
+    if (wrongBook > 0) {
+      return 'No prices from the books you can use are in this snapshot.';
+    }
+  }
+  final parts = <String>[
+    if (started > 0)
+      '$started ${started == 1 ? 'price is' : 'prices are'} from games that have already started',
+    if (stale > 0)
+      '$stale ${stale == 1 ? 'price was' : 'prices were'} more than 30 minutes old when saved',
+    if (closed > 0)
+      '$closed ${closed == 1 ? 'price is' : 'prices are'} suspended or not open',
+    if (future > 0)
+      '$future ${future == 1 ? 'price is' : 'prices are'} dated after the snapshot',
+    if (wrongBook > 0)
+      '$wrongBook ${wrongBook == 1 ? 'price is' : 'prices are'} from books you cannot use',
+  ];
+  if (parts.isEmpty) return 'No usable prices in this snapshot.';
+  return 'No usable prices in this snapshot. ${parts.join('; ')}.';
+}
+
 MarketScan scanMarkets(OddsBoard board, DateTime now, {Set<String>? books}) {
-  final quotes = usableSnapshotQuotes(board.quotes, now, books: books);
+  final quotes = usableSnapshotQuotes(
+    board.quotes,
+    now,
+    books: books,
+    events: board.events,
+    fetchedAt: board.fetchedAt,
+  );
   final events = {for (final event in board.events) event.id: event};
   final markets = <PricedMarket>[];
   final byEvent = <String, List<OddsQuote>>{};
@@ -420,12 +646,7 @@ MarketScan scanMarkets(OddsBoard board, DateTime now, {Set<String>? books}) {
     final bySlice = <String, List<OddsQuote>>{};
     for (final quote in entry.value) {
       final selection = quote.selection;
-      bySlice
-          .putIfAbsent(
-            '${selection.market}|${selection.period}|${selection.rules}',
-            () => [],
-          )
-          .add(quote);
+      bySlice.putIfAbsent(_sliceKey(selection), () => []).add(quote);
     }
     for (final slice in bySlice.values) {
       final market = slice.first.selection.market;
@@ -455,6 +676,9 @@ MarketScan scanMarkets(OddsBoard board, DateTime now, {Set<String>? books}) {
     middles: middles,
     snapshotAt: board.fetchedAt,
     demo: board.demo,
+    emptyReason: markets.isEmpty
+        ? snapshotEmptyReason(board, now, books: books)
+        : null,
   );
 }
 
@@ -507,21 +731,25 @@ PricedMarket _priceMarket(
   String matchup,
 ) {
   final byOutcome = <String, List<OddsQuote>>{};
-  final wanted = selections.map((selection) => selection.key).toSet();
+  final wanted = selections.map(_sideKey).toSet();
   for (final quote in quotes) {
-    if (wanted.contains(quote.selection.key)) {
-      byOutcome.putIfAbsent(quote.selection.key, () => []).add(quote);
+    final key = _sideKey(quote.selection);
+    if (wanted.contains(key)) {
+      byOutcome.putIfAbsent(key, () => []).add(quote);
     }
   }
   final byBook = <String, Map<String, OddsQuote>>{};
   for (final selection in selections) {
-    for (final quote in byOutcome[selection.key] ?? const <OddsQuote>[]) {
-      byBook.putIfAbsent(quote.bookId, () => {})[selection.key] = quote;
+    final key = _sideKey(selection);
+    for (final quote in byOutcome[key] ?? const <OddsQuote>[]) {
+      byBook.putIfAbsent(quote.bookId, () => {})[key] = quote;
     }
   }
   final completeBooks = <Map<String, OddsQuote>>[];
   for (final book in byBook.values) {
-    if (selections.every((selection) => book.containsKey(selection.key))) {
+    if (selections.every(
+      (selection) => book.containsKey(_sideKey(selection)),
+    )) {
       completeBooks.add(book);
     }
   }
@@ -536,7 +764,7 @@ PricedMarket _priceMarket(
     for (final book in completeBooks) {
       final implied = [
         for (final selection in selections)
-          impliedProbability(book[selection.key]!.decimal),
+          impliedProbability(book[_sideKey(selection)]!.decimal),
       ];
       final proportional = removeVigProportional(implied);
       fairRows.add(proportional.probabilities);
@@ -563,7 +791,7 @@ PricedMarket _priceMarket(
   final sides = <PricedSide>[];
   for (var i = 0; i < selections.length; i++) {
     final selection = selections[i];
-    final offered = byOutcome[selection.key];
+    final offered = byOutcome[_sideKey(selection)];
     final best = offered == null || offered.isEmpty
         ? null
         : _bestPrice(offered);
@@ -610,6 +838,9 @@ PricedMarket _priceMarket(
         ),
     removalMethodsDisagree: disagree,
     complete: selections.length >= 2 && bestHold != null,
+    rulesUnverified: byOutcome.values
+        .expand((quotes) => quotes)
+        .any(rulesLookUnverified),
   );
 }
 
@@ -621,9 +852,21 @@ String _detail(List<Selection> selections) {
       ? ''
       : ' ${point.abs().toStringAsFixed(point.abs().truncateToDouble() == point.abs() ? 0 : 1)}';
   if (market == 'h2h') return name;
+  if (market == 'spreads') {
+    return [
+      for (final selection in selections)
+        '${selection.outcome} ${_signedLine(selection.point)}',
+    ].join(' · ');
+  }
   final who = selections.first.participant;
   if (who.isEmpty) return '$name$number';
   return '$who · $name$number';
+}
+
+String _signedLine(double? point) {
+  if (point == null) return '';
+  final text = point.toStringAsFixed(1);
+  return point > 0 ? '+$text' : text;
 }
 
 bool _wholePoint(Selection selection) {
@@ -661,7 +904,7 @@ OddsQuote _bestPrice(List<OddsQuote> quotes) {
 List<Selection> _uniqueSelections(List<OddsQuote> quotes) {
   final byKey = <String, Selection>{};
   for (final quote in quotes) {
-    byKey[quote.selection.key] = quote.selection;
+    byKey[_sideKey(quote.selection)] = quote.selection;
   }
   return byKey.values.toList();
 }
@@ -689,6 +932,7 @@ ArbitrageOpportunity? _arbitrageFor(PricedMarket market) {
     sameBook: books.length == 1,
     tieNotPriced: market.tieNotPriced,
     wholeNumberLine: market.wholeNumberLine,
+    rulesUnverified: market.rulesUnverified,
   );
 }
 
@@ -704,19 +948,17 @@ List<MiddleOpportunity> _middlesFor(
     }
     if (selection.point == null) continue;
     slices
-        .putIfAbsent(
-          '${selection.eventId}|${selection.market}|${selection.period}|${selection.rules}',
-          () => [],
-        )
+        .putIfAbsent('${selection.eventId}|${_sliceKey(selection)}', () => [])
         .add(quote);
   }
   final middles = <MiddleOpportunity>[];
   for (final slice in slices.values) {
     final bestByKey = <String, OddsQuote>{};
     for (final quote in slice) {
-      final current = bestByKey[quote.selection.key];
+      final key = _sideKey(quote.selection);
+      final current = bestByKey[key];
       if (current == null || quote.decimal > current.decimal) {
-        bestByKey[quote.selection.key] = quote;
+        bestByKey[key] = quote;
       }
     }
     final bests = bestByKey.values.toList();
@@ -753,6 +995,8 @@ MiddleOpportunity? _middle(OddsQuote a, OddsQuote b, String matchup) {
       second: b,
       window: _marginWindow(left.outcome, right.outcome, margins),
       pushPossible: _wholePoint(left) || _wholePoint(right),
+      payoff: _middlePayoff(a, b),
+      rulesUnverified: rulesLookUnverified(a) || rulesLookUnverified(b),
     );
   }
   final over = left.outcome.toLowerCase() == 'over'
@@ -778,7 +1022,88 @@ MiddleOpportunity? _middle(OddsQuote a, OddsQuote b, String matchup) {
     second: under,
     window: _totalWindow(totals),
     pushPossible: _wholePoint(over.selection) || _wholePoint(under.selection),
+    payoff: _middlePayoff(over, under),
+    rulesUnverified: rulesLookUnverified(over) || rulesLookUnverified(under),
   );
+}
+
+MiddlePayoff _middlePayoff(OddsQuote first, OddsQuote second) {
+  const stake = 100.0;
+  final hit = stake * ((first.decimal - 1) + (second.decimal - 1));
+  final missFirst = stake * (first.decimal - 2);
+  final missSecond = stake * (second.decimal - 2);
+  return MiddlePayoff(
+    stakePerSide: stake,
+    hitProfit: hit,
+    missIfFirstWins: missFirst,
+    missIfSecondWins: missSecond,
+    breakEvenIfFirstCovers: _breakEvenHitRate(hit, missFirst),
+    breakEvenIfSecondCovers: _breakEvenHitRate(hit, missSecond),
+  );
+}
+
+/// Fraction of results that must land in the window so the average result is
+/// zero, if every miss pays [miss]. A miss that does not lose money needs no
+/// hits to break even.
+double _breakEvenHitRate(double hit, double miss) {
+  if (miss >= -1e-9) return 0;
+  final span = hit - miss;
+  if (span <= 1e-12) return 1;
+  final rate = -miss / span;
+  if (rate <= 0) return 0;
+  if (rate >= 1) return 1;
+  return rate;
+}
+
+String _dollars(double value) {
+  final sign = value < 0 ? '-' : '';
+  return '$sign\$${value.abs().toStringAsFixed(2)}';
+}
+
+String _hitRateLabel(double rate) => '${(rate * 100).toStringAsFixed(1)}%';
+
+/// Visible card copy: hit profit, decided-miss result, and break-even rate.
+String middlePayoffSummary(MiddleOpportunity middle) {
+  final pay = middle.payoff;
+  final hit = _dollars(pay.hitProfit);
+  final first = middle.first.selection.label;
+  final second = middle.second.selection.label;
+  final missFirst = _dollars(pay.missIfFirstWins);
+  final missSecond = _dollars(pay.missIfSecondWins);
+  final opening =
+      '\$100 on each side. If the window hits, the profit is $hit. ';
+  final neitherLoses =
+      pay.missIfFirstWins >= -0.005 && pay.missIfSecondWins >= -0.005;
+  if (neitherLoses) {
+    return '$opening'
+        'If the window misses and both bets are decided, the result is still not a loss. '
+        'The window does not have to hit to break even.';
+  }
+  final sameMiss = (pay.missIfFirstWins - pay.missIfSecondWins).abs() < 0.005;
+  if (sameMiss) {
+    return '$opening'
+        'If the window misses and both bets are decided, the result is $missFirst. '
+        'The window has to hit ${_hitRateLabel(pay.breakEvenIfFirstCovers)} of the time to break even.';
+  }
+  return '$opening'
+      'If $first wins and $second loses, the result is $missFirst. '
+      'If $second wins and $first loses, the result is $missSecond. '
+      'The window has to hit ${_hitRateLabel(pay.breakEvenHitRate)} of the time to break even against the larger loss.';
+}
+
+/// Dialog copy for the window. A push is not a win on one side and a loss
+/// on the other.
+String middleWindowExplanation(MiddleOpportunity middle) {
+  if (middle.pushPossible) {
+    return 'Those final scores are the only ones where both bets win. '
+        'Outside that window, if both bets are decided, one wins and the other loses. '
+        'Landing on a whole number can push that bet and return the stake. '
+        'A push is not a win on one side and a loss on the other. '
+        'This is not a guaranteed profit.';
+  }
+  return 'Those final scores are the only ones where both bets win. '
+      'Every other whole-number result loses one side and wins the other. '
+      'This is not a guaranteed profit.';
 }
 
 List<int> _strictIntegers(double low, double high) {

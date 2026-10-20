@@ -78,6 +78,7 @@ void main() {
     expect(find.text('My bets'), findsOneWidget);
     expect(find.text('Stake size'), findsOneWidget);
     expect(find.text('Prop history'), findsOneWidget);
+    expect(find.textContaining('last 20'), findsOneWidget);
     await tester.ensureVisible(find.text('Best price'));
     await tester.tap(find.text('Best price'));
     await tester.pumpAndSettle();
@@ -96,7 +97,21 @@ void main() {
     await tester.tap(find.text('Stake size'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Full Kelly'), findsOneWidget);
+    final stakeLines = tester.widgetList<Text>(
+      find.textContaining('% of bankroll'),
+    );
+    expect(stakeLines, isNotEmpty);
+    for (final line in stakeLines) {
+      expect(line.data, isNot(contains('+')));
+    }
     expect(find.textContaining('1-800-GAMBLER'), findsOneWidget);
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Win chance %'),
+      '100',
+    );
+    await tester.pump();
+    expect(find.textContaining('less than 100'), findsOneWidget);
+    expect(find.textContaining('Full Kelly'), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
@@ -170,5 +185,161 @@ void main() {
     expect(find.textContaining('Versus KC: 0 of 1 cleared'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
+  });
+
+  OddsQuote toolQuote({
+    required String outcome,
+    required String book,
+    required double decimal,
+    String market = 'h2h',
+    double? point,
+    String status = 'unverified',
+    String? rules,
+  }) {
+    final at = DateTime.utc(2026, 10, 18, 12);
+    return OddsQuote(
+      selection: Selection(
+        eventId: 'g',
+        market: market,
+        outcome: outcome,
+        point: point,
+        rules: rules ?? 'unverified:$book:$market',
+      ),
+      bookId: book,
+      book: book,
+      provider: 'test',
+      decimal: decimal,
+      sourceAt: at,
+      collectedAt: at,
+      status: status,
+    );
+  }
+
+  Widget toolsHarness(OddsBoard board) => MaterialApp(
+    home: Scaffold(
+      body: SingleChildScrollView(
+        child: ToolsPage(
+          board: board,
+          now: DateTime.utc(2026, 10, 18, 12),
+          store: MemoryResearchStore(),
+          history: (_) async => <OddsQuote>[],
+          stamp: (_) => '2026-10-18 12:00:00 UTC',
+        ),
+      ),
+    ),
+  );
+
+  testWidgets('Unverified snapshot prices show up with the rules note', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(430, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final at = DateTime.utc(2026, 10, 18, 12);
+    await tester.pumpWidget(
+      toolsHarness(
+        OddsBoard(
+          events: [
+            SportEvent(
+              'g',
+              'Buffalo Bills',
+              'Kansas City Chiefs',
+              at.add(const Duration(days: 1)),
+            ),
+          ],
+          quotes: [
+            toolQuote(
+              outcome: 'Buffalo Bills',
+              book: 'draftkings',
+              decimal: 1.91,
+            ),
+            toolQuote(
+              outcome: 'Kansas City Chiefs',
+              book: 'fanduel',
+              decimal: 1.91,
+            ),
+            toolQuote(
+              outcome: 'Over',
+              book: 'draftkings',
+              decimal: 1.91,
+              market: 'totals',
+              point: 47,
+            ),
+            toolQuote(
+              outcome: 'Under',
+              book: 'fanduel',
+              decimal: 1.91,
+              market: 'totals',
+              point: 49,
+            ),
+          ],
+          fetchedAt: at,
+        ),
+      ),
+    );
+    await tester.tap(find.text('Best price'));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('House rules not independently verified'),
+      findsWidgets,
+    );
+    expect(find.textContaining('Suspended lines are left out'), findsNothing);
+    await tester.tap(find.text('All tools'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Arbitrage and middles'));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('If the window hits, the profit is'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('break even'), findsOneWidget);
+    expect(find.textContaining('-\$9.00'), findsOneWidget);
+    await tester.ensureVisible(find.byTooltip('Middle window'));
+    await tester.tap(find.byTooltip('Middle window'));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('loses one side and wins the other'),
+      findsNothing,
+    );
+    expect(find.textContaining('return the stake'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('An empty tools board names the real reason', (tester) async {
+    tester.view.physicalSize = const Size(430, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final at = DateTime.utc(2026, 10, 18, 12);
+    await tester.pumpWidget(
+      toolsHarness(
+        OddsBoard(
+          events: [SportEvent('g', 'Buffalo Bills', 'Kansas City Chiefs', at)],
+          quotes: [
+            toolQuote(
+              outcome: 'Buffalo Bills',
+              book: 'draftkings',
+              decimal: 2.2,
+              status: 'open',
+              rules: 'includes_overtime_push_on_tie',
+            ),
+            toolQuote(
+              outcome: 'Kansas City Chiefs',
+              book: 'fanduel',
+              decimal: 2.2,
+              status: 'open',
+              rules: 'includes_overtime_push_on_tie',
+            ),
+          ],
+          fetchedAt: at,
+        ),
+      ),
+    );
+    await tester.tap(find.text('Best price'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('already started'), findsOneWidget);
+    expect(find.textContaining('Suspended lines are left out'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 }

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:odds_edge/domain/market_math.dart';
 import 'package:odds_edge/domain/odds.dart';
 import 'package:odds_edge/data/demo.dart';
 
@@ -196,12 +197,23 @@ void main() {
     expect(board.quotes.first.selection.point, 3.5);
     expect(board.quotes.first.freshness(now), 'current');
     expect(provider.parse(fixture(home: 'Unknown'), now).quotes, isEmpty);
+    expect(board.quotes.first.status, 'open');
+    expect(board.quotes.first.selection.rules, 'includes_overtime_push_on_tie');
     final unverified = TheOddsApiProvider('test').parse(fixture(), now);
     expect(unverified.quotes.first.status, 'unverified');
+    expect(unverified.quotes.first.selection.rules, 'unverified');
     expect(
       bestQuote(unverified.quotes, unverified.quotes.first.selection, now),
       isNull,
     );
+    expect(
+      unverified.notices.join('\n'),
+      contains('not independently verified'),
+    );
+    final priced = scanMarkets(unverified, now);
+    expect(priced.markets, isNotEmpty);
+    expect(priced.markets.single.rulesUnverified, isTrue);
+    expect(priced.emptyReason, isNull);
     expect(canonicalTeam('BUF'), 'BUF');
     expect(canonicalTeam(' buffalo bills '), 'BUF');
     expect(

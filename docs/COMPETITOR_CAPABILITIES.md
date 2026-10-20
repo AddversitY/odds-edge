@@ -35,8 +35,8 @@ comparison are unchanged.
 
 | Tool | Where | What you are looking at |
 |---|---|---|
-| Best price | Tools → Best price | Best number in the current snapshot, sportsbook fee, vig-free market chance, and a market comparison. Sharp-book column stays empty until a sharp book is actually in the snapshot. |
-| Arbitrage and middles | Tools → Arbitrage and middles | Two-sided prices that cross, with a stake split, and windows where both bets can win. Not a guaranteed profit. |
+| Best price | Tools → Best price | Best number in the current snapshot, sportsbook fee, vig-free market chance, and a market comparison. The list opens in that comparison order, or you can switch it to lowest fee. Sharp-book column stays empty until a sharp book is actually in the snapshot. A card says when the house rules were not independently verified. |
+| Arbitrage and middles | Tools → Arbitrage and middles | Two-sided prices that cross, with a stake split, and windows where both bets can win. A middle shows the profit if the window hits, the result if it misses, and the break-even hit rate. Not a guaranteed profit. |
 | Line movement | Tools → Line movement | Change between snapshots this computer already saved. Does not spend Odds API credits. |
 | Parlay price | Tools → Parlay price | Multiplied ticket price. Fair price only when the legs are separate games, or from one chance you type for a same-game ticket. |
 | My bets | Tools → My bets | Bets you type. Profit, ROI, record, and closing-line value from a close you type. |
@@ -47,11 +47,39 @@ Every one of those screens says when the snapshot was taken. Tap the info
 icon next to a figure for a plain-language explanation. None of them tells you
 to place a bet.
 
+## What a real free snapshot does
+
+A free-tier The Odds API snapshot checked with this phase (14 games, 582
+prices) returned 8 of the 10 default books. Caesars and Fanatics were not in
+the response. A missing book is left out of the board. It is not a failed
+request, and the app does not spend another credit to go looking for it.
+
+`VERIFIED_NFL_RULE_BOOKS` is optional and is unset in the usual setup. Books
+that are not on that list are stored as unverified. Best price, arbitrage, and
+middles still compare their full-game moneylines, spreads, and totals. Prices
+are grouped by market and number, including snapshots that were saved with an
+older per-book rules label. Each of those cards says house rules are not
+independently verified. That is the honest choice: labeling the 10 default
+books as "includes overtime, push on a tie" would claim a check that has not
+been done.
+
+Put a book on `VERIFIED_NFL_RULE_BOOKS` only after that book's full-game
+moneyline (including overtime, push on a tie), spread, and total are confirmed.
+Those books use that rules label, they are not mixed into the unverified
+group, and they do not show the note. Unverified prices still cannot win the
+live best-price badge on Odds comparison.
+
+Games that have already started are left out of those three tools. So is a
+price whose source time is more than 30 minutes older than the moment it was
+saved. An in-game line and a stale pregame line are not treated as an edge.
+Neither check requests new odds. If nothing usable remains, the empty state
+says why, instead of blaming suspended lines.
+
 ## Price shopping
 
 | Feature | Who documents it | Status | Simpler version | Data and cost | Blocked |
 |---|---|---|---|---|---|
-| Best price across books | OddsJam odds screen; Unabated odds screen; Outlier odds tracking; Rithmm line shopping; Pikkit line shopping | Have | One card per market shows the best open price in the snapshot and the book. Odds comparison still has the full book-by-book table. | Saved Odds API snapshot, 10 US books, moneyline, spread, total. $0 beyond the free 500 credits/month. | Live prices, 100+ books, and props need a paid feed. |
+| Best price across books | OddsJam odds screen; Unabated odds screen; Outlier odds tracking; Rithmm line shopping; Pikkit line shopping | Have | One card per market shows the best price in the snapshot and the book. If those house rules were not independently verified, the card says so. Odds comparison still has the full book-by-book table, and an unverified price still cannot win the live badge there. | Saved Odds API snapshot. The request asks for 10 US books; a checked free-tier response included 8 (no Caesars, no Fanatics). Moneyline, spread, total. $0 beyond the free 500 credits/month. | Live prices, 100+ books, and props need a paid feed. |
 | Sportsbook fee (hold / synthetic hold) | OddsJam low-hold tool; Unabated best-line and synthetic hold; Unabated no-vig page | Have | "Fee at the best prices" is how far the best prices add up past 100%. A negative fee is the arbitrage case. "Typical book fee" is the middle book, so one long price does not set it. | Same snapshot. $0. | No. |
 | Vig-free fair price | Unabated no-vig calculator (proportional method); Outlier devig / no-vig; Pikkit no-vig CLV option | Have | Each book that posted every side is fee-removed in proportion, then averaged. If equal-slice removal would move a chance by more than 1 percentage point, the card says so. | Same snapshot. $0. | No. |
 | Sharp-book reference (Pinnacle and similar) | Unabated "Unabated Line"; Outlier Pro sharp-book odds; OddsJam "Pinny"; Pikkit no-vig and best-available close | Partial | The math runs when a snapshot contains Pinnacle, Circa, Bookmaker, BetCRIS, or LowVig. The free US list does not include them, so the column says they are absent instead of substituting FanDuel or DraftKings. | Needs those books in an approved feed. Not in the free 10. | Paid odds feed. |
@@ -70,8 +98,8 @@ to place a bet.
 | Positive EV versus a vig-free market | OddsJam +EV; Outlier Premium+ badge and Pro feed; Unabated edge versus its line | Have | "Versus that market" is the profit per $1 if the vig-free chance were right. Positive means the snapshot price is longer than that chance. It is labeled as a market comparison, not a prediction and not a pick. | Same snapshot. $0. | A live scanner still needs a paid, faster feed. |
 | Positive EV versus a prediction model | Rithmm Edge; Unabated prop simulator | Partial | Proof Lab and player investigation still take a chance you type, or a conditional replay. There is no validated model, so the app does not rank "best bets." | Needs a tested model and point-in-time history. $0 until a feed is required. | No for the manual version. A real model may later need paid history. |
 | Arbitrage with stake split | OddsJam arbitrage; Outlier Pro arb feed; marketed by OddsJam as guaranteed | Have | Shows the dollars of a $100 combined stake and the return if both bets were accepted at the snapshot prices. Same-book gaps, missing draw prices, and whole-number pushes are spelled out. The word "guaranteed" is not used. | Same snapshot. $0. | Live arbs, props, and futures need a paid feed. |
-| Middles | OddsJam middles, including live; Outlier Pro middling with profit/loss; Unabated negative synthetic hold | Have | Names the whole-number scores where both bets win, and says that outside the window one side loses. No profit is promised. | Spreads and totals already in the snapshot. $0. | Live middles need a paid feed. |
-| Low-hold finder as its own feed | OddsJam low-hold tool | Have | The fee is on every Best price card, lowest fee first is unnecessary because positive-EV and negative-fee cards are already sorted to the top. | Same snapshot. $0. | Live board needs a paid feed. |
+| Middles | OddsJam middles, including live; Outlier Pro middling with profit/loss; Unabated negative synthetic hold | Have | Names the whole-number scores where both bets win. Shows the profit if the window hits, the result if it misses and both bets are decided, and the hit rate that breaks even. A whole-number push returns that stake. It is not described as a win on one side and a loss on the other. No profit is promised. | Spreads and totals already in the snapshot. $0. | Live middles need a paid feed. |
+| Low-hold finder as its own feed | OddsJam low-hold tool | Have | The fee is on every Best price card. The list opens ordered by the market comparison. Choose Lowest fee to put the smallest fee first, including a negative fee. | Same snapshot. $0. | Live board needs a paid feed. |
 | Bonus-bet / promo converter | OddsJam bonus conversion; Outlier Pro boosted parlays | Missing | A converter needs the promotion's exact stake, odds, and hedge rules. No promo feed is connected, and none is scraped. | Could later be a calculator you fill in. $0. A live promo board needs a feed or hand entry. | No for a manual calculator. A scanner would need promo terms we do not have. |
 | Free-bet and site-credit workflows | OddsJam; Pikkit promotions center | Missing | Not built. Same reason as promos. | Hand entry later. $0. | No. |
 

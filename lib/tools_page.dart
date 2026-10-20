@@ -143,7 +143,7 @@ class _ToolsPageState extends State<ToolsPage> {
       _link(
         ToolId.props,
         'Prop history',
-        'How often a recorded stat cleared a line: last 5, last 10, the season, and one opponent.',
+        'How often a recorded stat cleared a line: last 5, last 10, last 20, the season, and one opponent.',
         Icons.bar_chart,
       ),
     ],
@@ -170,44 +170,73 @@ class _ToolsPageState extends State<ToolsPage> {
       );
 }
 
-class _PriceScreen extends StatelessWidget {
+class _PriceScreen extends StatefulWidget {
   const _PriceScreen({required this.scan, required this.stamp});
   final MarketScan scan;
   final String Function(DateTime time) stamp;
 
   @override
+  State<_PriceScreen> createState() => _PriceScreenState();
+}
+
+class _PriceScreenState extends State<_PriceScreen> {
+  MarketSort sort = MarketSort.comparison;
+
+  @override
   Widget build(BuildContext context) {
-    final longer = scan.markets.where(
-      (market) => (market.bestMarketEv ?? 0) > 0,
-    );
+    final scan = widget.scan;
+    final markets = sortPricedMarkets(scan.markets, sort);
+    final longer = markets.where((market) => (market.bestMarketEv ?? 0) > 0);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _title('Best price'),
-        _snapshotBanner(scan, stamp),
+        _snapshotBanner(scan, widget.stamp),
         const SizedBox(height: 8),
-        Text(
-          longer.isEmpty
-              ? 'No price in this snapshot is longer than the vig-free market.'
-              : '${longer.length} ${longer.length == 1 ? 'price is' : 'prices are'} longer than the vig-free market. That is a comparison with other books, not a prediction.',
-        ),
-        const SizedBox(height: 8),
-        const ToolNote(
-          'The vig-free chance removes the sportsbook fee from every book that posted all sides, then averages those books. Tap any figure for the plain-language meaning.',
-        ),
-        const SizedBox(height: 16),
-        if (scan.markets.isEmpty)
-          const Card(
+        if (markets.isEmpty)
+          Card(
             child: Padding(
-              padding: EdgeInsets.all(18),
+              padding: const EdgeInsets.all(18),
               child: Text(
-                'No open prices in this snapshot. Suspended lines are left out.',
+                scan.emptyReason ?? 'No usable prices in this snapshot.',
               ),
             ),
+          )
+        else ...[
+          Text(
+            longer.isEmpty
+                ? 'No price in this snapshot is longer than the vig-free market.'
+                : '${longer.length} ${longer.length == 1 ? 'price is' : 'prices are'} longer than the vig-free market. That is a comparison with other books, not a prediction.',
           ),
-        for (final market in scan.markets) ...[
-          _marketCard(market),
+          const SizedBox(height: 8),
+          const ToolNote(
+            'The vig-free chance removes the sportsbook fee from every book that posted all sides, then averages those books. Tap any figure for the plain-language meaning.',
+          ),
           const SizedBox(height: 12),
+          DropdownButtonFormField<MarketSort>(
+            key: ValueKey(sort),
+            initialValue: sort,
+            decoration: const InputDecoration(labelText: 'Order'),
+            items: const [
+              DropdownMenuItem(
+                value: MarketSort.comparison,
+                child: Text('Market comparison'),
+              ),
+              DropdownMenuItem(
+                value: MarketSort.lowestFee,
+                child: Text('Lowest fee'),
+              ),
+            ],
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() => sort = value);
+            },
+          ),
+          const SizedBox(height: 16),
+          for (final market in markets) ...[
+            _marketCard(market),
+            const SizedBox(height: 12),
+          ],
         ],
         const ResponsibleLine(),
       ],
@@ -319,6 +348,11 @@ class _PriceScreen extends StatelessWidget {
                 'This is a whole-number line. It can push. A push is not in the profit figure.',
               ),
             ),
+          if (market.rulesUnverified)
+            const Padding(
+              padding: EdgeInsets.only(top: 6),
+              child: ToolNote(unverifiedRulesNote),
+            ),
         ],
       ),
     ),
@@ -346,7 +380,16 @@ class _HedgeScreen extends StatelessWidget {
         'An arbitrage is a pair of prices that cover every listed result with a little left over. It is not a locked profit. Both bets have to be accepted, at these prices, with the same rules.',
       ),
       const SizedBox(height: 12),
-      if (scan.arbitrage.isEmpty)
+      if (scan.markets.isEmpty)
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Text(
+              scan.emptyReason ?? 'No usable prices in this snapshot.',
+            ),
+          ),
+        )
+      else if (scan.arbitrage.isEmpty)
         const Card(
           child: Padding(
             padding: EdgeInsets.all(18),
@@ -366,10 +409,12 @@ class _HedgeScreen extends StatelessWidget {
       ),
       const SizedBox(height: 6),
       const ToolNote(
-        'A middle is two different numbers. There is a window where both bets win. Outside that window, one bet wins and the other loses. You are not paid both ways for certain.',
+        'A middle is two different numbers. There is a window where both bets win. Outside that window, one bet wins and the other loses, unless a whole-number line pushes and the stake comes back. You are not paid both ways for certain.',
       ),
       const SizedBox(height: 12),
-      if (scan.middles.isEmpty)
+      if (scan.markets.isEmpty)
+        const SizedBox.shrink()
+      else if (scan.middles.isEmpty)
         const Card(
           child: Padding(
             padding: EdgeInsets.all(18),
@@ -437,6 +482,11 @@ class _HedgeScreen extends StatelessWidget {
                   'A whole-number line can push. A push returns that stake, so the pictured return does not happen.',
                 ),
               ),
+            if (opportunity.rulesUnverified)
+              const Padding(
+                padding: EdgeInsets.only(top: 6),
+                child: ToolNote(unverifiedRulesNote),
+              ),
           ],
         ),
       ),
@@ -465,14 +515,21 @@ class _HedgeScreen extends StatelessWidget {
           ExplainedValue(
             value: middle.window,
             title: 'Middle window',
-            body: 'Those final scores are the only ones where both bets win. Every other whole-number result loses one side and wins the other. This is not a guaranteed profit.',
+            body: middleWindowExplanation(middle),
           ),
+          const SizedBox(height: 8),
+          Text(middlePayoffSummary(middle)),
           if (middle.pushPossible)
             const Padding(
               padding: EdgeInsets.only(top: 6),
               child: ToolNote(
                 'A whole-number line can push. A push returns that stake instead of winning or losing it.',
               ),
+            ),
+          if (middle.rulesUnverified)
+            const Padding(
+              padding: EdgeInsets.only(top: 6),
+              child: ToolNote(unverifiedRulesNote),
             ),
         ],
       ),
@@ -510,6 +567,8 @@ class _MovementScreenState extends State<_MovementScreen> {
       widget.board.quotes,
       widget.now,
       books: widget.books,
+      events: widget.board.events,
+      fetchedAt: widget.board.fetchedAt,
     );
     final byKey = <String, Selection>{};
     for (final quote in quotes) {
@@ -552,7 +611,14 @@ class _MovementScreenState extends State<_MovementScreen> {
             ),
           )
         else if (options.isEmpty)
-          const Text('No open selections in this snapshot.')
+          Text(
+            snapshotEmptyReason(
+                  widget.board,
+                  widget.now,
+                  books: widget.books,
+                ) ??
+                'No open selections in this snapshot.',
+          )
         else ...[
           DropdownButtonFormField<String>(
             key: ValueKey('move-${selected?.key}-${options.length}'),
@@ -1166,7 +1232,7 @@ class _StakeScreenState extends State<_StakeScreen> {
       final decimal = _american(odds.text);
       final win = _percent(chance.text);
       final tie = _percent(push.text) ?? 0;
-      if (decimal == null || win == null) {
+      if (decimal == null || win == null || win >= 1) {
         throw ArgumentError(
           'Enter American odds and a win chance greater than 0 and less than 100.',
         );
@@ -1210,7 +1276,7 @@ class _StakeScreenState extends State<_StakeScreen> {
 
   Widget _stakeResult(StakeSuggestion stake, double? bank) {
     String line(String name, double fraction) {
-      final percent = _signedPercent(fraction);
+      final percent = formatPlainPercent(fraction);
       final units = (fraction / 0.01).toStringAsFixed(2);
       if (bank == null) return '$name: $percent of bankroll · $units units';
       return '$name: ${_money(bank * fraction)} · $percent of bankroll · $units units';
@@ -1227,7 +1293,7 @@ class _StakeScreenState extends State<_StakeScreen> {
                   ? 'At this win chance, the price is ${_signedPercent(stake.expectedValuePerUnit)} per \$1.'
                   : 'At this win chance, the price is not better than break-even, so the stake is \$0.',
               title: 'Kelly stake',
-              body: 'Full Kelly uses your win chance, the price, and any push chance. Half and quarter Kelly are smaller on purpose. One unit here means 1% of the bankroll. A stake larger than the bankroll means the win chance and the price are an extreme pair. None of these figures is a recommendation.',
+              body: 'Full Kelly uses your win chance, the price, and any push chance. Half and quarter Kelly are smaller on purpose. One unit here means 1% of the bankroll. The stake is a share of the bankroll and stays within it. None of these figures is a recommendation.',
               style: const TextStyle(fontSize: 18),
             ),
             const SizedBox(height: 8),
@@ -1606,9 +1672,23 @@ double? _percent(String text) {
   return parsed / 100;
 }
 
-String _signedPercent(double value) {
-  final text = '${(value * 100).toStringAsFixed(1)}%';
-  return value > 0 ? '+$text' : text;
+String formatSignedPercent(double value) {
+  if (!value.isFinite) return 'unavailable';
+  final tenths = (value * 1000).round();
+  if (tenths == 0) return '0.0%';
+  final digits = (tenths.abs() / 10).toStringAsFixed(1);
+  return tenths > 0 ? '+$digits%' : '-$digits%';
+}
+
+String _signedPercent(double value) => formatSignedPercent(value);
+
+/// Stake share of bankroll. No leading plus: a stake is not a signed edge.
+String formatPlainPercent(double value) {
+  if (!value.isFinite) return 'unavailable';
+  final tenths = (value * 1000).round();
+  if (tenths == 0) return '0.0%';
+  final digits = (tenths.abs() / 10).toStringAsFixed(1);
+  return tenths < 0 ? '-$digits%' : '$digits%';
 }
 
 String _signedPoints(double value) {

@@ -295,9 +295,14 @@ class TheOddsApiProvider implements OddsProvider {
                 }
                 // Require market timestamp; a book-level time may mask an old market.
                 final sourceAt = DateTime.parse(market['last_update']);
-                final rules = verifiedRuleBooks.contains(bookId)
+                // Only VERIFIED_NFL_RULE_BOOKS claims a settlement rule. Other
+                // books share the label `unverified` so full-game markets can
+                // be compared, and the tools say the rules were not checked.
+                // A per-book rules key would make each book match only itself.
+                final verified = verifiedRuleBooks.contains(bookId);
+                final rules = verified
                     ? 'includes_overtime_push_on_tie'
-                    : 'unverified:$bookId:$key';
+                    : 'unverified';
                 quotes.add(
                   OddsQuote(
                     selection: Selection(
@@ -315,9 +320,7 @@ class TheOddsApiProvider implements OddsProvider {
                     decimal: (outcome['price'] as num).toDouble(),
                     sourceAt: sourceAt,
                     collectedAt: collectedAt,
-                    status: rules.startsWith('unverified:')
-                        ? 'unverified'
-                        : 'open',
+                    status: verified ? 'open' : 'unverified',
                   ),
                 );
               } catch (_) {
@@ -338,7 +341,7 @@ class TheOddsApiProvider implements OddsProvider {
         if (rejected > 0)
           '$rejected records rejected because identity or fields could not be verified.',
         'Live adapter currently requests main NFL markets only; prop and alternate feeds need separate provider entitlement and identity mapping.',
-        if (quotes.any((q) => q.status == 'unverified')) 'Settlement rules need verification before affected books can enter best-price comparisons.',
+        if (quotes.any((q) => q.status == 'unverified')) 'House rules are not independently verified for some books. Price tools still compare their full-game markets and say so on the card. Those books do not earn a live best-price badge.',
       ],
     );
   }
