@@ -96,7 +96,20 @@ field asset is 1672 x 941. No paid provider or validated forecast model is enabl
 
 ## Individual player research
 
-Player stats is a fifth workspace section (Players on mobile), with searchable
+The primary Overview action now opens a guided player investigation. Profiles
+offer Investigate a bet, then Evidence → Simulate → Save → Review. The separate
+frozen-prediction journal and manual review support portable backups alongside
+existing Proof Lab research. Read [methodology](docs/PLAYER_SIMULATION.md) and the
+[competitor capability roadmap](docs/COMPETITOR_CAPABILITIES.md) before extending
+the model. It is conditional historical replay, not a calibrated next-game model.
+
+Navigation now has three main destinations: Overview, Research, and Odds
+comparison. Research contains Matchups, Players, and Proof Lab tabs and remembers
+the last selected research tab. On phones the same grouping appears as Home,
+Research, and Odds. Quote-to-lab navigation still opens the exact captured price;
+saved research and all analysis tools retain their existing workflows.
+
+Research → Players provides searchable
 stable player identities, last-three-recorded-game box scores, current-season
 totals and the previous three completed seasons. Regular season and postseason
 stay distinct. Totals/averages show observed-statistic counts and unavailable

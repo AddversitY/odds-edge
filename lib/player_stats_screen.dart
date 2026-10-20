@@ -14,9 +14,11 @@ PlayerStatsDataset _decodePlayerSnapshot(String json) =>
     );
 
 class PlayerStatsScreen extends StatefulWidget {
-  const PlayerStatsScreen({super.key, this.source});
+  const PlayerStatsScreen({super.key, this.source, this.onInvestigate});
 
   final Future<Map<String, dynamic>>? source;
+  final void Function(PlayerGame, List<PlayerGame>, Map<String, dynamic>)?
+  onInvestigate;
 
   @override
   State<PlayerStatsScreen> createState() => _PlayerStatsScreenState();
@@ -267,6 +269,34 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
                 Text(
                   '${selected.position} · ${selected.team} · team at latest recorded appearance',
                 ),
+                if (widget.onInvestigate != null &&
+                    [
+                      'QB',
+                      'RB',
+                      'FB',
+                      'WR',
+                      'TE',
+                    ].contains(selected.position)) ...[
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    key: const Key('start-player-investigation'),
+                    onPressed: () {
+                      FocusScope.of(context).unfocus();
+                      widget.onInvestigate!(
+                        selected,
+                        playerRows,
+                        dataset.metadata,
+                      );
+                    },
+                    icon: const Icon(Icons.science_outlined),
+                    label: const Text('Investigate a bet'),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Evidence → scenarios → saved prediction → outcome review',
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 Wrap(
                   spacing: 12,

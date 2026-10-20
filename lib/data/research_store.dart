@@ -3,6 +3,7 @@ import 'dart:io';
 
 import '../domain/research.dart';
 import '../domain/autopsy.dart';
+import '../domain/player_investigation.dart';
 
 class ResearchStore {
   ResearchStore({this.directory});
@@ -125,6 +126,50 @@ class ResearchStore {
     return (j?['books'] as List?)?.cast<String>().toSet();
   }
 
+  Future<void> saveInvestigation(PlayerInvestigation record) =>
+      _appendState('player-investigations.jsonl', record.toJson());
+  Future<void> saveInvestigationReview(PlayerInvestigationReview review) =>
+      _appendState(
+        'player-investigation-reviews.jsonl',
+        PlayerInvestigationReview.fromJson(review.toJson()).toJson(),
+      );
+  Future<List<T>> _readJournal<T>(
+    String name,
+    T Function(Map<String, dynamic>) decode,
+  ) async {
+    await _writes;
+    final file = await _aux(name);
+    if (!await file.exists()) return [];
+    final records = <T>[];
+    for (final line in const LineSplitter().convert(
+      utf8.decode(await file.readAsBytes(), allowMalformed: true),
+    )) {
+      if (line.trim().isEmpty) continue;
+      try {
+        records.add(decode(Map<String, dynamic>.from(jsonDecode(line))));
+      } catch (_) {
+        warnings.add(
+          'An unreadable $name entry was preserved; readable entries remain available.',
+        );
+      }
+    }
+    return records;
+  }
+
+  Future<List<PlayerInvestigation>> loadInvestigations() async =>
+      (await _readJournal(
+        'player-investigations.jsonl',
+        PlayerInvestigation.fromJson,
+      )).reversed.toList();
+  Future<Map<String, PlayerInvestigationReview>>
+  loadInvestigationReviews() async => {
+    for (final r in await _readJournal(
+      'player-investigation-reviews.jsonl',
+      PlayerInvestigationReview.fromJson,
+    ))
+      r.id: r,
+  };
+
   Future<void> _appendState(String name, Map<String, dynamic> value) =>
       _serial(() async {
         await (await _aux(name)).writeAsString(
@@ -161,12 +206,25 @@ class ResearchStore {
     );
     final reviews = await _aux('reviews.jsonl');
     if (await reviews.exists()) await reviews.copy('${target.path}.reviews');
+    for (final journal in [
+      'player-investigations.jsonl',
+      'player-investigation-reviews.jsonl',
+    ]) {
+      final file = await _aux(journal);
+      if (await file.exists()) await file.copy('${target.path}.$journal');
+    }
     return target.path;
   });
   Future<String> exportJson() async => jsonEncode({
     'format': 'odds-edge-research-v2',
     'records': (await load()).map((r) => r.toJson()).toList(),
     'reviews': (await loadReviews()).values.map((r) => r.toJson()).toList(),
+    'investigations': (await loadInvestigations())
+        .map((r) => r.toJson())
+        .toList(),
+    'investigationReviews': (await loadInvestigationReviews()).values
+        .map((r) => r.toJson())
+        .toList(),
   });
   Future<int> importJson(String text) async {
     if (text.length > 10000000) throw const FormatException('Backup too large');
@@ -183,6 +241,25 @@ class ResearchStore {
         .map((r) => ResearchReview.fromJson(r))
         .toList();
     final existingReviews = await loadReviews();
+    final investigations = (j['investigations'] as List? ?? [])
+        .map((r) => PlayerInvestigation.fromJson(r))
+        .toList();
+    final investigationReviews = (j['investigationReviews'] as List? ?? [])
+        .map((r) => PlayerInvestigationReview.fromJson(r))
+        .toList();
+    final knownInvestigations = {
+      for (final r in await loadInvestigations()) r.id: jsonEncode(r.toJson()),
+    };
+    // A reused ID with different frozen evidence must never replace a record.
+    final incomingIdentities = Map.of(knownInvestigations);
+    for (final r in investigations) {
+      if (incomingIdentities.containsKey(r.id) &&
+          incomingIdentities[r.id] != jsonEncode(r.toJson())) {
+        throw const FormatException('Conflicting investigation identity');
+      }
+      incomingIdentities[r.id] = jsonEncode(r.toJson());
+    }
+    final knownInvestigationReviews = await loadInvestigationReviews();
     await backup();
     var count = 0;
     for (final record in records.reversed) {
@@ -192,6 +269,20 @@ class ResearchStore {
       }
     }
     final validKeys = (await load()).map(researchId).toSet();
+    for (final r in investigations.reversed) {
+      if (!knownInvestigations.containsKey(r.id)) {
+        await saveInvestigation(r);
+        knownInvestigations[r.id] = jsonEncode(r.toJson());
+        count++;
+      }
+    }
+    for (final r in investigationReviews) {
+      if (knownInvestigations.containsKey(r.id) &&
+          !knownInvestigationReviews.containsKey(r.id)) {
+        await saveInvestigationReview(r);
+        knownInvestigationReviews[r.id] = r;
+      }
+    }
     for (final review in reviews) {
       // Import never overwrites a local outcome assessment.
       if (validKeys.contains(review.researchKey) &&
