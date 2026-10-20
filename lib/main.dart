@@ -358,6 +358,9 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                                   store: researchStore,
                                   initialContext: researchContext,
                                   calculator: const ProbabilityCalculator(),
+                                  assistant: backend
+                                      ? repository.assistant
+                                      : null,
                                 )
                               : SingleChildScrollView(
                                   padding: EdgeInsets.all(wide ? 30 : 16),

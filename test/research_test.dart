@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:odds_edge/domain/assistant.dart';
 import 'package:odds_edge/domain/research.dart';
 import 'package:odds_edge/data/research_store.dart';
 
@@ -61,5 +62,36 @@ void main() {
       }),
       throwsFormatException,
     );
+  });
+  test('Assistant commentary stays outside notes and assumptions', () {
+    const answer =
+        'No team evidence was provided, so no team statistic is known.';
+    final record = SavedResearch(
+      savedAt: DateTime.utc(2026, 10, 19),
+      thesis: 'My own note',
+      assumptions: const ResearchAssumptions(),
+      assistant: AssistantNote(
+        generatedAt: DateTime.utc(2026, 10, 19, 12),
+        mode: 'challenge',
+        question: 'What is missing?',
+        answer: answer,
+        cited: const ['assumptions', 'frozen_quote'],
+      ),
+    );
+    final restored = SavedResearch.fromJson(record.toJson());
+    expect(restored.thesis, 'My own note');
+    expect(restored.assumptions.toJson(), record.assumptions.toJson());
+    expect(restored.assistant!.answer, answer);
+    expect(restored.assistant!.cited, ['assumptions', 'frozen_quote']);
+    expect(
+      restored.toJson()['assumptions'].toString(),
+      isNot(contains(answer)),
+    );
+    expect(restored.toJson()['assistant']['answer'], answer);
+    final legacy = record.toJson()..remove('assistant');
+    expect(SavedResearch.fromJson(legacy).assistant, isNull);
+    final invented = record.toJson();
+    invented['assistant']['cited'] = ['web'];
+    expect(() => SavedResearch.fromJson(invented), throwsFormatException);
   });
 }

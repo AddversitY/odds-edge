@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'data/research_store.dart';
+import 'domain/assistant.dart';
 import 'domain/research.dart';
 import 'domain/odds.dart';
 import 'research_comparison.dart';
@@ -15,10 +17,15 @@ class ResearchWorkspace extends StatefulWidget {
     this.store,
     this.initialContext,
     this.calculator,
+    this.assistant,
+    this.teamEvidence = const [],
+    this.playerEvidence = const [],
   });
   final ResearchStore? store;
   final ResearchContext? initialContext;
   final Widget? calculator;
+  final Future<AssistantReply> Function(AssistantRequest request)? assistant;
+  final List<Map<String, dynamic>> teamEvidence, playerEvidence;
   @override
   State<ResearchWorkspace> createState() => _ResearchWorkspaceState();
 }
@@ -29,6 +36,11 @@ class _ResearchWorkspaceState extends State<ResearchWorkspace> {
   late ResearchContext subject =
       widget.initialContext ?? const ResearchContext();
   final thesis = TextEditingController(), name = TextEditingController();
+  final question = TextEditingController();
+  AssistantNote? assistantNote;
+  String assistantStatus = '';
+  bool asking = false;
+  int askGeneration = 0;
   List<SavedResearch> saved = [];
   String query = '', message = '', draftStatus = 'Loading research…';
   bool busy = true, ready = false, library = false;
@@ -58,7 +70,84 @@ class _ResearchWorkspaceState extends State<ResearchWorkspace> {
     thesis: thesis.text.trim(),
     assumptions: assumptions,
     context: subject,
+    assistant: assistantNote,
   );
+  void applyAssumptions(ResearchAssumptions next) {
+    if (jsonEncode(next.toJson()) != jsonEncode(assumptions.toJson())) {
+      assistantNote = null;
+      assistantStatus = '';
+      asking = false;
+      askGeneration++;
+    }
+    assumptions = next;
+  }
+
+  AssistantRequest assistantRequest(String mode) => AssistantRequest(
+    mode: mode,
+    question: question.text.trim(),
+    selection: {
+      'label': subject.label,
+      'matchup': subject.matchup,
+      'price': subject.price,
+      'demo': subject.demo,
+      'identity': subject.identity,
+    },
+    quote: subject.quote?.toJson(),
+    event: subject.event?.toJson(),
+    assumptions: assumptions.toJson(),
+    teamEvidence: widget.teamEvidence,
+    playerEvidence: widget.playerEvidence,
+  );
+  Future<void> ask(String mode) async {
+    if (!ready || asking) return;
+    final generation = ++askGeneration;
+    if (widget.assistant == null) {
+      setState(() {
+        assistantNote = null;
+        assistantStatus = 'assistant unavailable\nConnect the local backend to ask. This app does not contact the model itself.';
+      });
+      return;
+    }
+    setState(() {
+      asking = true;
+      assistantStatus = '';
+    });
+    try {
+      final reply = await widget.assistant!(assistantRequest(mode));
+      if (!mounted || generation != askGeneration) return;
+      if (!reply.available) {
+        setState(() {
+          assistantNote = null;
+          assistantStatus =
+              '${reply.answer.trim().isEmpty ? 'assistant unavailable' : reply.answer.trim()}\nSaved odds, notes, and assumptions were not changed.';
+        });
+        return;
+      }
+      setState(() {
+        assistantNote = AssistantNote(
+          generatedAt: DateTime.now().toUtc(),
+          mode: mode,
+          question: question.text.trim(),
+          answer: reply.answer,
+          cited: reply.cited,
+        );
+        assistantStatus = '';
+      });
+      changed();
+    } catch (_) {
+      if (mounted && generation == askGeneration) {
+        setState(() {
+          assistantNote = null;
+          assistantStatus = 'assistant unavailable\nSaved odds, notes, and assumptions were not changed.';
+        });
+      }
+    } finally {
+      if (mounted && generation == askGeneration) {
+        setState(() => asking = false);
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -100,6 +189,9 @@ class _ResearchWorkspaceState extends State<ResearchWorkspace> {
   void restore(SavedResearch r) {
     assumptions = r.assumptions;
     subject = r.context;
+    assistantNote = r.assistant;
+    assistantStatus = '';
+    question.text = r.assistant?.question ?? '';
     name.text = r.name;
     thesis.text = r.thesis;
   }
@@ -159,6 +251,7 @@ class _ResearchWorkspaceState extends State<ResearchWorkspace> {
     }
     name.dispose();
     thesis.dispose();
+    question.dispose();
     super.dispose();
   }
 
@@ -260,6 +353,95 @@ class _ResearchWorkspaceState extends State<ResearchWorkspace> {
         );
       }
     }
+  }
+
+  Widget assistantPanel() {
+    final canAsk = ready && !asking && !busy;
+    final included = [
+      subject.quote == null
+          ? 'demonstration selection'
+          : 'frozen quote and selection',
+      'your assumptions',
+      if (widget.teamEvidence.isNotEmpty) 'team evidence',
+      if (widget.playerEvidence.isNotEmpty) 'player evidence',
+    ].join(', ');
+    final missing = [
+      if (widget.teamEvidence.isEmpty)
+        'No team evidence is attached, so team statistics cannot be supplied.',
+      if (widget.playerEvidence.isEmpty) 'No player evidence is attached, so player statistics cannot be supplied.',
+    ].join(' ');
+    return panel(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Explain / challenge this research',
+            style: TextStyle(fontSize: 18),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'AI-generated',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Commentary from the research assistant. It is kept separate from your notes and assumptions. It is not a fact, a forecast, or a guarantee.',
+            style: TextStyle(color: Colors.white70),
+          ),
+          const SizedBox(height: 8),
+          Text('Included inputs: $included. $missing'.trim()),
+          const SizedBox(height: 12),
+          TextField(
+            controller: question,
+            maxLength: 500,
+            maxLines: 3,
+            enabled: ready && !asking,
+            decoration: const InputDecoration(
+              labelText: 'Question (optional)',
+              hintText:
+                  'Ask about these inputs only. Example: what is missing?',
+            ),
+          ),
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            children: [
+              FilledButton(
+                onPressed: canAsk ? () => ask('explain') : null,
+                child: const Text('Explain this research'),
+              ),
+              OutlinedButton(
+                onPressed: canAsk ? () => ask('challenge') : null,
+                child: const Text('Challenge this research'),
+              ),
+            ],
+          ),
+          if (asking) ...[
+            const Padding(
+              padding: EdgeInsets.only(top: 12),
+              child: LinearProgressIndicator(),
+            ),
+            const SizedBox(height: 8),
+            const Text('thinking…'),
+            const Text(
+              'A reasoning reply can take a minute. Only the inputs on this screen are being used.',
+              style: TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+          ],
+          if (assistantStatus.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(assistantStatus),
+          ],
+          if (assistantNote != null) ...[
+            const SizedBox(height: 12),
+            AssistantCommentary(
+              note: assistantNote!,
+              demonstrationSelection: subject.quote == null,
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   Widget adjustment(
@@ -434,8 +616,8 @@ class _ResearchWorkspaceState extends State<ResearchWorkspace> {
                               assumptions.baseProbability * 100,
                               1,
                               99,
-                              (v) => assumptions = assumptions.copyWith(
-                                baseProbability: v / 100,
+                              (v) => applyAssumptions(
+                                assumptions.copyWith(baseProbability: v / 100),
                               ),
                             ),
                             adjustment(
@@ -443,8 +625,8 @@ class _ResearchWorkspaceState extends State<ResearchWorkspace> {
                               assumptions.performance,
                               -10,
                               10,
-                              (v) => assumptions = assumptions.copyWith(
-                                performance: v,
+                              (v) => applyAssumptions(
+                                assumptions.copyWith(performance: v),
                               ),
                             ),
                             adjustment(
@@ -452,8 +634,8 @@ class _ResearchWorkspaceState extends State<ResearchWorkspace> {
                               assumptions.availability,
                               -10,
                               10,
-                              (v) => assumptions = assumptions.copyWith(
-                                availability: v,
+                              (v) => applyAssumptions(
+                                assumptions.copyWith(availability: v),
                               ),
                             ),
                             adjustment(
@@ -461,8 +643,8 @@ class _ResearchWorkspaceState extends State<ResearchWorkspace> {
                               assumptions.environment,
                               -10,
                               10,
-                              (v) => assumptions = assumptions.copyWith(
-                                environment: v,
+                              (v) => applyAssumptions(
+                                assumptions.copyWith(environment: v),
                               ),
                             ),
                             ExpansionTile(
@@ -474,8 +656,8 @@ class _ResearchWorkspaceState extends State<ResearchWorkspace> {
                                   assumptions.push * 100,
                                   0,
                                   50,
-                                  (v) => assumptions = assumptions.copyWith(
-                                    push: v / 100,
+                                  (v) => applyAssumptions(
+                                    assumptions.copyWith(push: v / 100),
                                   ),
                                 ),
                                 const Text(
@@ -487,15 +669,16 @@ class _ResearchWorkspaceState extends State<ResearchWorkspace> {
                               onPressed: ready
                                   ? () {
                                       setState(
-                                        () =>
-                                            assumptions = subject.quote == null
-                                            ? const ResearchAssumptions()
-                                            : const ResearchAssumptions(
-                                                performance: 0,
-                                                availability: 0,
-                                                environment: 0,
-                                                baseProbability: .5,
-                                              ),
+                                        () => applyAssumptions(
+                                          subject.quote == null
+                                              ? const ResearchAssumptions()
+                                              : const ResearchAssumptions(
+                                                  performance: 0,
+                                                  availability: 0,
+                                                  environment: 0,
+                                                  baseProbability: .5,
+                                                ),
+                                        ),
                                       );
                                       changed();
                                     }
@@ -567,6 +750,8 @@ class _ResearchWorkspaceState extends State<ResearchWorkspace> {
                             );
                     },
                   ),
+                  const SizedBox(height: 16),
+                  assistantPanel(),
                   const SizedBox(height: 16),
                   panel(
                     Column(
@@ -683,6 +868,14 @@ class _ResearchWorkspaceState extends State<ResearchWorkspace> {
                                   Text(
                                     r.thesis.isEmpty ? 'No notes.' : r.thesis,
                                   ),
+                                  if (r.assistant != null) ...[
+                                    const SizedBox(height: 12),
+                                    AssistantCommentary(
+                                      note: r.assistant!,
+                                      demonstrationSelection:
+                                          r.context.quote == null,
+                                    ),
+                                  ],
                                   TextButton(
                                     onPressed: () async {
                                       if (ready) {
@@ -715,6 +908,52 @@ class _ResearchWorkspaceState extends State<ResearchWorkspace> {
               ],
             ),
           ),
+        ),
+      ],
+    );
+  }
+}
+
+class AssistantCommentary extends StatelessWidget {
+  const AssistantCommentary({
+    super.key,
+    required this.note,
+    required this.demonstrationSelection,
+  });
+  final AssistantNote note;
+  final bool demonstrationSelection;
+  @override
+  Widget build(BuildContext context) {
+    final labels = note.cited
+        .map(
+          (id) => id == 'frozen_quote' && demonstrationSelection
+              ? 'Demonstration selection'
+              : (assistantInputLabels[id] ?? id),
+        )
+        .join(', ');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'AI-generated',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
+        const Text(
+          'Separate from your notes and assumptions. Not a fact or a forecast.',
+          style: TextStyle(color: Colors.white70, fontSize: 12),
+        ),
+        const SizedBox(height: 8),
+        SelectableText(note.answer),
+        const SizedBox(height: 8),
+        Text(
+          note.cited.isEmpty
+              ? 'Cited inputs: none identified.'
+              : 'Cited inputs: $labels',
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Not a recommendation. No outcome is guaranteed.',
+          style: TextStyle(color: Colors.white70, fontSize: 12),
         ),
       ],
     );

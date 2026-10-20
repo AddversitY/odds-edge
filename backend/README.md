@@ -45,6 +45,53 @@ reconciliation; ambiguous events are kept separate rather than fuzzy-merged.
 Live player props require a stable player-ID registry and exact
 stat/threshold/period/rule mapping.
 
+## Research assistant (xAI)
+
+The Proof Lab action **Explain / challenge this research** calls this backend.
+The Flutter app never calls xAI and never sees the key. Leave the key unset
+and the odds server still runs; the assistant answers `assistant unavailable`.
+
+Create a key in the xAI console at <https://console.x.ai/>. Calls can add
+charges to that xAI account, so skip this until you want the assistant.
+
+In a PowerShell window, from the project folder, set the key for that window
+only and start the backend. This does not save the key on disk:
+
+```powershell
+cd C:\Users\vince\development\odds_edge
+$env:XAI_API_KEY = "paste-your-key-here"
+$env:XAI_MODEL = "grok-4.7"
+& C:\Users\vince\flutter\bin\dart.bat run backend/server.dart
+```
+
+`$env:XAI_MODEL` is optional. If you omit it, the server uses `grok-4.7`.
+`$env:XAI_REASONING_EFFORT` is optional and defaults to `low` (`none`, `low`,
+`medium`, or `high`). Closing the window forgets the key. Do not put the key
+in the Flutter app, in `--dart-define`, in a screenshot, or in a file you commit.
+
+To keep the key for later PowerShell windows, open Windows Settings, search
+for "environment variables", choose **Environment Variables**, and under
+**User variables** add `XAI_API_KEY`. Open a new PowerShell window afterward.
+Anyone who can use that Windows account can read that variable.
+
+Then in the app choose **Connect local backend**, open Proof Lab, and use
+**Explain / challenge this research**. The panel is labeled AI-generated and
+shows **thinking…** while a reply is in progress. A reasoning reply can take
+about a minute. Its text is stored separately from your notes and assumptions.
+It is not a forecast and it does not guarantee a result. With no key, or if the
+model cannot be reached, the panel says assistant unavailable and leaves your
+research unchanged. Web search is not requested.
+
+`POST /v1/assistant` accepts JSON the app already has: `mode` (`explain` or
+`challenge`), an optional `question`, the on-screen `selection`, a frozen
+`quote` and `event` when a price was captured, `assumptions`, and optional
+`teamEvidence` and `playerEvidence` lists. The reply is
+`available`, `answer`, and `cited` (which of those inputs the answer used).
+The model is instructed to use only that payload, not to invent stats or odds,
+to flag uncertainty, and not to guarantee a wager. The request does not send
+web search. The key is sent only on the server, in the Authorization header,
+never in the URL. `reasoning.effort` defaults to `low`.
+
 ## Service contract and freshness
 
 - `GET /health`: process mode, and in live mode the saved credit counters,
@@ -58,6 +105,9 @@ stat/threshold/period/rule mapping.
 - `GET /v1/history?selection=<encoded selection key>&at=<optional ISO time>`:
   collected snapshots for an exact selection. Both source and collection times
   must be at or before `at`. This is not a complete Replay Lab or purchased archive.
+- `POST /v1/assistant`: grounded research commentary from the configured model.
+  A missing `XAI_API_KEY` returns HTTP 200 with `assistant unavailable` and
+  does not call xAI. Invalid JSON returns HTTP 400. Odds routes are unchanged.
 
 Live mode does not poll on a fixed timer. The free The Odds API plan includes
 500 credits per month. The backend takes one daily snapshot (default 15:00 UTC)
