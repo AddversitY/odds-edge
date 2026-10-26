@@ -1,12 +1,12 @@
 {
-    "name": "odds_edge",
-    "short_name": "odds_edge",
+    "name": "Odds Edge",
+    "short_name": "Odds Edge",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#0C111A",
+    "theme_color": "#0C111A",
+    "description": "A plain-English parlay coach for everyday bettors.",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {

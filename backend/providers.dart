@@ -1,10 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:odds_edge/domain/nfl_teams.dart';
 import 'package:odds_edge/domain/odds.dart';
 import 'package:odds_edge/data/demo.dart';
 
 import 'quota.dart';
+
+export 'package:odds_edge/domain/nfl_teams.dart';
 
 abstract interface class OddsProvider {
   String get id;
@@ -18,57 +21,15 @@ class DemoProvider implements OddsProvider {
   Future<OddsBoard> fetch(DateTime now) async => demoBoard(now);
 }
 
-const nflTeams = <String, String>{
-  'Arizona Cardinals': 'ARI',
-  'Atlanta Falcons': 'ATL',
-  'Baltimore Ravens': 'BAL',
-  'Buffalo Bills': 'BUF',
-  'Carolina Panthers': 'CAR',
-  'Chicago Bears': 'CHI',
-  'Cincinnati Bengals': 'CIN',
-  'Cleveland Browns': 'CLE',
-  'Dallas Cowboys': 'DAL',
-  'Denver Broncos': 'DEN',
-  'Detroit Lions': 'DET',
-  'Green Bay Packers': 'GB',
-  'Houston Texans': 'HOU',
-  'Indianapolis Colts': 'IND',
-  'Jacksonville Jaguars': 'JAX',
-  'Kansas City Chiefs': 'KC',
-  'Las Vegas Raiders': 'LV',
-  'Los Angeles Chargers': 'LAC',
-  'Los Angeles Rams': 'LAR',
-  'Miami Dolphins': 'MIA',
-  'Minnesota Vikings': 'MIN',
-  'New England Patriots': 'NE',
-  'New Orleans Saints': 'NO',
-  'New York Giants': 'NYG',
-  'New York Jets': 'NYJ',
-  'Philadelphia Eagles': 'PHI',
-  'Pittsburgh Steelers': 'PIT',
-  'San Francisco 49ers': 'SF',
-  'Seattle Seahawks': 'SEA',
-  'Tampa Bay Buccaneers': 'TB',
-  'Tennessee Titans': 'TEN',
-  'Washington Commanders': 'WAS',
-};
-
-String? canonicalTeam(String name) {
-  final normalized = name.trim().toLowerCase();
-  for (final team in nflTeams.entries) {
-    if (team.key.toLowerCase() == normalized ||
-        team.value.toLowerCase() == normalized) {
-      return team.value;
-    }
-  }
-  return const {
-    'jax': 'JAX',
-    'jac': 'JAX',
-    'gbp': 'GB',
-    'kcc': 'KC',
-    'sfo': 'SF',
-  }[normalized];
-}
+/// State-specific operators stay distinct. A few national brands use a
+/// different id in The Odds API than in the rest of this app.
+String normalizeBookId(String rawBook) =>
+    const {
+      'williamhill_us': 'caesars',
+      'espnbet': 'thescore',
+      'hardrockbet': 'hardrock',
+    }[rawBook] ??
+    rawBook;
 
 abstract interface class OddsApiTransport {
   Future<OddsApiResponse> get(Uri uri);
@@ -264,14 +225,7 @@ class TheOddsApiProvider implements OddsProvider {
         // A requested book that sends nothing is omitted. That is not an error.
         for (final book in item['bookmakers'] as List) {
           final rawBook = book['key'] as String;
-          // State-specific operators deliberately remain distinct.
-          final bookId =
-              const {
-                'williamhill_us': 'caesars',
-                'espnbet': 'thescore',
-                'hardrockbet': 'hardrock',
-              }[rawBook] ??
-              rawBook;
+          final bookId = normalizeBookId(rawBook);
           for (final market in book['markets'] as List) {
             final key = market['key'] as String;
             if (!['h2h', 'spreads', 'totals'].contains(key)) {

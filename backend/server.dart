@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:odds_edge/domain/assistant.dart';
 
 import 'llm.dart';
+import 'prop_odds.dart';
 import 'providers.dart';
 import 'quota.dart';
 import 'service.dart';
@@ -62,10 +63,29 @@ Future<void> main() async {
     model: xaiModel(env['XAI_MODEL']),
     reasoningEffort: env['XAI_REASONING_EFFORT'],
   );
+  final props = live == null
+      ? null
+      : PropCoordinator(
+          apiKey: config.apiKey,
+          bookmakers: live.bookmakers,
+          transport: live.transport,
+          cache: PropCache(File('backend/data/props-snapshot.json')),
+          scheduledHold: config.creditReserve,
+          creditsRemaining: () => ledger.remaining,
+          onCredit: (observation, {required bool oddsCall}) {
+            ledger.apply(
+              observation,
+              at: DateTime.now().toUtc(),
+              updateLastCost: oddsCall,
+            );
+            unawaited(ledger.save());
+          },
+        );
   if (live != null) {
     await service.restore();
     // The timer keeps the shared snapshot current even when nobody has the
     // app open. It only calls The Odds API when a planned slot is due.
+    // Prop prices are a separate, smaller budget and are not polled here.
     unawaited(service.maintain());
     Timer.periodic(const Duration(minutes: 1), (_) {
       unawaited(service.maintain());
@@ -87,6 +107,7 @@ Future<void> main() async {
         providerMode: config.mode,
         service: service,
         assistant: assistant,
+        props: props,
       );
     } finally {
       await request.response.close();
@@ -99,7 +120,13 @@ Future<void> handleRequest(
   required String providerMode,
   required OddsService service,
   required XaiAssistant assistant,
+  PropCoordinator? props,
 }) async {
+  _cors(request);
+  if (request.method == 'OPTIONS') {
+    request.response.statusCode = 204;
+    return;
+  }
   try {
     if (request.method == 'POST' && request.uri.path == '/v1/assistant') {
       await _writeAssistant(request, assistant);
@@ -117,6 +144,21 @@ Future<void> handleRequest(
         result = (await service.getBoard(
           onDemand: request.uri.queryParameters['refresh'] == '1',
         )).toJson();
+      case '/v1/props':
+        result = props == null
+            ? {
+                'events': <Object>[],
+                'quotes': <Object>[],
+                'fetchedAt': DateTime.now().toUtc().toIso8601String(),
+                'demo': true,
+                'notices': [
+                  'Player-prop prices are requested only when the server is using The Odds API. Sample props, when the app is in demonstration mode, are already on the main odds board.',
+                ],
+              }
+            : (await props.board(
+                DateTime.now().toUtc(),
+                refresh: request.uri.queryParameters['refresh'] == '1',
+              )).toJson();
       case '/v1/history':
         final selection = request.uri.queryParameters['selection'];
         if (selection == null) {
@@ -180,6 +222,12 @@ Future<Map<String, dynamic>> _readJsonObject(HttpRequest request) async {
   }
   if (decoded is! Map) throw const FormatException('Invalid request');
   return Map<String, dynamic>.from(decoded);
+}
+
+void _cors(HttpRequest request) {
+  request.response.headers.set('Access-Control-Allow-Origin', '*');
+  request.response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  request.response.headers.set('Access-Control-Allow-Headers', 'Content-Type');
 }
 
 void _writeJson(HttpRequest request, int status, Object body) {

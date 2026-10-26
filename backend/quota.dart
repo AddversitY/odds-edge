@@ -374,15 +374,17 @@ class OddsBackendConfig {
 
   factory OddsBackendConfig.fromEnvironment(Map<String, String> env) {
     final mode = env['ODDS_PROVIDER'] ?? 'demo';
-    final apiKey = env['THE_ODDS_API_KEY'] ?? '';
+    final namedKey = (env['THE_ODDS_API_KEY'] ?? '').trim();
+    final aliasKey = (env['ODDS_API_KEY'] ?? '').trim();
+    final apiKey = namedKey.isNotEmpty ? namedKey : aliasKey;
     if (mode != 'demo' && mode != 'the-odds-api') {
       throw const FormatException(
-        'Set ODDS_PROVIDER to demo or the-odds-api. Real mode needs THE_ODDS_API_KEY on the server.',
+        'Set ODDS_PROVIDER to demo or the-odds-api. Real mode needs THE_ODDS_API_KEY or ODDS_API_KEY on the server.',
       );
     }
     if (mode == 'the-odds-api' && apiKey.isEmpty) {
       throw const FormatException(
-        'Set ODDS_PROVIDER to demo or the-odds-api. Real mode needs THE_ODDS_API_KEY on the server.',
+        'Set ODDS_PROVIDER to demo or the-odds-api. Real mode needs THE_ODDS_API_KEY or ODDS_API_KEY on the server.',
       );
     }
     final seconds = int.tryParse(env['ODDS_REFRESH_SECONDS'] ?? '') ?? 60;
