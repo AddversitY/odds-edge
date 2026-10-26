@@ -1,14 +1,20 @@
 import 'dart:convert';
-import 'dart:io';
 
 import '../domain/research.dart';
 import '../domain/autopsy.dart';
 import '../domain/player_investigation.dart';
 import '../domain/bets.dart';
+import '../domain/saved_play.dart';
+import 'journal_stub.dart'
+    if (dart.library.io) 'journal_io.dart'
+    if (dart.library.html) 'journal_web.dart'
+    if (dart.library.js_interop) 'journal_web.dart';
+import 'text_journal.dart';
 
 class ResearchStore {
-  ResearchStore({this.directory});
-  final Directory? directory;
+  ResearchStore({Object? directory, TextJournal? journal})
+    : _journal = journal ?? createJournal(directory);
+  final TextJournal _journal;
   final List<String> warnings = [];
   Future<void> _writes = Future.value();
   Future<T> _serial<T>(Future<T> Function() action) {
@@ -17,38 +23,19 @@ class ResearchStore {
     return next;
   }
 
-  Future<File> _file() async {
-    final root = directory ?? _supportDirectory();
-    final folder = Directory('${root.path}${Platform.pathSeparator}odds_edge');
-    await folder.create(recursive: true);
-    return File('${folder.path}${Platform.pathSeparator}research.jsonl');
-  }
-
-  Directory _supportDirectory() {
-    final env = Platform.environment;
-    if (Platform.isWindows) {
-      final appData = env['LOCALAPPDATA'];
-      if (appData != null && appData.isNotEmpty) return Directory(appData);
-    } else if (Platform.isIOS || Platform.isMacOS) {
-      final home = env['HOME'];
-      if (home != null && home.isNotEmpty) {
-        return Directory('$home/Library/Application Support');
-      }
-    }
-    // No working-directory fallback: never pretend an ephemeral location is persistent.
-    throw StateError('Application support directory unavailable');
+  List<String> _lines(List<int>? bytes) {
+    if (bytes == null) return const [];
+    return const LineSplitter().convert(
+      utf8.decode(bytes, allowMalformed: true),
+    );
   }
 
   Future<List<SavedResearch>> load() async {
     await _writes;
     warnings.clear();
-    final file = await _file();
-    if (!await file.exists()) return [];
     final results = <SavedResearch>[];
     var number = 0;
-    for (final line in const LineSplitter().convert(
-      utf8.decode(await file.readAsBytes(), allowMalformed: true),
-    )) {
+    for (final line in _lines(await _journal.readBytes('research.jsonl'))) {
       number++;
       if (line.trim().isEmpty) continue;
       try {
@@ -63,25 +50,14 @@ class ResearchStore {
   }
 
   Future<void> save(SavedResearch research) => _serial(() async {
-    final file = await _file();
-    // A leading newline isolates an incomplete tail left by a power loss.
-    await file.writeAsString(
-      '\n${jsonEncode(research.toJson())}\n',
-      mode: FileMode.append,
-      flush: true,
-    );
+    await _journal.append('research.jsonl', '\n${jsonEncode(research.toJson())}\n');
   });
-
-  Future<File> _aux(String name) async =>
-      File('${(await _file()).parent.path}${Platform.pathSeparator}$name');
 
   Future<void> saveDraft(SavedResearch record) =>
       _appendState('drafts.jsonl', record.toJson());
   Future<SavedResearch?> loadDraft({String? selectionKey}) async {
     await _writes;
-    final file = await _aux('drafts.jsonl');
-    if (!await file.exists()) return null;
-    for (final line in (await file.readAsLines()).reversed) {
+    for (final line in _lines(await _journal.readBytes('drafts.jsonl')).reversed) {
       if (line.trim().isEmpty) continue;
       try {
         final record = SavedResearch.fromJson(jsonDecode(line));
@@ -103,12 +79,8 @@ class ResearchStore {
       _appendState('reviews.jsonl', review.toJson());
   Future<Map<String, ResearchReview>> loadReviews() async {
     await _writes;
-    final file = await _aux('reviews.jsonl');
     final result = <String, ResearchReview>{};
-    if (!await file.exists()) return result;
-    for (final line in const LineSplitter().convert(
-      utf8.decode(await file.readAsBytes(), allowMalformed: true),
-    )) {
+    for (final line in _lines(await _journal.readBytes('reviews.jsonl'))) {
       if (line.trim().isEmpty) continue;
       try {
         final r = ResearchReview.fromJson(jsonDecode(line));
@@ -139,12 +111,8 @@ class ResearchStore {
     T Function(Map<String, dynamic>) decode,
   ) async {
     await _writes;
-    final file = await _aux(name);
-    if (!await file.exists()) return [];
     final records = <T>[];
-    for (final line in const LineSplitter().convert(
-      utf8.decode(await file.readAsBytes(), allowMalformed: true),
-    )) {
+    for (final line in _lines(await _journal.readBytes(name))) {
       if (line.trim().isEmpty) continue;
       try {
         records.add(decode(Map<String, dynamic>.from(jsonDecode(line))));
@@ -185,19 +153,34 @@ class ResearchStore {
     return values;
   }
 
+  Future<void> saveSavedPlay(SavedPlay play) =>
+      _appendState('saved-plays.jsonl', play.toJson());
+
+  /// Latest write wins. A later write with removed=true drops the play.
+  Future<List<SavedPlay>> loadSavedPlays() async {
+    final latest = <String, SavedPlay>{};
+    for (final play in await _readJournal(
+      'saved-plays.jsonl',
+      SavedPlay.fromJson,
+    )) {
+      latest[play.id] = play;
+    }
+    final values = [
+      for (final play in latest.values)
+        if (!play.removed) play,
+    ]..sort((a, b) => b.savedAt.compareTo(a.savedAt));
+    return values;
+  }
+
   Future<void> _appendState(String name, Map<String, dynamic> value) =>
       _serial(() async {
-        await (await _aux(name)).writeAsString(
-          '\n${jsonEncode(value)}\n',
-          mode: FileMode.append,
-          flush: true,
-        );
+        await _journal.append(name, '\n${jsonEncode(value)}\n');
       });
   Future<Map<String, dynamic>?> _lastState(String name) async {
     await _writes;
-    final file = await _aux(name);
-    if (!await file.exists()) return null;
-    for (final line in (await file.readAsLines()).reversed) {
+    final bytes = await _journal.readBytes(name);
+    if (bytes == null) return null;
+    for (final line in _lines(bytes).reversed) {
       if (line.trim().isEmpty) continue;
       try {
         return Map<String, dynamic>.from(jsonDecode(line));
@@ -210,27 +193,18 @@ class ResearchStore {
     throw const FormatException('No recoverable entries');
   }
 
-  Future<String> backup() => _serial(() async {
-    final source = await _file();
-    final target = await _aux(
-      'research-backup-${DateTime.now().microsecondsSinceEpoch}.jsonl',
-    );
-    await target.writeAsBytes(
-      await source.exists() ? await source.readAsBytes() : <int>[],
-      flush: true,
-    );
-    final reviews = await _aux('reviews.jsonl');
-    if (await reviews.exists()) await reviews.copy('${target.path}.reviews');
-    for (final journal in [
-      'player-investigations.jsonl',
-      'player-investigation-reviews.jsonl',
-      'bets.jsonl',
-    ]) {
-      final file = await _aux(journal);
-      if (await file.exists()) await file.copy('${target.path}.$journal');
-    }
-    return target.path;
-  });
+  Future<String> backup() => _serial(
+    () => _journal.makeBackup(
+      researchName: 'research.jsonl',
+      copies: const [
+        'reviews.jsonl',
+        'player-investigations.jsonl',
+        'player-investigation-reviews.jsonl',
+        'bets.jsonl',
+        'saved-plays.jsonl',
+      ],
+    ),
+  );
   Future<String> exportJson() async => jsonEncode({
     'format': 'odds-edge-research-v2',
     'records': (await load()).map((r) => r.toJson()).toList(),
@@ -242,6 +216,7 @@ class ResearchStore {
         .map((r) => r.toJson())
         .toList(),
     'bets': (await loadBets()).map((bet) => bet.toJson()).toList(),
+    'savedPlays': (await loadSavedPlays()).map((play) => play.toJson()).toList(),
   });
   Future<int> importJson(String text) async {
     if (text.length > 10000000) throw const FormatException('Backup too large');
@@ -249,7 +224,6 @@ class ResearchStore {
     if (j['format'] != 'odds-edge-research-v2') {
       throw const FormatException('Unknown backup format');
     }
-    // Validate everything before writing anything.
     final records = (j['records'] as List)
         .map((r) => SavedResearch.fromJson(r))
         .toList();
@@ -267,7 +241,6 @@ class ResearchStore {
     final knownInvestigations = {
       for (final r in await loadInvestigations()) r.id: jsonEncode(r.toJson()),
     };
-    // A reused ID with different frozen evidence must never replace a record.
     final incomingIdentities = Map.of(knownInvestigations);
     for (final r in investigations) {
       if (incomingIdentities.containsKey(r.id) &&
@@ -287,6 +260,23 @@ class ResearchStore {
       final encoded = jsonEncode(bet.toJson());
       if (existingBets.containsKey(bet.id) && existingBets[bet.id] != encoded) {
         throw const FormatException('Conflicting bet identity');
+      }
+    }
+    final incomingPlays = (j['savedPlays'] as List? ?? [])
+        .map((play) => SavedPlay.fromJson(Map<String, dynamic>.from(play)))
+        .toList();
+    final existingPlays = {
+      for (final play in await _readJournal(
+        'saved-plays.jsonl',
+        SavedPlay.fromJson,
+      ))
+        play.id: jsonEncode(play.toJson()),
+    };
+    for (final play in incomingPlays) {
+      final encoded = jsonEncode(play.toJson());
+      if (existingPlays.containsKey(play.id) &&
+          existingPlays[play.id] != encoded) {
+        throw const FormatException('Conflicting saved play');
       }
     }
     await backup();
@@ -319,8 +309,14 @@ class ResearchStore {
         count++;
       }
     }
+    for (final play in incomingPlays) {
+      if (!existingPlays.containsKey(play.id)) {
+        await saveSavedPlay(play);
+        existingPlays[play.id] = jsonEncode(play.toJson());
+        count++;
+      }
+    }
     for (final review in reviews) {
-      // Import never overwrites a local outcome assessment.
       if (validKeys.contains(review.researchKey) &&
           !existingReviews.containsKey(review.researchKey)) {
         await saveReview(review);

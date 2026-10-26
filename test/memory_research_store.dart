@@ -3,6 +3,7 @@ import 'package:odds_edge/domain/research.dart';
 import 'package:odds_edge/domain/autopsy.dart';
 import 'package:odds_edge/domain/player_investigation.dart';
 import 'package:odds_edge/domain/bets.dart';
+import 'package:odds_edge/domain/saved_play.dart';
 
 class MemoryResearchStore extends ResearchStore {
   final List<PlayerInvestigation> investigations = [];
@@ -61,6 +62,22 @@ class MemoryResearchStore extends ResearchStore {
   @override
   Future<List<TrackedBet>> loadBets() async {
     final copy = [...bets]..sort((a, b) => b.placedAt.compareTo(a.placedAt));
+    return copy;
+  }
+
+  final List<SavedPlay> plays = [];
+  @override
+  Future<void> saveSavedPlay(SavedPlay play) async {
+    plays.removeWhere((existing) => existing.id == play.id);
+    plays.add(play);
+  }
+
+  @override
+  Future<List<SavedPlay>> loadSavedPlays() async {
+    final copy = [
+      for (final play in plays)
+        if (!play.removed) play,
+    ]..sort((a, b) => b.savedAt.compareTo(a.savedAt));
     return copy;
   }
 

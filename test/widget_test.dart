@@ -16,13 +16,18 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(OddsEdgeApp(researchStore: MemoryResearchStore()));
     expect(find.text('DEMO'), findsOneWidget);
-    expect(find.byType(NavigationDestination), findsNWidgets(4));
+    expect(find.byType(NavigationDestination), findsNWidgets(6));
     expect(find.textContaining('Snapshot as of'), findsWidgets);
-    await tester.tap(find.text('Odds', skipOffstage: false));
+    expect(find.text('Ask Coach'), findsOneWidget);
+    await tester.tap(find.text('More', skipOffstage: false));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Odds comparison'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Best demo price'), findsOneWidget);
     expect(find.text('Research this price'), findsWidgets);
-    await tester.tap(find.text('Research', skipOffstage: false));
+    await tester.tap(find.text('More', skipOffstage: false));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Research'));
     await tester.pump();
     expect(find.widgetWithText(Tab, 'Matchups'), findsOneWidget);
     expect(find.widgetWithText(Tab, 'Players'), findsOneWidget);
@@ -45,10 +50,13 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(OddsEdgeApp(researchStore: MemoryResearchStore()));
-    expect(find.widgetWithText(ListTile, 'Research'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, 'Home'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, 'Research'), findsNothing);
     expect(find.widgetWithText(ListTile, 'NFL matchups'), findsNothing);
     expect(find.widgetWithText(ListTile, 'Player stats'), findsNothing);
     expect(find.widgetWithText(ListTile, 'Proof Lab'), findsNothing);
+    await tester.tap(find.widgetWithText(ListTile, 'More'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Odds comparison'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('My accessible books'));
@@ -69,7 +77,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(OddsEdgeApp(researchStore: MemoryResearchStore()));
-    await tester.tap(find.text('Tools', skipOffstage: false));
+    await tester.tap(find.text('More', skipOffstage: false));
     await tester.pumpAndSettle();
     expect(find.text('Best price'), findsOneWidget);
     expect(find.text('Arbitrage and middles'), findsOneWidget);
@@ -409,5 +417,54 @@ void main() {
     expect(find.textContaining('Versus that market: 0.0% per'), findsWidgets);
     expect(find.textContaining('-0.0%'), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Phone coach tabs open without overflow', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(OddsEdgeApp(researchStore: MemoryResearchStore()));
+    await tester.pump();
+    expect(find.text('CHECK MY SLIP'), findsOneWidget);
+    expect(find.text('Ask Coach'), findsOneWidget);
+
+    await tester.tap(find.text('Props', skipOffstage: false));
+    await tester.pump();
+    expect(find.text('PLAYER PROPS'), findsOneWidget);
+    expect(find.text('Josh Allen'), findsWidgets);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('Games', skipOffstage: false));
+    await tester.pumpAndSettle();
+    expect(find.text('GAMES'), findsOneWidget);
+    expect(find.text('Buffalo Bills'), findsWidgets);
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text('Buffalo Bills').first);
+    await tester.pumpAndSettle();
+    expect(find.text('FEE-FREE WIN CHANCE'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Parlays', skipOffstage: false));
+    await tester.pumpAndSettle();
+    expect(find.text('PARLAYS'), findsOneWidget);
+    expect(find.text('How these tickets are built'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('Bets', skipOffstage: false));
+    await tester.pumpAndSettle();
+    expect(find.text('MY BETS'), findsOneWidget);
+    await tester.tap(find.text('Bet log'));
+    await tester.pumpAndSettle();
+    expect(find.text('Nothing settled'), findsOneWidget);
+    expect(find.text('Nothing pending'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    tester.view.physicalSize = const Size(360, 780);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
   });
 }

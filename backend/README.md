@@ -140,6 +140,22 @@ The app shows `Snapshot as of <time>` so a saved price is not presented as a
 live stream. Quotes older than 120 seconds before kickoff, or 20 seconds after
 kickoff, still do not earn a live best-price badge.
 
+Player props are a second, smaller budget. `GET /v1/props` returns the saved
+prop snapshot and does not spend a credit. `GET /v1/props?refresh=1` may
+request passing yards and receptions for the next two upcoming games. That is
+2 markets × 2 games = 4 credits, and only when the saved snapshot is older
+than 18 hours, today's prop spend is still under 4, the month is still under
+60, and the call would not eat the credits held back for the regular
+moneyline, spread, and total schedule (`ODDS_CREDIT_RESERVE`, default 50).
+The one-minute timer does not refresh props. The events list used to pick
+those two games is free. The actual charge is whatever The Odds API reports
+in `x-requests-last`. A busy main-line month is about 240 credits; props add
+at most 60, so the pair stays near 300 of the 500 free credits. The cache
+file is `backend/data/props-snapshot.json` and is not committed. Sample mode
+does not call this route for the Props screen: the sample board already
+includes one passing-yards example. `ODDS_API_KEY` is accepted when
+`THE_ODDS_API_KEY` is empty. The key is never written into an error.
+
 The Odds API's $30/month plan includes 20,000 credits, which is enough to
 refresh about every 60 seconds during games. That upgrade is not turned on
 here. A 60-second poll of three markets would use up the free 500 credits in
