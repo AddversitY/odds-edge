@@ -6,10 +6,12 @@ import '../domain/market_math.dart';
 import '../domain/odds.dart';
 import '../domain/parlay_value.dart';
 import '../domain/value_check.dart';
+import '../domain/why_brief.dart';
 import '../explained_number.dart';
 import '../theme/edge_theme.dart';
 import 'coach_widgets.dart';
 import 'value_view.dart';
+import 'why_view.dart';
 
 class ParlaysScreen extends StatefulWidget {
   const ParlaysScreen({
@@ -421,18 +423,21 @@ class _ParlayCard extends StatelessWidget {
             style: EdgeType.title,
           ),
         ),
-        extraWhy: Column(
+        whyBody: WhyBriefView(brief: buildTicketBrief(ticket)),
+        extraMath: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 8),
-            for (final leg in ticket.legs)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  '${leg.verdict.wordLabel}. ${leg.input.label}',
-                  style: EdgeType.body,
-                ),
-              ),
+            const SizedBox(height: 12),
+            for (final leg in ticket.legs) ...[
+              Text(leg.input.label, style: EdgeType.label),
+              const SizedBox(height: 4),
+              Text(leg.verdict.math, style: EdgeType.body),
+              if (leg.verdict.alternative != null) ...[
+                const SizedBox(height: 4),
+                Text(leg.verdict.alternative!, style: EdgeType.body),
+              ],
+              const SizedBox(height: 12),
+            ],
           ],
         ),
       ),

@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:odds_edge/domain/assistant.dart';
 
+import 'injury_feed.dart';
 import 'line_history.dart';
 import 'llm.dart';
 import 'prop_odds.dart';
@@ -103,6 +104,12 @@ Future<void> main() async {
             unawaited(ledger.save());
           },
         );
+  final injuries = InjuryFeed(cacheFile: File('backend/data/injuries.json'));
+  // Injury pages are free public files. This timer does not call The Odds API.
+  unawaited(injuries.refresh(kickoffs: service.knownKickoffs));
+  Timer.periodic(const Duration(minutes: 1), (_) {
+    unawaited(injuries.refresh(kickoffs: service.knownKickoffs));
+  });
   if (live != null) {
     await service.restore();
     // The timer keeps the shared snapshot current even when nobody has the
@@ -134,6 +141,7 @@ Future<void> main() async {
         props: props,
         lines: lines,
         sharp: sharp,
+        injuries: injuries,
       );
     } finally {
       await request.response.close();
@@ -149,6 +157,7 @@ Future<void> handleRequest(
   PropCoordinator? props,
   LineHistory? lines,
   SharpCoordinator? sharp,
+  InjuryFeed? injuries,
   String modelPath = 'assets/nfl-model.json',
 }) async {
   _cors(request);
@@ -222,6 +231,18 @@ Future<void> handleRequest(
             result = {'error': "Coach's Line file could not be read."};
           }
         }
+      case '/v1/injuries':
+        final feed = injuries;
+        result = feed == null
+            ? {
+                'live': false,
+                'entries': <Object>[],
+                'changes': <Object>[],
+                'sources': <Object>[],
+                'fetchedAt': DateTime.now().toUtc().toIso8601String(),
+                'notice': 'Injury checks are not running on this server.',
+              }
+            : (await feed.current(kickoffs: service.knownKickoffs)).toJson();
       case '/v1/lines':
         final event = request.uri.queryParameters['event'];
         if (event == null || event.isEmpty) {

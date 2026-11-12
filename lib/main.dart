@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'coach/ask_coach.dart';
 import 'coach/games_screen.dart';
 import 'coach/home_screen.dart';
+import 'coach/injuries_screen.dart';
 import 'coach/model_screen.dart';
 import 'coach/my_bets_screen.dart';
 import 'coach/parlays_screen.dart';
@@ -14,6 +15,7 @@ import 'data/demo.dart';
 import 'data/repository.dart';
 import 'domain/coach_board.dart';
 import 'domain/coach_model.dart';
+import 'domain/injury_report.dart';
 import 'domain/odds.dart';
 import 'research_workspace.dart';
 import 'data/research_store.dart';
@@ -50,7 +52,11 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
   late OddsBoard board;
   OddsBoard? propBoard;
   OddsBoard? sharpBoard;
+  InjuryReport? injuryReport;
+  String? openGameId;
+  String? focusPropMarket;
   Timer? timer;
+  Timer? injuryTimer;
   int page = 0;
   int shell = 0;
   int lastResearchPage = 1;
@@ -102,6 +108,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       5 => 'Tools',
       6 => "Coach's model",
       7 => 'More',
+      8 => 'Injuries',
       4 => 'Players',
       1 => 'Matchups',
       3 => 'Proof Lab',
@@ -182,6 +189,10 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
           }
         });
     unawaited(loadCoachModel());
+    unawaited(loadInjuries());
+    injuryTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      unawaited(loadInjuries());
+    });
     // Re-evaluate freshness even if no successful network request arrives.
     timer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (backend && !loading) {
@@ -195,8 +206,35 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
   @override
   void dispose() {
     timer?.cancel();
+    injuryTimer?.cancel();
     repository.close();
     super.dispose();
+  }
+
+  Future<void> loadInjuries() async {
+    try {
+      final live = await repository.injuries();
+      if (!mounted) return;
+      if (live.entries.isNotEmpty) {
+        setState(() => injuryReport = live);
+        return;
+      }
+    } catch (_) {
+      // The local backend is optional. The stored report still shows.
+    }
+    if (!mounted ||
+        (injuryReport != null && injuryReport!.entries.isNotEmpty)) {
+      return;
+    }
+    try {
+      final stored = await loadStoredInjuryReport();
+      if (!mounted) return;
+      setState(() => injuryReport = stored);
+    } catch (_) {
+      if (mounted && injuryReport == null) {
+        setState(() {});
+      }
+    }
   }
 
   Future<void> refresh({bool onDemand = false}) async {
@@ -622,6 +660,8 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       history: backend && error == null
           ? (selection) => repository.history(selection)
           : null,
+      injuries: injuryReport,
+      focusMarket: focusPropMarket,
     ),
     2 => GamesScreen(
       board: pricedBoard,
@@ -629,6 +669,11 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       enabledBooks: enabledBooks,
       model: coachModel,
       settings: edgeSettings,
+      injuries: injuryReport,
+      openEventId: openGameId,
+      onEventOpened: () {
+        if (openGameId != null) setState(() => openGameId = null);
+      },
     ),
     3 => ParlaysScreen(
       board: pricedBoard,
@@ -652,10 +697,23 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       const Text('More', style: EdgeType.title),
       const SizedBox(height: 8),
       const Text(
-        'Odds, research, tools, and the model. Each one is listed here only.',
+        'Injuries, odds, research, tools, and the model. Each one is listed here only.',
         style: EdgeType.body,
       ),
       const SizedBox(height: 16),
+      _libraryRow(
+        'Injuries',
+        injuryReport == null
+            ? 'Who is out, and what that changes.'
+            : injuryReport!.changes.isEmpty
+            ? 'Who is out, and what that changes. ${injuryReport!.freshness(now)}.'
+            : '${injuryReport!.changes.length} ${injuryReport!.changes.length == 1 ? 'status just changed' : 'statuses just changed'}.',
+        () => setState(() {
+          shell = 5;
+          page = 8;
+          researchContext = null;
+        }),
+      ),
       _libraryRow(
         'Odds comparison',
         'The same bet at every book in this snapshot.',
@@ -717,6 +775,23 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
 
   Widget legacyPage(bool wide) {
     if (page == 7) return libraryMenu();
+    if (page == 8) {
+      return InjuriesScreen(
+        report: injuryReport,
+        now: now,
+        events: board.events,
+        onOpenGame: (id) => setState(() {
+          shell = 2;
+          openGameId = id;
+          researchContext = null;
+        }),
+        onOpenMarket: (market) => setState(() {
+          shell = 1;
+          focusPropMarket = market;
+          researchContext = null;
+        }),
+      );
+    }
     if (page == 3) {
       return ResearchWorkspace(
         key: ValueKey(researchLaunch),

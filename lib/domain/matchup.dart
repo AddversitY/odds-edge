@@ -468,6 +468,55 @@ String gameScript({
   return '${text[0].toUpperCase()}${text.substring(1)}.';
 }
 
+/// The same facts as [gameScript], in one short line for a labeled row.
+String scriptBrief({
+  required String teamName,
+  required double? teamSpread,
+  required double? total,
+  required String market,
+}) {
+  if (teamSpread == null && total == null) {
+    return 'No spread or total in this snapshot.';
+  }
+  final bits = <String>[];
+  final spread = teamSpread;
+  if (spread != null) {
+    final points = spread.abs().toStringAsFixed(1);
+    if (spread < 0) {
+      bits.add('Favored by $points');
+    } else if (spread > 0) {
+      bits.add('Underdog by $points');
+    } else {
+      bits.add("Pick'em");
+    }
+  }
+  if (total != null) bits.add('total ${total.toStringAsFixed(1)}');
+  final passing =
+      market == 'player_pass_yds' ||
+      market == 'player_pass_tds' ||
+      market.startsWith('player_reception');
+  final rushing = market == 'player_rush_yds' || market == 'player_rush_tds';
+  if (spread != null && spread >= 7 && passing) {
+    bits.add('more passes if trailing');
+  } else if (spread != null && spread <= -7 && rushing) {
+    bits.add('more rushes if they lead');
+  } else if (spread != null && spread <= -7 && passing) {
+    bits.add('fewer passes if they lead');
+  } else if (spread != null && spread >= 7 && rushing) {
+    bits.add('fewer rushes if trailing');
+  }
+  return bits.join(' · ');
+}
+
+/// Last word of the club name, for a short script line.
+String clubNickname(String? abbrevOrName) {
+  if (abbrevOrName == null || abbrevOrName.trim().isEmpty) {
+    return 'This team';
+  }
+  final code = canonicalTeam(abbrevOrName);
+  return _club(code ?? abbrevOrName) ?? abbrevOrName.trim();
+}
+
 class MatchupCard {
   const MatchupCard({
     required this.sentence,

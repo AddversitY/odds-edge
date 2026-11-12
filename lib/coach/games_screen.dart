@@ -2,15 +2,20 @@ import 'package:flutter/material.dart';
 
 import '../domain/coach_board.dart';
 import '../domain/coach_model.dart';
+import '../domain/injury_report.dart';
 import '../domain/market_math.dart';
+import '../domain/matchup.dart';
+import '../domain/nfl_teams.dart';
 import '../domain/odds.dart';
 import '../domain/value_check.dart';
+import '../domain/why_brief.dart';
 import '../explained_number.dart';
 import '../theme/edge_theme.dart';
 import '../theme/reveal.dart';
 import 'coach_line_view.dart';
 import 'coach_widgets.dart';
 import 'value_view.dart';
+import 'why_view.dart';
 
 enum _When { all, today, upcoming }
 
@@ -26,6 +31,9 @@ class GamesScreen extends StatefulWidget {
       totalPoints: 2.5,
       minExpectedValue: 0.02,
     ),
+    this.injuries,
+    this.openEventId,
+    this.onEventOpened,
   });
 
   final OddsBoard board;
@@ -33,6 +41,11 @@ class GamesScreen extends StatefulWidget {
   final Set<String>? enabledBooks;
   final CoachModel? model;
   final EdgeSettings settings;
+  final InjuryReport? injuries;
+
+  /// Opens this game once, then [onEventOpened] clears the request.
+  final String? openEventId;
+  final VoidCallback? onEventOpened;
 
   @override
   State<GamesScreen> createState() => _GamesScreenState();
@@ -40,6 +53,59 @@ class GamesScreen extends StatefulWidget {
 
 class _GamesScreenState extends State<GamesScreen> {
   _When when = _When.all;
+  String? _opened;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _openRequested());
+  }
+
+  @override
+  void didUpdateWidget(GamesScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.openEventId != null && widget.openEventId != _opened) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _openRequested());
+    }
+  }
+
+  void _openRequested() {
+    final id = widget.openEventId;
+    if (id == null || !mounted || id == _opened) return;
+    final slate = summarizeSlate(
+      widget.board,
+      widget.now,
+      books: widget.enabledBooks,
+    );
+    GameSummary? game;
+    for (final item in slate.games) {
+      if (item.event.id == id) game = item;
+    }
+    _opened = id;
+    widget.onEventOpened?.call();
+    if (game == null) return;
+    _open(game);
+  }
+
+  void _open(GameSummary game) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => _GameDetail(
+          game: game,
+          board: widget.board,
+          now: widget.now,
+          books: widget.enabledBooks,
+          injuries: widget.injuries,
+          line: widget.model?.lineFor(
+            game.event,
+            widget.board.quotes,
+            settings: widget.settings,
+            books: widget.enabledBooks,
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -94,30 +160,14 @@ class _GamesScreenState extends State<GamesScreen> {
           for (final game in games) ...[
             _GameCard(
               game: game,
+              injuries: widget.injuries,
               line: widget.model?.lineFor(
                 game.event,
                 widget.board.quotes,
                 settings: widget.settings,
                 books: widget.enabledBooks,
               ),
-              onOpen: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => _GameDetail(
-                      game: game,
-                      board: widget.board,
-                      now: widget.now,
-                      books: widget.enabledBooks,
-                      line: widget.model?.lineFor(
-                        game.event,
-                        widget.board.quotes,
-                        settings: widget.settings,
-                        books: widget.enabledBooks,
-                      ),
-                    ),
-                  ),
-                );
-              },
+              onOpen: () => _open(game),
             ),
             const SizedBox(height: 10),
           ],
@@ -138,23 +188,38 @@ class _GamesScreenState extends State<GamesScreen> {
 void _noop() {}
 
 class _GameCard extends StatelessWidget {
-  const _GameCard({required this.game, required this.onOpen, this.line});
+  const _GameCard({
+    required this.game,
+    required this.onOpen,
+    this.line,
+    this.injuries,
+  });
   final GameSummary game;
   final CoachLine? line;
+  final InjuryReport? injuries;
   final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
     final event = game.event;
+    final badge = badgeForClubs(injuries, [event.away, event.home]);
     return CoachCard(
       child: InkWell(
         onTap: onOpen,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '${event.league} · ${event.startsAt.toLocal().toString().substring(0, 16)}',
-              style: EdgeType.label,
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${event.league} · ${event.startsAt.toLocal().toString().substring(0, 16)}',
+                    style: EdgeType.label,
+                  ),
+                ),
+                if (badge != null)
+                  InjuryBadgePill(label: badge.label, severe: badge.severe),
+              ],
             ),
             const SizedBox(height: 8),
             Text(event.away, style: EdgeType.title),
@@ -181,6 +246,7 @@ class _GameDetail extends StatelessWidget {
     required this.now,
     required this.books,
     this.line,
+    this.injuries,
   });
 
   final GameSummary game;
@@ -188,6 +254,7 @@ class _GameDetail extends StatelessWidget {
   final DateTime now;
   final Set<String>? books;
   final CoachLine? line;
+  final InjuryReport? injuries;
 
   @override
   Widget build(BuildContext context) {
@@ -246,6 +313,8 @@ class _GameDetail extends StatelessWidget {
               now: now,
               books: books,
               line: line,
+              game: game,
+              injuries: injuries,
             ),
           const SizedBox(height: 12),
           const ToolNote(
@@ -337,7 +406,9 @@ class _MarketBlock extends StatelessWidget {
     required this.board,
     required this.now,
     required this.books,
+    required this.game,
     this.line,
+    this.injuries,
   });
 
   final String title;
@@ -345,7 +416,9 @@ class _MarketBlock extends StatelessWidget {
   final OddsBoard board;
   final DateTime now;
   final Set<String>? books;
+  final GameSummary game;
   final CoachLine? line;
+  final InjuryReport? injuries;
 
   @override
   Widget build(BuildContext context) {
@@ -370,6 +443,8 @@ class _MarketBlock extends StatelessWidget {
                     now: now,
                     books: books,
                     line: line,
+                    game: game,
+                    injuries: injuries,
                   ),
           ],
         ),
@@ -385,14 +460,18 @@ class _SideRow extends StatefulWidget {
     required this.board,
     required this.now,
     required this.books,
+    required this.game,
     this.line,
+    this.injuries,
   });
   final PricedSide side;
   final PricedMarket market;
   final OddsBoard board;
   final DateTime now;
   final Set<String>? books;
+  final GameSummary game;
   final CoachLine? line;
+  final InjuryReport? injuries;
 
   @override
   State<_SideRow> createState() => _SideRowState();
@@ -475,9 +554,14 @@ class _SideRowState extends State<_SideRow> {
             alternative: alternative,
             overpriced: verdict.overpriced,
           );
-    final pinnacle = sharp == null
-        ? 'Pinnacle is not in this snapshot for this side. The fee-free chance is the books that are here.'
-        : 'Pinnacle\'s fee-free chance is ${percentLabel(sharp)}. That is the sharp book\'s number for the spread or total, not a pick.';
+    final event = widget.game.event;
+    final brief = buildSideBrief(
+      verdict: shown,
+      modelUnproven: chance != null,
+      injuryText: gameInjuryText(widget.injuries, event.away, event.home),
+      scriptText: _sideScript(widget.game, widget.side),
+      sharpLine: sharpText(sharp),
+    );
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: ValueView(
@@ -495,13 +579,17 @@ class _SideRowState extends State<_SideRow> {
             ),
           ],
         ),
-        extraWhy: Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Text(pinnacle, style: EdgeType.body),
-        ),
+        whyBody: WhyBriefView(brief: brief),
         extraMath: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const SizedBox(height: 8),
+            Text(
+              sharp == null
+                  ? 'Pinnacle is not in this snapshot for this side. The fee-free chance is the books that are here.'
+                  : 'Pinnacle\'s fee-free chance is ${percentLabel(sharp)}. That is the sharp book\'s number for the spread or total, not a pick.',
+              style: EdgeType.body,
+            ),
             const SizedBox(height: 8),
             for (final row in ladder)
               Padding(
@@ -558,4 +646,37 @@ double? _ourChance(CoachLine? line, Selection selection) {
     }
   }
   return null;
+}
+
+String _sideScript(GameSummary game, PricedSide side) {
+  double? total;
+  double? homeSpread;
+  for (final market in game.markets) {
+    for (final item in market.sides) {
+      if (market.market == 'totals' && item.selection.outcome == 'Over') {
+        total ??= item.selection.point;
+      }
+      if (market.market == 'spreads' &&
+          item.selection.outcome == game.event.home) {
+        homeSpread ??= item.selection.point;
+      }
+    }
+  }
+  final selection = side.selection;
+  var team = game.event.home;
+  var spread = homeSpread;
+  if (selection.market == 'spreads' || selection.market == 'h2h') {
+    team = selection.outcome;
+    if (selection.market == 'spreads') {
+      spread = selection.point;
+    } else if (team == game.event.away && homeSpread != null) {
+      spread = -homeSpread;
+    }
+  }
+  return scriptBrief(
+    teamName: clubNickname(canonicalTeam(team) ?? team),
+    teamSpread: spread,
+    total: selection.market == 'totals' ? selection.point ?? total : total,
+    market: selection.market,
+  );
 }
