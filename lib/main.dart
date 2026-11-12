@@ -3,8 +3,17 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'coach/ask_coach.dart';
+import 'coach/games_screen.dart';
+import 'coach/home_screen.dart';
+import 'coach/model_screen.dart';
+import 'coach/my_bets_screen.dart';
+import 'coach/parlays_screen.dart';
+import 'coach/props_screen.dart';
 import 'data/demo.dart';
 import 'data/repository.dart';
+import 'domain/coach_board.dart';
+import 'domain/coach_model.dart';
 import 'domain/odds.dart';
 import 'research_workspace.dart';
 import 'data/research_store.dart';
@@ -87,13 +96,22 @@ class EdgeWorkspace extends StatefulWidget {
 
 class _EdgeWorkspaceState extends State<EdgeWorkspace> {
   late OddsBoard board;
+  OddsBoard? propBoard;
   Timer? timer;
   int page = 0;
+  int shell = 0;
   int lastResearchPage = 1;
   String? eventId, selectionKey;
   String market = 'h2h';
   Set<String>? enabledBooks;
   bool backend = false, loading = false, scenario = false;
+  CoachModel? coachModel;
+  bool edgeEdited = false;
+  EdgeSettings edgeSettings = const EdgeSettings(
+    spreadPoints: 2.5,
+    totalPoints: 2.5,
+    minExpectedValue: 0.02,
+  );
   double win = .55;
   String? error;
   String? preferenceNotice;
@@ -107,39 +125,47 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
     ),
   );
   static const workspaceNames = [
-    'Overview',
-    'Research',
-    'Odds comparison',
-    'Tools',
+    'Home',
+    'Props',
+    'Games',
+    'Parlays',
+    'My Bets',
+    'More',
   ];
   static const workspaceIcons = [
+    Icons.home_outlined,
+    Icons.person_outline,
+    Icons.sports_football_outlined,
+    Icons.receipt_long_outlined,
+    Icons.bookmark_outline,
     Icons.grid_view_rounded,
-    Icons.query_stats_rounded,
-    Icons.compare_arrows_rounded,
-    Icons.handyman_outlined,
   ];
-  static const phoneLabels = ['Home', 'Research', 'Odds', 'Tools'];
+  static const phoneLabels = [
+    'Home',
+    'Props',
+    'Games',
+    'Parlays',
+    'Bets',
+    'More',
+  ];
   static const researchPages = [1, 4, 3];
   static const researchNames = ['Matchups', 'Players', 'Proof Lab'];
   bool get inResearch => researchPages.contains(page);
-  int get workspaceIndex => switch (page) {
-    0 => 0,
-    2 => 2,
-    5 => 3,
-    _ => 1,
-  };
+  int get workspaceIndex => shell;
 
   void navigateTo(int next) => setState(() {
     page = next;
+    shell = 5;
     if (inResearch) lastResearchPage = next;
     if (next != 3) researchContext = null;
   });
 
-  void openWorkspace(int index) => navigateTo(switch (index) {
-    1 => lastResearchPage,
-    2 => 2,
-    3 => 5,
-    _ => 0,
+  void openShell(int index) => setState(() {
+    shell = index;
+    if (index == 5) {
+      page = 5;
+      researchContext = null;
+    }
   });
 
   void investigatePlayer(
@@ -199,6 +225,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
             );
           }
         });
+    unawaited(loadCoachModel());
     // Re-evaluate freshness even if no successful network request arrives.
     timer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (backend && !loading) {
@@ -212,6 +239,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
   @override
   void dispose() {
     timer?.cancel();
+    repository.close();
     super.dispose();
   }
 
@@ -233,6 +261,8 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
           selectionKey = null;
         }
       });
+      if (backend) unawaited(loadProps());
+      if (onDemand || coachModel == null) unawaited(loadCoachModel());
     } catch (_) {
       if (mounted) {
         setState(
@@ -274,6 +304,123 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       (quote.eligible(now, inPlay: inPlay) ||
           quoteFreshness(quote) == 'snapshot');
   String pct(double p) => '${(p * 100).toStringAsFixed(1)}%';
+
+  Future<void> loadProps({bool refresh = false}) async {
+    if (!backend) {
+      if (mounted) setState(() => propBoard = null);
+      return;
+    }
+    try {
+      final next = await repository.props(refresh: refresh);
+      if (mounted) setState(() => propBoard = next);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          propBoard = OddsBoard(
+            events: const [],
+            quotes: const [],
+            fetchedAt: now,
+            notices: const [
+              'Player-prop prices could not be loaded. No stand-in prices were added.',
+            ],
+          );
+        });
+      }
+    }
+  }
+
+  OddsBoard get propSource {
+    if (!backend || board.demo) return board;
+    final props = propBoard;
+    if (props == null) {
+      return OddsBoard(
+        events: board.events,
+        quotes: const [],
+        fetchedAt: board.fetchedAt,
+        notices: const [
+          'Player-prop prices have not been saved yet.',
+        ],
+      );
+    }
+    return OddsBoard(
+      events: props.events.isEmpty ? board.events : props.events,
+      quotes: props.quotes,
+      fetchedAt: props.fetchedAt,
+      demo: props.demo,
+      notices: props.notices,
+    );
+  }
+
+  Future<void> loadCoachModel() async {
+    CoachModel? next;
+    if (backend) {
+      try {
+        next = CoachModel.fromJson(await repository.coachModel());
+      } catch (_) {
+        next = null;
+      }
+    }
+    if (next == null) {
+      try {
+        next = await loadBundledCoachModel();
+      } catch (_) {
+        next = coachModel;
+      }
+    }
+    if (!mounted || next == null) return;
+    setState(() {
+      coachModel = next;
+      if (!edgeEdited) edgeSettings = next!.settings;
+    });
+  }
+
+  List<CoachLine> get coachLines {
+    final model = coachModel;
+    if (model == null) return const [];
+    final lines = <CoachLine>[];
+    for (final event in board.events) {
+      final line = model.lineFor(
+        event,
+        board.quotes,
+        settings: edgeSettings,
+        books: enabledBooks,
+      );
+      if (line != null) lines.add(line);
+    }
+    return lines;
+  }
+
+  CoachBrief? coachBrief() {
+    final slate = summarizeSlate(board, now, books: enabledBooks);
+    final play = slate.topPlays.where((item) => item.quote.decimal > 1);
+    if (play.isEmpty) return null;
+    final first = play.first;
+    final lines = coachLines;
+    final edged = [for (final line in lines) if (line.flagged) line];
+    final shown = (edged.isEmpty ? lines : edged).take(8).toList();
+    final modelNote = shown.isEmpty ? '' : ' ${shown.first.askCoachSentence}';
+    final backtest = coachModel?.backtest.plainEnglish ?? '';
+    var note =
+        '${first.explanation} Price ${americanLabel(first.quote.decimal)} at ${first.quote.book}. ${priceAge(first.quote.sourceAt, now)}. ${board.demo ? 'Sample prices.' : 'Saved snapshot.'}$modelNote';
+    if (note.length > 500) note = note.substring(0, 500);
+    return CoachBrief(
+      label: first.title,
+      matchup: first.subtitle,
+      price: first.quote.decimal,
+      demo: first.quote.demo || board.demo,
+      identity: first.quote.selection.key,
+      note: note,
+      teamEvidence: [
+        for (final line in shown) line.evidence(),
+        if (backtest.isNotEmpty)
+          {
+            'source': "Coach's Line backtest",
+            'hasEdge': coachModel?.backtest.hasEdge ?? false,
+            'summary': backtest.length > 500 ? backtest.substring(0, 500) : backtest,
+          },
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -340,7 +487,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                                     ),
                                     leading: Icon(workspaceIcons[i], size: 20),
                                     title: Text(workspaceNames[i]),
-                                    onTap: () => openWorkspace(i),
+                                    onTap: () => openShell(i),
                                   ),
                                 ),
                               const Spacer(),
@@ -370,8 +517,24 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                           child: Row(
                             children: [
                               if (!wide) ...[
-                                brand(),
-                                const Spacer(),
+                                const Icon(
+                                  Icons.stacked_line_chart,
+                                  color: mint,
+                                  size: 22,
+                                ),
+                                const SizedBox(width: 6),
+                                const Flexible(
+                                  child: Text(
+                                    'ODDS EDGE',
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 13,
+                                      letterSpacing: 0.4,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
                               ] else ...[
                                 Text(
                                   workspaceNames[workspaceIndex],
@@ -380,21 +543,48 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                                 const Spacer(),
                               ],
                               badge(
-                                page == 4
+                                shell == 5 && page == 4
                                     ? 'HISTORICAL STATS'
                                     : board.demo
                                     ? (wide ? 'DEMONSTRATION' : 'DEMO')
                                     : (wide ? 'PROVIDER FEED' : 'FEED'),
-                                page == 4
+                                shell == 5 && page == 4
                                     ? mint
                                     : board.demo
                                     ? Colors.amber
                                     : mint,
                               ),
-                              const SizedBox(width: 8),
-                              if (page != 4)
+                              const SizedBox(width: 4),
+                              TextButton(
+                                key: const Key('ask-coach'),
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                  ),
+                                  minimumSize: const Size(0, 36),
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                onPressed: () => showAskCoach(
+                                  context,
+                                  brief: backend && error == null
+                                      ? coachBrief()
+                                      : null,
+                                  ask: backend && error == null
+                                      ? repository.assistant
+                                      : null,
+                                ),
+                                child: const Text('Ask Coach'),
+                              ),
+                              if (!(shell == 5 && page == 4))
                                 IconButton(
                                   tooltip: 'Refresh odds',
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 36,
+                                    minHeight: 36,
+                                  ),
                                   onPressed: loading
                                       ? null
                                       : () => refresh(onDemand: true),
@@ -412,73 +602,8 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                           ),
                         ),
                         const Divider(height: 1),
-                        if (inResearch) researchTabs(),
-                        Expanded(
-                          child: page == 3
-                              ? ResearchWorkspace(
-                                  key: ValueKey(researchLaunch),
-                                  store: researchStore,
-                                  initialContext: researchContext,
-                                  calculator: const ProbabilityCalculator(),
-                                  assistant: backend
-                                      ? repository.assistant
-                                      : null,
-                                )
-                              : SingleChildScrollView(
-                                  padding: EdgeInsets.all(wide ? 30 : 16),
-                                  key: PageStorageKey(page),
-                                  child: ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      maxWidth: 1400,
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        if (page != 3 && page != 4) ...[
-                                          sourcePanel(),
-                                          const SizedBox(height: 26),
-                                        ],
-                                        if (page == 0)
-                                          overview()
-                                        else if (page == 1)
-                                          matchups()
-                                        else if (page == 2)
-                                          comparison()
-                                        else if (page == 4)
-                                          PlayerStatsScreen(
-                                            onInvestigate: investigatePlayer,
-                                          )
-                                        else if (page == 5)
-                                          ToolsPage(
-                                            key: const Key('tools-page'),
-                                            board: board,
-                                            now: now,
-                                            enabledBooks: enabledBooks,
-                                            backendConnected:
-                                                backend && error == null,
-                                            store: researchStore,
-                                            stamp: stamp,
-                                            history: (selection) => backend
-                                                ? repository.history(selection)
-                                                : Future.value(const []),
-                                          )
-                                        else
-                                          const SizedBox(),
-                                        const SizedBox(height: 30),
-                                        if (page != 4)
-                                          const Text(
-                                            'Prices are observations, not guaranteed offers. Confirm the exact line and rules with the operator.',
-                                            style: TextStyle(
-                                              color: Colors.white54,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                        ),
+                        if (shell == 5 && inResearch) researchTabs(),
+                        Expanded(child: shell == 5 ? legacyPage(wide) : coachPage()),
                       ],
                     ),
                   ),
@@ -491,7 +616,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
             ? null
             : NavigationBar(
                 selectedIndex: workspaceIndex,
-                onDestinationSelected: openWorkspace,
+                onDestinationSelected: openShell,
                 destinations: [
                   for (var i = 0; i < workspaceNames.length; i++)
                     NavigationDestination(
@@ -503,6 +628,158 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       );
     },
   );
+
+  Widget coachPage() => switch (shell) {
+    0 => HomeScreen(
+      board: board,
+      now: now,
+      stamp: stamp,
+      enabledBooks: enabledBooks,
+      onOpenProps: () => openShell(1),
+      onOpenGames: () => openShell(2),
+    ),
+    1 => PropsScreen(
+      board: propSource,
+      now: now,
+      store: researchStore,
+      enabledBooks: enabledBooks,
+      history: backend && error == null
+          ? (selection) => repository.history(selection)
+          : null,
+    ),
+    2 => GamesScreen(
+      board: board,
+      now: now,
+      enabledBooks: enabledBooks,
+      model: coachModel,
+      settings: edgeSettings,
+    ),
+    3 => ParlaysScreen(
+      board: board,
+      now: now,
+      enabledBooks: enabledBooks,
+    ),
+    4 => MyBetsScreen(
+      store: researchStore,
+      board: board,
+      now: now,
+      books: enabledBooks,
+    ),
+    _ => const SizedBox(),
+  };
+
+  Widget moreLinks() => Padding(
+    padding: const EdgeInsets.only(bottom: 16),
+    child: Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        OutlinedButton(
+          onPressed: () => navigateTo(2),
+          child: const Text('Odds comparison'),
+        ),
+        OutlinedButton(
+          onPressed: () => navigateTo(lastResearchPage),
+          child: const Text('Research'),
+        ),
+        OutlinedButton(
+          onPressed: () => setState(() {
+            shell = 5;
+            page = 0;
+          }),
+          child: const Text('Overview'),
+        ),
+        OutlinedButton(
+          onPressed: () => setState(() {
+            shell = 5;
+            page = 5;
+          }),
+          child: const Text('Price tools'),
+        ),
+        OutlinedButton(
+          onPressed: () => setState(() {
+            shell = 5;
+            page = 6;
+          }),
+          child: const Text("Coach's model"),
+        ),
+      ],
+    ),
+  );
+
+  Widget legacyPage(bool wide) {
+    if (page == 3) {
+      return ResearchWorkspace(
+        key: ValueKey(researchLaunch),
+        store: researchStore,
+        initialContext: researchContext,
+        calculator: const ProbabilityCalculator(),
+        assistant: backend && error == null ? repository.assistant : null,
+      );
+    }
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(wide ? 30 : 16),
+      key: PageStorageKey(page),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1400),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            moreLinks(),
+            if (page != 4) ...[
+              sourcePanel(),
+              const SizedBox(height: 26),
+            ],
+            if (page == 0)
+              overview()
+            else if (page == 1)
+              matchups()
+            else if (page == 2)
+              comparison()
+            else if (page == 4)
+              PlayerStatsScreen(onInvestigate: investigatePlayer)
+            else if (page == 6)
+              ModelScreen(
+                model: coachModel,
+                settings: edgeSettings,
+                onPoints: (value) => setState(() {
+                  edgeEdited = true;
+                  edgeSettings = edgeSettings.copyWith(
+                    spreadPoints: value,
+                    totalPoints: value,
+                  );
+                }),
+                onMinExpectedValue: (value) => setState(() {
+                  edgeEdited = true;
+                  edgeSettings = edgeSettings.copyWith(minExpectedValue: value);
+                }),
+              )
+            else if (page == 5)
+              ToolsPage(
+                key: const Key('tools-page'),
+                board: board,
+                now: now,
+                enabledBooks: enabledBooks,
+                backendConnected: backend && error == null,
+                store: researchStore,
+                stamp: stamp,
+                history: (selection) => backend && error == null
+                    ? repository.history(selection)
+                    : Future.value(const []),
+              )
+            else
+              const SizedBox(),
+            const SizedBox(height: 30),
+            if (page != 4)
+              const Text(
+                'Prices are observations, not guaranteed offers. Confirm the exact line and rules with the operator.',
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget brand() => const Row(
     mainAxisSize: MainAxisSize.min,
@@ -601,6 +878,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                           fetchedAt: now,
                           demo: !backend,
                         );
+                        propBoard = null;
                       });
                       await refresh();
                     },
@@ -618,7 +896,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
         const SizedBox(height: 4),
         Text(
           board.demo
-              ? 'Synthetic NFL fixtures and odds · no live feed or predictive model connected. This sample is a snapshot, not a live stream.'
+              ? "Sample NFL prices. Coach's Line, when it is loaded, uses real past seasons. These prices are not a live book."
               : 'These odds are a saved snapshot, not a live stream. A quote counts as current only when the sportsbook time and our collection time are both within 120 seconds before kickoff or 20 seconds after kickoff.',
           style: const TextStyle(color: Colors.white60, fontSize: 12),
         ),
@@ -701,7 +979,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                     child: const Text('Review saved predictions'),
                   ),
                   OutlinedButton.icon(
-                    onPressed: () => openWorkspace(3),
+                    onPressed: () => openShell(5),
                     icon: const Icon(Icons.handyman_outlined),
                     label: const Text('Price, parlays, and bet log'),
                   ),
@@ -859,6 +1137,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                 eventId = e.id;
                 selectionKey = null;
                 page = 2;
+                shell = 5;
               }),
               icon: const Icon(Icons.compare_arrows, size: 18),
               label: const Text('Explore prices'),
@@ -900,6 +1179,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       researchContext = ResearchContext(quote: quote, event: selectedEvent);
       researchLaunch++;
       page = 3;
+      shell = 5;
       lastResearchPage = 3;
     });
   }

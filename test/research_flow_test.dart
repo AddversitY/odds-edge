@@ -199,6 +199,8 @@ void main() {
       final store = MemoryResearchStore();
       await tester.pumpWidget(OddsEdgeApp(researchStore: store));
       await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ListTile, 'More'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Odds comparison'));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Investigate in Proof Lab'));
@@ -214,7 +216,9 @@ void main() {
         'Test named research',
       );
       await tester.pump(const Duration(milliseconds: 500));
-      await tester.tap(find.text('Overview'));
+      await tester.tap(find.widgetWithText(ListTile, 'Home'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ListTile, 'More'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Research'));
       await tester.pumpAndSettle();
