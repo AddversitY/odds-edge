@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:odds_edge/domain/odds.dart';
 
+import 'line_history.dart';
 import 'providers.dart';
 import 'quota.dart';
 
@@ -375,6 +376,7 @@ class SharpCoordinator {
     this.cacheFor = sharpCacheFor,
     this.creditsRemaining,
     this.onCredit,
+    this.lines,
   });
 
   final String apiKey;
@@ -386,7 +388,18 @@ class SharpCoordinator {
   final int? Function()? creditsRemaining;
   final void Function(CreditObservation observation, {required bool oddsCall})?
   onCredit;
+  final LineHistory? lines;
   Future<OddsBoard>? _pending;
+
+  Future<void> _remember(OddsBoard board) async {
+    final history = lines;
+    if (history == null || board.quotes.isEmpty) return;
+    try {
+      await history.record(board, kind: 'lines');
+    } catch (_) {
+      // A full disk must not hide the Pinnacle prices that were just read.
+    }
+  }
 
   Uri oddsUri() => Uri.https('api.the-odds-api.com', '/v4/sports/$sport/odds', {
     'apiKey': apiKey,
@@ -423,7 +436,10 @@ class SharpCoordinator {
       force: refresh,
     );
     if (!decision.allowed) {
-      if (cached.board != null) return cached.board!;
+      if (cached.board != null) {
+        await _remember(cached.board!);
+        return cached.board!;
+      }
       return _empty(current, decision.reason);
     }
     if (apiKey.isEmpty) {
@@ -474,13 +490,20 @@ class SharpCoordinator {
           notice: notice,
         ),
       );
+      await _remember(board);
       return board;
     } on StateError catch (error) {
       final safe = _scrub(error.message);
-      if (cached.board != null) return cached.board!;
+      if (cached.board != null) {
+        await _remember(cached.board!);
+        return cached.board!;
+      }
       return _empty(current, safe);
     } catch (_) {
-      if (cached.board != null) return cached.board!;
+      if (cached.board != null) {
+        await _remember(cached.board!);
+        return cached.board!;
+      }
       return _empty(
         current,
         'Pinnacle prices could not be refreshed. No stand-in prices were added.',

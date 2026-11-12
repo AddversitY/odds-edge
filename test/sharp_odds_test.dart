@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import '../backend/line_history.dart';
 import '../backend/providers.dart';
 import '../backend/sharp_odds.dart';
 
@@ -184,6 +185,42 @@ void main() {
     expect(board.notices.join(' '), isNot(contains(secret)));
     expect(transport.calls, 1);
   });
+
+  test(
+    'a Pinnacle pull is journaled once and a cached read does not pull again',
+    () async {
+      final dir = await Directory.systemTemp.createTemp('sharp-odds-journal');
+      addTearDown(() => dir.delete(recursive: true));
+      final history = LineHistory(
+        File('${dir.path}/lines.jsonl'),
+        compactEvery: 100,
+      );
+      final transport = _Transport(
+        body: jsonEncode(_body()),
+        headers: {'x-requests-last': '2'},
+      );
+      final sharp = SharpCoordinator(
+        apiKey: secret,
+        transport: transport,
+        cache: SharpCache(File('${dir.path}/sharp-snapshot.json')),
+        creditsRemaining: () => 200,
+        scheduledHold: 50,
+        lines: history,
+      );
+      final first = await sharp.board(now);
+      expect(first.quotes, isNotEmpty);
+      expect(transport.calls, 1);
+      final again = await sharp.board(now.add(const Duration(minutes: 20)));
+      expect(again.quotes, isNotEmpty);
+      expect(transport.calls, 1);
+      final shots = await history.forEvent(
+        'nfl:BUF:KC:2026-11-13T00:20:00.000Z',
+      );
+      expect(shots, hasLength(1));
+      expect(shots.single['kind'], 'lines');
+      expect(shots.single.toString(), isNot(contains(secret)));
+    },
+  );
 }
 
 List<Map<String, Object>> _body() => [

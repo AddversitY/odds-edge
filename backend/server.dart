@@ -10,6 +10,7 @@ import 'line_history.dart';
 import 'llm.dart';
 import 'prop_odds.dart';
 import 'providers.dart';
+import 'public_splits.dart';
 import 'quota.dart';
 import 'service.dart';
 import 'sharp_odds.dart';
@@ -103,6 +104,7 @@ Future<void> main() async {
             );
             unawaited(ledger.save());
           },
+          lines: lines,
         );
   final injuries = InjuryFeed(cacheFile: File('backend/data/injuries.json'));
   // Injury pages are free public files. This timer does not call The Odds API.
@@ -244,11 +246,20 @@ Future<void> handleRequest(
               }
             : (await feed.current(kickoffs: service.knownKickoffs)).toJson();
       case '/v1/lines':
+        final history = lines;
+        final all = request.uri.queryParameters['all'] == '1';
+        if (all) {
+          result = {
+            'origin': 'collected_since_installation',
+            'events': history == null ? <Object>[] : await history.slate(),
+            'notice': 'Prices this server already fetched. Reading them does not call The Odds API.',
+          };
+          break;
+        }
         final event = request.uri.queryParameters['event'];
         if (event == null || event.isEmpty) {
           throw const FormatException('event required');
         }
-        final history = lines;
         result = {
           'origin': 'collected_since_installation',
           'event': event,
@@ -257,6 +268,8 @@ Future<void> handleRequest(
               : await history.forEvent(event),
           'notice': 'Prices this server already fetched. Reading them does not call The Odds API.',
         };
+      case '/v1/public-splits':
+        result = publicSplitsPayload();
       case '/v1/history':
         final selection = request.uri.queryParameters['selection'];
         if (selection == null) {

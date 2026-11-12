@@ -7,6 +7,7 @@ import '../domain/market_math.dart';
 import '../domain/matchup.dart';
 import '../domain/nfl_teams.dart';
 import '../domain/odds.dart';
+import '../domain/public_sharp.dart' hide clubNickname;
 import '../domain/value_check.dart';
 import '../domain/why_brief.dart';
 import '../explained_number.dart';
@@ -14,6 +15,7 @@ import '../theme/edge_theme.dart';
 import '../theme/reveal.dart';
 import 'coach_line_view.dart';
 import 'coach_widgets.dart';
+import 'sharp_view.dart';
 import 'value_view.dart';
 import 'why_view.dart';
 
@@ -31,6 +33,9 @@ class GamesScreen extends StatefulWidget {
       totalPoints: 2.5,
       minExpectedValue: 0.02,
     ),
+    this.lineHistory = const {},
+    this.publicSplits = const [],
+    this.sampleHistory = false,
     this.injuries,
     this.openEventId,
     this.onEventOpened,
@@ -41,6 +46,9 @@ class GamesScreen extends StatefulWidget {
   final Set<String>? enabledBooks;
   final CoachModel? model;
   final EdgeSettings settings;
+  final Map<String, List<LineSnapshot>> lineHistory;
+  final List<PublicSplit> publicSplits;
+  final bool sampleHistory;
   final InjuryReport? injuries;
 
   /// Opens this game once, then [onEventOpened] clears the request.
@@ -96,6 +104,7 @@ class _GamesScreenState extends State<GamesScreen> {
           now: widget.now,
           books: widget.enabledBooks,
           injuries: widget.injuries,
+          sharp: _sharpFor(game.event),
           line: widget.model?.lineFor(
             game.event,
             widget.board.quotes,
@@ -160,6 +169,7 @@ class _GamesScreenState extends State<GamesScreen> {
           for (final game in games) ...[
             _GameCard(
               game: game,
+              sharp: _sharpFor(game.event),
               injuries: widget.injuries,
               line: widget.model?.lineFor(
                 game.event,
@@ -174,6 +184,16 @@ class _GamesScreenState extends State<GamesScreen> {
       ],
     );
   }
+
+  SharpRead _sharpFor(SportEvent event) => readSharp(
+    event: event,
+    history: historyForEvent(event, widget.lineHistory),
+    currentQuotes: widget.board.quotes,
+    publicSplit: publicSplitFor(event, widget.publicSplits),
+    sample: widget.sampleHistory,
+    now: widget.now,
+    pricesAt: widget.board.fetchedAt,
+  );
 
   bool _matches(GameSummary game, DateTime today) {
     final day = calendarDay(game.event.startsAt);
@@ -191,10 +211,12 @@ class _GameCard extends StatelessWidget {
   const _GameCard({
     required this.game,
     required this.onOpen,
+    required this.sharp,
     this.line,
     this.injuries,
   });
   final GameSummary game;
+  final SharpRead sharp;
   final CoachLine? line;
   final InjuryReport? injuries;
   final VoidCallback onOpen;
@@ -232,6 +254,15 @@ class _GameCard extends StatelessWidget {
                 "Coach's Line is not on this game.",
                 style: EdgeType.body.copyWith(color: EdgeColors.textSecondary),
               ),
+            if (sharp.hasSignal) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Sharp  ${sharp.oneLine}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: EdgeType.label.copyWith(color: EdgeColors.text),
+              ),
+            ],
           ],
         ),
       ),
@@ -245,6 +276,7 @@ class _GameDetail extends StatelessWidget {
     required this.board,
     required this.now,
     required this.books,
+    required this.sharp,
     this.line,
     this.injuries,
   });
@@ -253,6 +285,7 @@ class _GameDetail extends StatelessWidget {
   final OddsBoard board;
   final DateTime now;
   final Set<String>? books;
+  final SharpRead sharp;
   final CoachLine? line;
   final InjuryReport? injuries;
 
@@ -276,6 +309,8 @@ class _GameDetail extends StatelessWidget {
                 style: EdgeType.body,
               ),
             ),
+          SharpWhyRow(read: sharp),
+          const SizedBox(height: 16),
           Reveal(
             verdict: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
