@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:odds_edge/domain/odds.dart';
 
+import 'line_history.dart';
 import 'providers.dart';
 import 'quota.dart';
 
@@ -441,6 +442,7 @@ class PropCoordinator {
     this.scheduledHold = 0,
     this.creditsRemaining,
     this.onCredit,
+    this.lines,
   });
 
   final String apiKey;
@@ -454,6 +456,10 @@ class PropCoordinator {
   final int? Function()? creditsRemaining;
   final void Function(CreditObservation observation, {required bool oddsCall})?
   onCredit;
+
+  /// Same journal as the main board. Written only after a prop fetch that
+  /// already happened, never as a reason to fetch again.
+  final LineHistory? lines;
   Future<OddsBoard>? _pending;
 
   int get creditsPerEvent =>
@@ -574,6 +580,14 @@ class PropCoordinator {
         notice: notice,
       );
       await cache.save(record);
+      final history = lines;
+      if (history != null) {
+        try {
+          await history.record(board, kind: 'props');
+        } catch (_) {
+          // The prices are already cached. History is a copy, not the source.
+        }
+      }
       return board;
     } on StateError catch (error) {
       final safe = _scrub(error.message);

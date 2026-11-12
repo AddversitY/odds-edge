@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../domain/coach_board.dart';
+import '../domain/coach_model.dart';
 import '../domain/market_math.dart';
 import '../domain/odds.dart';
 import '../explained_number.dart';
+import 'coach_line_view.dart';
 import 'coach_widgets.dart';
 
 enum _When { all, today, upcoming }
@@ -14,11 +16,19 @@ class GamesScreen extends StatefulWidget {
     required this.board,
     required this.now,
     this.enabledBooks,
+    this.model,
+    this.settings = const EdgeSettings(
+      spreadPoints: 2.5,
+      totalPoints: 2.5,
+      minExpectedValue: 0.02,
+    ),
   });
 
   final OddsBoard board;
   final DateTime now;
   final Set<String>? enabledBooks;
+  final CoachModel? model;
+  final EdgeSettings settings;
 
   @override
   State<GamesScreen> createState() => _GamesScreenState();
@@ -80,6 +90,12 @@ class _GamesScreenState extends State<GamesScreen> {
           for (final game in games) ...[
             _GameCard(
               game: game,
+              line: widget.model?.lineFor(
+                game.event,
+                widget.board.quotes,
+                settings: widget.settings,
+                books: widget.enabledBooks,
+              ),
               onOpen: () {
                 Navigator.of(context).push(
                   MaterialPageRoute<void>(
@@ -88,6 +104,12 @@ class _GamesScreenState extends State<GamesScreen> {
                       board: widget.board,
                       now: widget.now,
                       books: widget.enabledBooks,
+                      line: widget.model?.lineFor(
+                        game.event,
+                        widget.board.quotes,
+                        settings: widget.settings,
+                        books: widget.enabledBooks,
+                      ),
                     ),
                   ),
                 );
@@ -112,8 +134,9 @@ class _GamesScreenState extends State<GamesScreen> {
 void _noop() {}
 
 class _GameCard extends StatelessWidget {
-  const _GameCard({required this.game, required this.onOpen});
+  const _GameCard({required this.game, required this.onOpen, this.line});
   final GameSummary game;
+  final CoachLine? line;
   final VoidCallback onOpen;
 
   @override
@@ -139,6 +162,10 @@ class _GameCard extends StatelessWidget {
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
+            if (line != null) ...[
+              CoachLineSummary(line: line!),
+              const SizedBox(height: 8),
+            ],
             Wrap(
               spacing: 6,
               runSpacing: 6,
@@ -149,9 +176,11 @@ class _GameCard extends StatelessWidget {
                   _Badge('${game.positiveEvMarkets} longer price'),
                 if (game.parlayCount > 0)
                   _Badge('${game.parlayCount} ticket'),
+                if (line?.flagged ?? false) const _Badge('Edge'),
                 if (game.arbitrageCount == 0 &&
                     game.positiveEvMarkets == 0 &&
-                    game.parlayCount == 0)
+                    game.parlayCount == 0 &&
+                    !(line?.flagged ?? false))
                   const _Badge('No gap in this snapshot', quiet: true),
               ],
             ),
@@ -190,12 +219,14 @@ class _GameDetail extends StatelessWidget {
     required this.board,
     required this.now,
     required this.books,
+    this.line,
   });
 
   final GameSummary game;
   final OddsBoard board;
   final DateTime now;
   final Set<String>? books;
+  final CoachLine? line;
 
   @override
   Widget build(BuildContext context) {
@@ -205,6 +236,17 @@ class _GameDetail extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (line != null) ...[
+            CoachLineCard(line: line!),
+            const SizedBox(height: 16),
+          ] else
+            const Padding(
+              padding: EdgeInsets.only(bottom: 16),
+              child: Text(
+                "Coach's Line is not available for this game. No number was filled in.",
+                style: TextStyle(color: Colors.white60, height: 1.35),
+              ),
+            ),
           const SectionLabel('FEE-FREE WIN CHANCE'),
           const SizedBox(height: 8),
           if (game.awayChance == null || game.homeChance == null)
@@ -237,7 +279,9 @@ class _GameDetail extends StatelessWidget {
           const SizedBox(height: 12),
           const ToolNote(
             'Place the bet at the sportsbook. This app does not send it. '
-            'Weather, injuries, and a starting lineup are not in this snapshot, so those sections are left out rather than filled with guesses.',
+            "Coach's Line uses past nflverse games, shared under CC BY 4.0. Odds Edge is not affiliated with nflverse. "
+            'The injury count is only players listed Out, not a starting lineup. Weather is not in the model. '
+            'A model does not guarantee the result.',
           ),
           const SizedBox(height: 8),
           const ToolNote(responsibleGamblingNote),

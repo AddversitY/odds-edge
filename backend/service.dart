@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:odds_edge/domain/odds.dart';
 
+import 'line_history.dart';
 import 'providers.dart';
 import 'quota.dart';
 
@@ -131,6 +132,7 @@ class OddsService {
   OddsService(
     this.providers,
     this.store, {
+    this.lines,
     this.refreshInterval = const Duration(seconds: 60),
     FreeTierPlan? freeTier,
     DateTime Function()? clock,
@@ -152,6 +154,9 @@ class OddsService {
   }
   final List<OddsProvider> providers;
   final SnapshotStore store;
+
+  /// Compact line-movement journal. Null in tests that only check the board.
+  final LineHistory? lines;
   final Duration refreshInterval;
   final FreeTierPlan? _freeTier;
   final DateTime Function() _clock;
@@ -483,8 +488,17 @@ class OddsService {
 
   Future<bool> _fetchOne(OddsProvider provider, DateTime now) async {
     try {
-      _cache[provider.id] = await provider.fetch(now);
+      final board = await provider.fetch(now);
+      _cache[provider.id] = board;
       _failures.remove(provider.id);
+      final history = lines;
+      if (history != null) {
+        try {
+          await history.record(board, kind: 'lines');
+        } catch (_) {
+          // A full disk must not hide the odds that were just fetched.
+        }
+      }
       return true;
     } catch (_) {
       _failures[provider.id] =

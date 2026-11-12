@@ -77,6 +77,13 @@ class BackendRepository {
     await _get('/v1/props${refresh ? '?refresh=1' : ''}'),
   );
 
+  /// The Coach's Line file. This route does not call The Odds API.
+  Future<Map<String, dynamic>> coachModel() async {
+    final decoded = await _get('/v1/model');
+    if (decoded is! Map) throw StateError('Backend unavailable.');
+    return Map<String, dynamic>.from(decoded);
+  }
+
   Future<List<OddsQuote>> history(Selection selection, {DateTime? at}) async {
     final query = <String, String>{'selection': selection.key};
     if (at != null) query['at'] = at.toUtc().toIso8601String();

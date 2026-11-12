@@ -4,14 +4,24 @@ import 'package:flutter/services.dart';
 import '../data/research_store.dart';
 import '../domain/bets.dart';
 import '../domain/coach_board.dart';
+import '../domain/coach_model.dart';
 import '../domain/odds.dart';
 import '../domain/saved_play.dart';
 import '../explained_number.dart';
 import 'coach_widgets.dart';
 
 class MyBetsScreen extends StatefulWidget {
-  const MyBetsScreen({super.key, required this.store});
+  const MyBetsScreen({
+    super.key,
+    required this.store,
+    this.board,
+    this.now,
+    this.books,
+  });
   final ResearchStore store;
+  final OddsBoard? board;
+  final DateTime? now;
+  final Set<String>? books;
 
   @override
   State<MyBetsScreen> createState() => _MyBetsScreenState();
@@ -57,7 +67,10 @@ class _MyBetsScreenState extends State<MyBetsScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          if (tab == 0) _saved(log.plays) else _logged(log.bets),
+          if (tab == 0)
+            _saved(log.plays)
+          else
+            _logged(log.bets, widget.board),
         ],
       );
     },
@@ -112,7 +125,7 @@ class _MyBetsScreenState extends State<MyBetsScreen> {
     );
   }
 
-  Widget _logged(List<TrackedBet> bets) {
+  Widget _logged(List<TrackedBet> bets, OddsBoard? board) {
     final ledger = BetLedger(bets);
     final days = betCalendar(bets);
     final month = calendarDay(DateTime.now());
@@ -147,10 +160,14 @@ class _MyBetsScreenState extends State<MyBetsScreen> {
           'Record ${ledger.wins}-${ledger.losses}-${ledger.pushes}. Days below are local dates. A day with no bet is left blank.',
           style: const TextStyle(color: Colors.white60, height: 1.35),
         ),
+        const SizedBox(height: 8),
+        Text(_closingSummary(ledger), style: const TextStyle(height: 1.4)),
         const SizedBox(height: 10),
         _MonthGrid(month: DateTime(month.year, month.month), days: monthDays),
         const SizedBox(height: 16),
         _AddBet(
+          board: board,
+          books: widget.books,
           onAdd: (bet) async {
             await widget.store.saveBet(bet);
             setState(() => future = _load());
@@ -176,12 +193,122 @@ class _MyBetsScreenState extends State<MyBetsScreen> {
                           ? 'Not in the settled total.'
                           : 'Result ${money(bet.profit!)}',
                     ),
+                    _ClosingNumber(
+                      key: ValueKey(bet.id),
+                      bet: bet,
+                      onSave: (closing) async {
+                        await widget.store.saveBet(
+                          bet.copyWith(closingLine: closing, replaceClosingLine: true),
+                        );
+                        setState(() => future = _load());
+                      },
+                    ),
                   ],
                 ),
               ),
             ),
         const SizedBox(height: 8),
         const ToolNote(responsibleGamblingNote),
+      ],
+    );
+  }
+}
+
+String _closingSummary(BetLedger ledger) {
+  final values = ledger.lineClvPoints;
+  if (values.isEmpty) {
+    return 'Closing number: none yet. Log the number on your ticket, then add the number the game closed at. Beating the close means you got the better number, not that the bet won.';
+  }
+  final average = ledger.averageLineClv!;
+  final direction = average > 0.05
+      ? 'ahead of the close'
+      : average < -0.05
+      ? 'behind the close'
+      : 'about even with the close';
+  return 'Closing number: you beat the close on ${ledger.beatClosingNumber} of ${values.length} bets with a closing number. Average ${signedNumber(average)} points, $direction.';
+}
+
+String _clvSentence(TrackedBet bet) {
+  final points = bet.lineClvPoints;
+  if (bet.line == null) {
+    return 'No number was saved with this bet, so it cannot be compared with the close.';
+  }
+  final logged = 'Number when you logged it: ${signedNumber(bet.line!)}.';
+  if (points == null) {
+    return '$logged Add the closing number when the game closes.';
+  }
+  if (points.abs() < 0.05) {
+    return '$logged Same number as the close.';
+  }
+  if (points > 0) {
+    return '$logged You beat the closing number by ${points.toStringAsFixed(1)} points.';
+  }
+  return '$logged The closing number beat you by ${(-points).toStringAsFixed(1)} points.';
+}
+
+class _ClosingNumber extends StatefulWidget {
+  const _ClosingNumber({super.key, required this.bet, required this.onSave});
+  final TrackedBet bet;
+  final Future<void> Function(double? closing) onSave;
+
+  @override
+  State<_ClosingNumber> createState() => _ClosingNumberState();
+}
+
+class _ClosingNumberState extends State<_ClosingNumber> {
+  late final closing = TextEditingController(
+    text: widget.bet.closingLine?.toString() ?? '',
+  );
+  String? message;
+
+  @override
+  void dispose() {
+    closing.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 6),
+        Text(_clvSentence(widget.bet), style: const TextStyle(height: 1.35)),
+        if (widget.bet.closingLineValue != null)
+          Text(
+            'Closing price versus the price you took: ${signedPercent(widget.bet.closingLineValue!)}. Positive means the close was a shorter price.',
+            style: const TextStyle(color: Colors.white60, height: 1.3),
+          ),
+        if (widget.bet.line != null) ...[
+          const SizedBox(height: 6),
+          TextField(
+            controller: closing,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+            decoration: const InputDecoration(labelText: 'Closing number'),
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: () async {
+                final text = closing.text.trim();
+                if (text.isEmpty) {
+                  await widget.onSave(null);
+                  return;
+                }
+                final value = double.tryParse(text);
+                if (value == null) {
+                  setState(() => message = 'Enter the closing number, such as -3.5 or 47.5.');
+                  return;
+                }
+                await widget.onSave(value);
+                if (mounted) setState(() => message = null);
+              },
+              child: const Text('Save closing number'),
+            ),
+          ),
+        ],
+        if (message != null)
+          Text(message!, style: const TextStyle(color: Colors.orangeAccent)),
       ],
     );
   }
@@ -296,8 +423,10 @@ const _months = [
 ];
 
 class _AddBet extends StatefulWidget {
-  const _AddBet({required this.onAdd});
+  const _AddBet({required this.onAdd, this.board, this.books});
   final Future<void> Function(TrackedBet bet) onAdd;
+  final OddsBoard? board;
+  final Set<String>? books;
   @override
   State<_AddBet> createState() => _AddBetState();
 }
@@ -307,6 +436,10 @@ class _AddBetState extends State<_AddBet> {
   final book = TextEditingController();
   final odds = TextEditingController();
   final stake = TextEditingController();
+  final line = TextEditingController();
+  String kind = 'spreads';
+  String side = '';
+  String? eventId;
   String? message;
 
   @override
@@ -315,7 +448,64 @@ class _AddBetState extends State<_AddBet> {
     book.dispose();
     odds.dispose();
     stake.dispose();
+    line.dispose();
     super.dispose();
+  }
+
+  void _fillFromBoard() {
+    final board = widget.board;
+    final id = eventId;
+    if (board == null || id == null) return;
+    SportEvent? event;
+    for (final candidate in board.events) {
+      if (candidate.id == id) event = candidate;
+    }
+    if (event == null) return;
+    final market = readMarketLine(event, board.quotes, books: widget.books);
+    String? chosen = side;
+    if (chosen.isEmpty) {
+      chosen = kind == 'totals' ? 'over' : 'away';
+    }
+    OddsQuote? quote;
+    double? number;
+    var label = '';
+    if (kind == 'spreads' && market.homeSpread != null) {
+      if (chosen == 'home') {
+        number = market.homeSpread;
+        quote = market.homeSpreadPrice;
+        label = '${event.home} ${signedNumber(number!)}';
+      } else {
+        chosen = 'away';
+        number = -market.homeSpread!;
+        quote = market.awaySpreadPrice;
+        label = '${event.away} ${signedNumber(number)}';
+      }
+    } else if (kind == 'totals' && market.total != null) {
+      final total = market.total!;
+      number = total;
+      if (chosen == 'under') {
+        quote = market.underPrice;
+        label = 'Under ${total.toStringAsFixed(1)}';
+      } else {
+        chosen = 'over';
+        quote = market.overPrice;
+        label = 'Over ${total.toStringAsFixed(1)}';
+      }
+    } else if (kind == 'h2h') {
+      number = null;
+      label = chosen == 'home' ? event.home : event.away;
+    }
+    side = chosen;
+    if (label.isNotEmpty) description.text = label;
+    if (number == null) {
+      line.clear();
+    } else {
+      line.text = number.toStringAsFixed(1);
+    }
+    if (quote != null) {
+      book.text = quote.book;
+      odds.text = americanLabel(quote.decimal);
+    }
   }
 
   @override
@@ -324,11 +514,98 @@ class _AddBetState extends State<_AddBet> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text('Log a bet you placed', style: TextStyle(fontWeight: FontWeight.w800)),
+        const SizedBox(height: 4),
+        const Text(
+          'The number on the ticket is saved now. After the game closes, add the closing number on the bet to see if you beat the close. This does not place the bet.',
+          style: TextStyle(color: Colors.white60, height: 1.35),
+        ),
+        const SizedBox(height: 8),
+        if (widget.board != null && widget.board!.events.isNotEmpty)
+          DropdownButtonFormField<String>(
+            initialValue: eventId,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Game on this screen'),
+            items: [
+              for (final event in widget.board!.events)
+                DropdownMenuItem(
+                  value: event.id,
+                  child: Text('${event.away} at ${event.home}', overflow: TextOverflow.ellipsis),
+                ),
+            ],
+            onChanged: (value) => setState(() {
+              eventId = value;
+              _fillFromBoard();
+            }),
+          ),
+        const SizedBox(height: 8),
+        Wrap(
+          children: [
+            FilterPill(
+              label: 'Spread',
+              selected: kind == 'spreads',
+              onTap: () => setState(() {
+                kind = 'spreads';
+                side = '';
+                _fillFromBoard();
+              }),
+            ),
+            FilterPill(
+              label: 'Total',
+              selected: kind == 'totals',
+              onTap: () => setState(() {
+                kind = 'totals';
+                side = 'over';
+                _fillFromBoard();
+              }),
+            ),
+            FilterPill(
+              label: 'Moneyline',
+              selected: kind == 'h2h',
+              onTap: () => setState(() {
+                kind = 'h2h';
+                side = '';
+                _fillFromBoard();
+              }),
+            ),
+          ],
+        ),
+        if (kind == 'totals')
+          Wrap(
+            children: [
+              FilterPill(
+                label: 'Over',
+                selected: side != 'under',
+                onTap: () => setState(() {
+                  side = 'over';
+                  _fillFromBoard();
+                }),
+              ),
+              FilterPill(
+                label: 'Under',
+                selected: side == 'under',
+                onTap: () => setState(() {
+                  side = 'under';
+                  _fillFromBoard();
+                }),
+              ),
+            ],
+          ),
         const SizedBox(height: 8),
         TextField(
           controller: description,
           decoration: const InputDecoration(labelText: 'What you bet'),
         ),
+        if (kind != 'h2h') ...[
+          const SizedBox(height: 8),
+          TextField(
+            controller: line,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+            decoration: const InputDecoration(
+              labelText: 'Number on your ticket',
+              helperText: 'Spread: -3.5 if you lay points, +3.5 if you get points. Total: 47.5.',
+            ),
+          ),
+        ],
         const SizedBox(height: 8),
         TextField(
           controller: book,
@@ -364,6 +641,13 @@ class _AddBetState extends State<_AddBet> {
               );
               return;
             }
+            final number = kind == 'h2h' ? null : double.tryParse(line.text.trim());
+            if (kind != 'h2h' && number == null) {
+              setState(
+                () => message = 'Enter the number on your ticket, such as -3.5 or 47.5.',
+              );
+              return;
+            }
             await widget.onAdd(
               TrackedBet(
                 id: DateTime.now().toUtc().microsecondsSinceEpoch.toString(),
@@ -373,9 +657,13 @@ class _AddBetState extends State<_AddBet> {
                 decimal: americanToDecimal(american),
                 stake: amount,
                 result: BetResult.pending,
+                market: kind,
+                side: side,
+                line: number,
               ),
             );
             description.clear();
+            line.clear();
             setState(() => message = null);
           },
           child: const Text('Add to log'),
