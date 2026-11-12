@@ -32,6 +32,35 @@ class CoachCard extends StatelessWidget {
   );
 }
 
+/// A small count of players listed out, or questionable when nobody is out.
+class InjuryBadgePill extends StatelessWidget {
+  const InjuryBadgePill({super.key, required this.label, required this.severe});
+
+  final String label;
+  final bool severe;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = severe ? EdgeColors.bad : EdgeColors.warn;
+    return Container(
+      key: const Key('injury-badge'),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .16),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color),
+      ),
+      child: Text(
+        label,
+        style: EdgeType.label.copyWith(
+          color: color,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
 class SectionLabel extends StatelessWidget {
   const SectionLabel(this.text, {super.key});
   final String text;
@@ -73,11 +102,7 @@ class FilterPill extends StatelessWidget {
 }
 
 class ChanceBar extends StatelessWidget {
-  const ChanceBar({
-    super.key,
-    required this.fraction,
-    required this.label,
-  });
+  const ChanceBar({super.key, required this.fraction, required this.label});
 
   /// Null hides the fill and says the chance is unavailable.
   final double? fraction;
@@ -92,9 +117,7 @@ class ChanceBar extends StatelessWidget {
       children: [
         Row(
           children: [
-            Expanded(
-              child: Text(label, style: EdgeType.label),
-            ),
+            Expanded(child: Text(label, style: EdgeType.label)),
             Text(
               shown ? '${(value * 100).toStringAsFixed(1)}%' : '—',
               style: EdgeType.title,
@@ -276,9 +299,7 @@ class OddsHistoryChart extends StatelessWidget {
     return SizedBox(
       height: 120,
       width: double.infinity,
-      child: CustomPaint(
-        painter: _OddsPainter(points),
-      ),
+      child: CustomPaint(painter: _OddsPainter(points)),
     );
   }
 }

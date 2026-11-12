@@ -259,6 +259,9 @@ class OddsService {
     };
   }
 
+  /// Kickoff times already on hand. Does not call The Odds API.
+  List<DateTime> get knownKickoffs => List<DateTime>.unmodifiable(_kickoffs);
+
   Future<OddsBoard> _load({required bool onDemand}) async {
     final now = _now();
     if (_freeTier == null) return _loadInterval(now);

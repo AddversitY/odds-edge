@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'coach/ask_coach.dart';
 import 'coach/games_screen.dart';
 import 'coach/home_screen.dart';
+import 'coach/injuries_screen.dart';
 import 'coach/sharp_view.dart';
 import 'coach/model_screen.dart';
 import 'coach/my_bets_screen.dart';
@@ -16,6 +17,7 @@ import 'data/demo_lines.dart';
 import 'data/repository.dart';
 import 'domain/coach_board.dart';
 import 'domain/coach_model.dart';
+import 'domain/injury_report.dart';
 import 'domain/odds.dart';
 import 'domain/public_sharp.dart';
 import 'research_workspace.dart';
@@ -55,7 +57,11 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
   OddsBoard? sharpBoard;
   Map<String, List<LineSnapshot>> lineHistory = const {};
   PublicFeed publicFeed = PublicFeed.unavailable;
+  InjuryReport? injuryReport;
+  String? openGameId;
+  String? focusPropMarket;
   Timer? timer;
+  Timer? injuryTimer;
   int page = 0;
   int shell = 0;
   int lastResearchPage = 1;
@@ -107,7 +113,8 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       5 => 'Tools',
       6 => "Coach's model",
       7 => 'More',
-      8 => 'Public vs sharp',
+      8 => 'Injuries',
+      9 => 'Public vs sharp',
       4 => 'Players',
       1 => 'Matchups',
       3 => 'Proof Lab',
@@ -189,6 +196,10 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
           }
         });
     unawaited(loadCoachModel());
+    unawaited(loadInjuries());
+    injuryTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      unawaited(loadInjuries());
+    });
     // Re-evaluate freshness even if no successful network request arrives.
     timer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (backend && !loading) {
@@ -202,8 +213,35 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
   @override
   void dispose() {
     timer?.cancel();
+    injuryTimer?.cancel();
     repository.close();
     super.dispose();
+  }
+
+  Future<void> loadInjuries() async {
+    try {
+      final live = await repository.injuries();
+      if (!mounted) return;
+      if (live.entries.isNotEmpty) {
+        setState(() => injuryReport = live);
+        return;
+      }
+    } catch (_) {
+      // The local backend is optional. The stored report still shows.
+    }
+    if (!mounted ||
+        (injuryReport != null && injuryReport!.entries.isNotEmpty)) {
+      return;
+    }
+    try {
+      final stored = await loadStoredInjuryReport();
+      if (!mounted) return;
+      setState(() => injuryReport = stored);
+    } catch (_) {
+      if (mounted && injuryReport == null) {
+        setState(() {});
+      }
+    }
   }
 
   Future<void> refresh({bool onDemand = false}) async {
@@ -652,6 +690,8 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       history: backend && error == null
           ? (selection) => repository.history(selection)
           : null,
+      injuries: injuryReport,
+      focusMarket: focusPropMarket,
     ),
     2 => GamesScreen(
       board: pricedBoard,
@@ -662,6 +702,11 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       lineHistory: lineHistory,
       publicSplits: publicFeed.splits,
       sampleHistory: board.demo && !backend,
+      injuries: injuryReport,
+      openEventId: openGameId,
+      onEventOpened: () {
+        if (openGameId != null) setState(() => openGameId = null);
+      },
     ),
     3 => ParlaysScreen(
       board: pricedBoard,
@@ -685,14 +730,27 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       const Text('More', style: EdgeType.title),
       const SizedBox(height: 8),
       const Text(
-        'Odds, research, tools, and the model. Each one is listed here only.',
+        'Injuries, odds, research, tools, and the model. Each one is listed here only.',
         style: EdgeType.body,
       ),
       const SizedBox(height: 16),
       _libraryRow(
+        'Injuries',
+        injuryReport == null
+            ? 'Who is out, and what that changes.'
+            : injuryReport!.changes.isEmpty
+            ? 'Who is out, and what that changes. ${injuryReport!.freshness(now)}.'
+            : '${injuryReport!.changes.length} ${injuryReport!.changes.length == 1 ? 'status just changed' : 'statuses just changed'}.',
+        () => setState(() {
+          shell = 5;
+          page = 8;
+          researchContext = null;
+        }),
+      ),
+      _libraryRow(
         'Public vs sharp',
         'Where the line moved, and where the public is when we are allowed to show it.',
-        () => navigateTo(8),
+        () => navigateTo(9),
       ),
       _libraryRow(
         'Odds comparison',
@@ -756,6 +814,23 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
   Widget legacyPage(bool wide) {
     if (page == 7) return libraryMenu();
     if (page == 8) {
+      return InjuriesScreen(
+        report: injuryReport,
+        now: now,
+        events: board.events,
+        onOpenGame: (id) => setState(() {
+          shell = 2;
+          openGameId = id;
+          researchContext = null;
+        }),
+        onOpenMarket: (market) => setState(() {
+          shell = 1;
+          focusPropMarket = market;
+          researchContext = null;
+        }),
+      );
+    }
+    if (page == 9) {
       return PublicSharpScreen(
         board: pricedBoard,
         now: now,
@@ -781,7 +856,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (page != 4 && page != 8) ...[
+            if (page != 4 && page != 8 && page != 9) ...[
               sourcePanel(),
               const SizedBox(height: 26),
             ],
@@ -825,7 +900,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
             else
               const SizedBox(),
             const SizedBox(height: 30),
-            if (page != 4 && page != 8)
+            if (page != 4 && page != 8 && page != 9)
               const Text(
                 'Prices are observations, not guaranteed offers. Confirm the exact line and rules with the operator.',
                 style: TextStyle(color: Colors.white54, fontSize: 12),

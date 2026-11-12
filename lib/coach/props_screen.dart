@@ -8,6 +8,7 @@ import '../data/research_store.dart';
 import '../domain/coach_board.dart';
 import '../domain/coach_model.dart';
 import '../domain/hit_rate.dart';
+import '../domain/injury_report.dart';
 import '../domain/matchup.dart';
 import '../domain/nfl_teams.dart';
 import '../domain/odds.dart';
@@ -15,10 +16,12 @@ import '../domain/player_stats.dart';
 import '../domain/prop_history.dart';
 import '../domain/prop_value.dart';
 import '../domain/saved_play.dart';
+import '../domain/why_brief.dart';
 import '../explained_number.dart';
 import '../theme/edge_theme.dart';
 import 'coach_widgets.dart';
 import 'value_view.dart';
+import 'why_view.dart';
 
 class PropsScreen extends StatefulWidget {
   const PropsScreen({
@@ -30,6 +33,8 @@ class PropsScreen extends StatefulWidget {
     this.loadMatchup,
     this.history,
     this.enabledBooks,
+    this.injuries,
+    this.focusMarket,
   });
 
   final OddsBoard board;
@@ -38,6 +43,10 @@ class PropsScreen extends StatefulWidget {
   final Future<PlayerStatsDataset> Function()? loadPlayers;
   final Future<MatchupContext> Function()? loadMatchup;
   final Future<List<OddsQuote>> Function(Selection selection)? history;
+  final InjuryReport? injuries;
+
+  /// When set, the list shows this stat. Used by a link from Injuries.
+  final String? focusMarket;
   final Set<String>? enabledBooks;
 
   @override
@@ -56,6 +65,17 @@ class _PropsScreenState extends State<PropsScreen> {
       PlayerDirectory.new,
     );
     matchup = _loadMatchup();
+    final market = widget.focusMarket;
+    if (market != null) filter = PropFilter(market: market);
+  }
+
+  @override
+  void didUpdateWidget(PropsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final market = widget.focusMarket;
+    if (market != null && market != oldWidget.focusMarket) {
+      filter = PropFilter(market: market);
+    }
   }
 
   Future<MatchupContext?> _loadMatchup() async {
@@ -125,6 +145,7 @@ class _PropsScreenState extends State<PropsScreen> {
                       now: widget.now,
                       board: widget.board,
                       facts: facts,
+                      injuries: widget.injuries,
                       onOpen: () => _open(card, facts, cards),
                       onSave: () => _save(card),
                     ),
@@ -180,6 +201,7 @@ class _PropsScreenState extends State<PropsScreen> {
           now: widget.now,
           history: widget.history,
           boardNow: widget.now,
+          injuries: widget.injuries,
           windowsFor: facts == null
               ? null
               : (item) => _windows(facts.players, item),
@@ -241,6 +263,7 @@ class _PropCard extends StatelessWidget {
     required this.facts,
     required this.onOpen,
     required this.onSave,
+    this.injuries,
   });
 
   final PropCardModel card;
@@ -248,6 +271,7 @@ class _PropCard extends StatelessWidget {
   final DateTime now;
   final OddsBoard board;
   final _PropFacts? facts;
+  final InjuryReport? injuries;
   final VoidCallback onOpen;
   final VoidCallback onSave;
 
@@ -264,6 +288,29 @@ class _PropCard extends StatelessWidget {
       fairProbability: card.fairProbability,
     );
     final matchup = priced.matchup;
+    final opponent = _opponent(windows);
+    final badge = badgeForProp(
+      injuries,
+      market: card.market,
+      playerName: card.player,
+      playerTeam: windows?.team,
+      opponent: opponent,
+    );
+    final brief = buildPropBrief(
+      verdict: priced.verdict,
+      line: card.line,
+      side: card.lineSide,
+      market: card.market,
+      player: card.player,
+      windows: windows,
+      matchup: matchup,
+      teamName: clubNickname(windows?.team),
+      teamSpread: _teamSpread(windows),
+      total: _total(),
+      injuries: injuries,
+      playerTeam: windows?.team,
+      opponent: opponent,
+    );
     return CoachCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -279,6 +326,13 @@ class _PropCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(child: Text(card.player, style: EdgeType.title)),
+                      if (badge != null) ...[
+                        InjuryBadgePill(
+                          label: badge.label,
+                          severe: badge.severe,
+                        ),
+                        const SizedBox(width: 4),
+                      ],
                       IconButton(
                         tooltip: 'Save play',
                         onPressed: onSave,
@@ -308,33 +362,7 @@ class _PropCard extends StatelessWidget {
                 ),
               ],
             ),
-            extraWhy: matchup == null
-                ? null
-                : Padding(
-                    padding: const EdgeInsets.only(top: 12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(matchup.sentence, style: EdgeType.body),
-                        const SizedBox(height: 8),
-                        Text(matchup.defenseLine, style: EdgeType.body),
-                        const SizedBox(height: 8),
-                        Text(matchup.injuryLine, style: EdgeType.body),
-                        const SizedBox(height: 8),
-                        Text(matchup.scriptLine, style: EdgeType.body),
-                        const SizedBox(height: 8),
-                        Text(matchup.snapLine, style: EdgeType.body),
-                        const SizedBox(height: 12),
-                        LineChart(
-                          samples:
-                              windows?.season?.samples ??
-                              windows?.last10?.samples ??
-                              const [],
-                          line: card.line,
-                        ),
-                      ],
-                    ),
-                  ),
+            whyBody: WhyBriefView(brief: brief),
             extraMath: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -364,6 +392,8 @@ class _PropCard extends StatelessWidget {
                 ),
                 if (matchup != null) ...[
                   const SizedBox(height: 12),
+                  Text(matchup.snapLine, style: EdgeType.body),
+                  const SizedBox(height: 8),
                   Text(matchup.credit, style: EdgeType.label),
                 ],
               ],
@@ -539,6 +569,7 @@ class _PropDetail extends StatefulWidget {
     required this.history,
     required this.boardNow,
     required this.windowsFor,
+    this.injuries,
   });
 
   final PropCardModel card;
@@ -548,6 +579,7 @@ class _PropDetail extends StatefulWidget {
   final DateTime now;
   final Future<List<OddsQuote>> Function(Selection selection)? history;
   final DateTime boardNow;
+  final InjuryReport? injuries;
   final PropWindows Function(PropCardModel card)? windowsFor;
 
   @override
@@ -592,26 +624,35 @@ class _PropDetailState extends State<_PropDetail> {
           const SizedBox(height: 8),
           ValueView(
             verdict: priced.verdict,
-            extraWhy: matchup == null
+            whyBody: WhyBriefView(
+              brief: buildPropBrief(
+                verdict: priced.verdict,
+                line: card.line,
+                side: card.lineSide,
+                market: card.market,
+                player: card.player,
+                windows: shown,
+                matchup: matchup,
+                teamName: clubNickname(shown?.team),
+                teamSpread: _teamSpread(shown),
+                total: card.event == null
+                    ? null
+                    : readMarketLine(card.event!, widget.board.quotes).total,
+                injuries: widget.injuries,
+                playerTeam: shown?.team,
+                opponent: _opponent(shown),
+              ),
+            ),
+            extraMath: matchup == null
                 ? null
-                : Padding(
-                    padding: const EdgeInsets.only(top: 12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(matchup.sentence, style: EdgeType.body),
-                        const SizedBox(height: 8),
-                        Text(matchup.defenseLine, style: EdgeType.body),
-                        const SizedBox(height: 8),
-                        Text(matchup.injuryLine, style: EdgeType.body),
-                        const SizedBox(height: 8),
-                        Text(matchup.scriptLine, style: EdgeType.body),
-                        const SizedBox(height: 8),
-                        Text(matchup.snapLine, style: EdgeType.body),
-                        const SizedBox(height: 8),
-                        Text(matchup.credit, style: EdgeType.label),
-                      ],
-                    ),
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 12),
+                      Text(matchup.snapLine, style: EdgeType.body),
+                      const SizedBox(height: 8),
+                      Text(matchup.credit, style: EdgeType.label),
+                    ],
                   ),
           ),
           const SizedBox(height: 12),

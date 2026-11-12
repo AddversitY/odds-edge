@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../domain/assistant.dart';
+import '../domain/injury_report.dart';
 import '../domain/odds.dart';
 
 class BackendRepository {
@@ -81,6 +82,13 @@ class BackendRepository {
   /// is refused once the daily or monthly Pinnacle budget is used.
   Future<OddsBoard> sharp({bool refresh = false}) async =>
       OddsBoard.fromJson(await _get('/v1/sharp${refresh ? '?refresh=1' : ''}'));
+
+  /// Cached injury report. This route does not call The Odds API.
+  Future<InjuryReport> injuries() async {
+    final decoded = await _get('/v1/injuries');
+    if (decoded is! Map) throw StateError('Backend unavailable.');
+    return InjuryReport.fromJson(Map<String, dynamic>.from(decoded));
+  }
 
   /// The Coach's Line file. This route does not call The Odds API.
   Future<Map<String, dynamic>> coachModel() async {
