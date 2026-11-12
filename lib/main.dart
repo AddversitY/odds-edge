@@ -13,6 +13,7 @@ import 'historical_evidence.dart';
 import 'player_stats_screen.dart';
 import 'player_investigation_page.dart';
 import 'domain/player_stats.dart';
+import 'tools_page.dart';
 
 const mint = Color(0xFF7CE7C0);
 const panel = Color(0xF212211E);
@@ -105,20 +106,28 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       defaultValue: 'http://127.0.0.1:8787',
     ),
   );
-  static const workspaceNames = ['Overview', 'Research', 'Odds comparison'];
+  static const workspaceNames = [
+    'Overview',
+    'Research',
+    'Odds comparison',
+    'Tools',
+  ];
   static const workspaceIcons = [
     Icons.grid_view_rounded,
     Icons.query_stats_rounded,
     Icons.compare_arrows_rounded,
+    Icons.handyman_outlined,
   ];
+  static const phoneLabels = ['Home', 'Research', 'Odds', 'Tools'];
   static const researchPages = [1, 4, 3];
   static const researchNames = ['Matchups', 'Players', 'Proof Lab'];
   bool get inResearch => researchPages.contains(page);
-  int get workspaceIndex => page == 0
-      ? 0
-      : page == 2
-      ? 2
-      : 1;
+  int get workspaceIndex => switch (page) {
+    0 => 0,
+    2 => 2,
+    5 => 3,
+    _ => 1,
+  };
 
   void navigateTo(int next) => setState(() {
     page = next;
@@ -126,13 +135,12 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
     if (next != 3) researchContext = null;
   });
 
-  void openWorkspace(int index) => navigateTo(
-    index == 1
-        ? lastResearchPage
-        : index == 2
-        ? 2
-        : 0,
-  );
+  void openWorkspace(int index) => navigateTo(switch (index) {
+    1 => lastResearchPage,
+    2 => 2,
+    3 => 5,
+    _ => 0,
+  });
 
   void investigatePlayer(
     PlayerGame player,
@@ -441,6 +449,20 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                                           PlayerStatsScreen(
                                             onInvestigate: investigatePlayer,
                                           )
+                                        else if (page == 5)
+                                          ToolsPage(
+                                            key: const Key('tools-page'),
+                                            board: board,
+                                            now: now,
+                                            enabledBooks: enabledBooks,
+                                            backendConnected:
+                                                backend && error == null,
+                                            store: researchStore,
+                                            stamp: stamp,
+                                            history: (selection) => backend
+                                                ? repository.history(selection)
+                                                : Future.value(const []),
+                                          )
                                         else
                                           const SizedBox(),
                                         const SizedBox(height: 30),
@@ -474,7 +496,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                   for (var i = 0; i < workspaceNames.length; i++)
                     NavigationDestination(
                       icon: Icon(workspaceIcons[i]),
-                      label: ['Home', 'Research', 'Odds'][i],
+                      label: phoneLabels[i],
                     ),
                 ],
               ),
@@ -677,6 +699,11 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                       ),
                     ),
                     child: const Text('Review saved predictions'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => openWorkspace(3),
+                    icon: const Icon(Icons.handyman_outlined),
+                    label: const Text('Price, parlays, and bet log'),
                   ),
                 ],
               ),

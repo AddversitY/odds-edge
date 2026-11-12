@@ -4,6 +4,7 @@ import 'dart:io';
 import '../domain/research.dart';
 import '../domain/autopsy.dart';
 import '../domain/player_investigation.dart';
+import '../domain/bets.dart';
 
 class ResearchStore {
   ResearchStore({this.directory});
@@ -170,6 +171,20 @@ class ResearchStore {
       r.id: r,
   };
 
+  Future<void> saveBet(TrackedBet bet) =>
+      _appendState('bets.jsonl', bet.toJson());
+
+  /// Latest write wins for each bet id. Older result updates stay in the file.
+  Future<List<TrackedBet>> loadBets() async {
+    final latest = <String, TrackedBet>{};
+    for (final bet in await _readJournal('bets.jsonl', TrackedBet.fromJson)) {
+      latest[bet.id] = bet;
+    }
+    final values = latest.values.toList()
+      ..sort((a, b) => b.placedAt.compareTo(a.placedAt));
+    return values;
+  }
+
   Future<void> _appendState(String name, Map<String, dynamic> value) =>
       _serial(() async {
         await (await _aux(name)).writeAsString(
@@ -209,6 +224,7 @@ class ResearchStore {
     for (final journal in [
       'player-investigations.jsonl',
       'player-investigation-reviews.jsonl',
+      'bets.jsonl',
     ]) {
       final file = await _aux(journal);
       if (await file.exists()) await file.copy('${target.path}.$journal');
@@ -225,6 +241,7 @@ class ResearchStore {
     'investigationReviews': (await loadInvestigationReviews()).values
         .map((r) => r.toJson())
         .toList(),
+    'bets': (await loadBets()).map((bet) => bet.toJson()).toList(),
   });
   Future<int> importJson(String text) async {
     if (text.length > 10000000) throw const FormatException('Backup too large');
@@ -260,6 +277,18 @@ class ResearchStore {
       incomingIdentities[r.id] = jsonEncode(r.toJson());
     }
     final knownInvestigationReviews = await loadInvestigationReviews();
+    final incomingBets = (j['bets'] as List? ?? [])
+        .map((bet) => TrackedBet.fromJson(Map<String, dynamic>.from(bet)))
+        .toList();
+    final existingBets = {
+      for (final bet in await loadBets()) bet.id: jsonEncode(bet.toJson()),
+    };
+    for (final bet in incomingBets) {
+      final encoded = jsonEncode(bet.toJson());
+      if (existingBets.containsKey(bet.id) && existingBets[bet.id] != encoded) {
+        throw const FormatException('Conflicting bet identity');
+      }
+    }
     await backup();
     var count = 0;
     for (final record in records.reversed) {
@@ -281,6 +310,13 @@ class ResearchStore {
           !knownInvestigationReviews.containsKey(r.id)) {
         await saveInvestigationReview(r);
         knownInvestigationReviews[r.id] = r;
+      }
+    }
+    for (final bet in incomingBets) {
+      if (!existingBets.containsKey(bet.id)) {
+        await saveBet(bet);
+        existingBets[bet.id] = jsonEncode(bet.toJson());
+        count++;
       }
     }
     for (final review in reviews) {

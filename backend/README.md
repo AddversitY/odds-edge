@@ -25,9 +25,15 @@ dart run backend/server.dart
 
 Book identifiers for rules verification are normalized IDs such as `fanduel`,
 `draftkings`, `caesars`. The comma-separated `VERIFIED_NFL_RULE_BOOKS` setting
-attests equivalent full-game rules including overtime and push on a tied outcome.
-Unverified books remain inspectable but cannot receive a best-price badge. Do
-not set this variable just to remove warnings.
+attests equivalent full-game rules including overtime and push on a tied
+outcome. Leave it unset when those rules have not been checked. The price
+tools still compare standard full-game markets from unverified books, grouped
+by market and number, and each card says the house rules were not
+independently verified. Unverified books do not receive the live best-price
+badge on the odds comparison screen. Do not set this variable just to remove
+the note. The 10 default books are not treated as verified on their own. A
+free-tier response may include only 8 of them: Caesars and Fanatics are often
+absent, and a missing book is not an error.
 
 The first live adapter requests main NFL moneyline, spread, and total markets
 for a list of up to 10 sportsbooks (`ODDS_API_BOOKMAKERS`). Leaving that unset

@@ -272,7 +272,7 @@ class _ResearchWorkspaceState extends State<ResearchWorkspace> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'An exact file backup preserves damaged entries too. Copy the portable export to move readable snapshots to another device.',
+                    'An exact file backup preserves damaged entries too. Copy the portable export to move readable snapshots to another device. The portable export also includes the bet log from Tools.',
                   ),
                   const SizedBox(height: 12),
                   SelectableText(path),
