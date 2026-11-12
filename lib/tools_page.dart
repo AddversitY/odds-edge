@@ -12,6 +12,7 @@ import 'domain/market_math.dart';
 import 'domain/odds.dart';
 import 'domain/player_stats.dart';
 import 'explained_number.dart';
+import 'theme/edge_theme.dart';
 
 enum ToolId { prices, hedges, movement, parlay, bets, stake, props }
 
@@ -85,19 +86,11 @@ class _ToolsPageState extends State<ToolsPage> {
   Widget _home() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
+      const Text('Tools', style: EdgeType.title),
+      const SizedBox(height: 8),
       const Text(
-        'TOOLS',
-        style: TextStyle(
-          color: toolMint,
-          letterSpacing: 2,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      const SizedBox(height: 10),
-      const Text(
-        'Check a price. Keep the math visible.',
-        style: TextStyle(fontSize: 30, fontWeight: FontWeight.w600),
+        'Check a price. The math stays one tap away.',
+        style: EdgeType.body,
       ),
       const SizedBox(height: 8),
       const ToolNote(
@@ -154,15 +147,13 @@ class _ToolsPageState extends State<ToolsPage> {
         padding: const EdgeInsets.only(bottom: 12),
         child: Card(
           child: ListTile(
-            leading: Icon(icon, color: toolMint),
-            title: Text(
-              title,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
+            leading: Icon(icon, color: EdgeColors.accent),
+            title: Text(title, style: EdgeType.body.copyWith(fontWeight: FontWeight.w700)),
             subtitle: Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(subtitle),
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(subtitle, style: EdgeType.label),
             ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => setState(() => tool = id),
           ),
@@ -249,21 +240,15 @@ class _PriceScreenState extends State<_PriceScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            market.matchup,
-            style: const TextStyle(color: Colors.white54, fontSize: 12),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            market.detail,
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-          ),
+          Text(market.matchup, style: EdgeType.label),
+          const SizedBox(height: 6),
+          Text(market.detail, style: EdgeType.title),
           if ((market.bestMarketEv ?? 0) > 0)
             const Padding(
               padding: EdgeInsets.only(top: 6),
               child: Text(
                 'Longer than the vig-free market',
-                style: TextStyle(color: toolMint),
+                style: TextStyle(color: EdgeColors.good),
               ),
             ),
           const SizedBox(height: 12),
@@ -291,7 +276,7 @@ class _PriceScreenState extends State<_PriceScreen> {
                     'Versus that market: ${_signedPercent(side.marketEv!)} per \$1',
                 title: 'Market comparison',
                 body: 'If the vig-free chance were right, this is the average profit per \$1 staked at the best snapshot price. A positive number means the sportsbook price is longer than that market chance. It is not a recommendation and not a promise the bet wins. A tie or a push is not included: anything except a win is treated as a loss.',
-                style: TextStyle(color: side.marketEv! > 0 ? toolMint : null),
+                style: TextStyle(color: side.marketEv! > 0 ? EdgeColors.good : EdgeColors.bad),
               ),
             if (side.sharpEv != null)
               ExplainedValue(
@@ -1582,11 +1567,11 @@ class _PropHistoryScreenState extends State<_PropHistoryScreen> {
 class ResponsibleLine extends StatelessWidget {
   const ResponsibleLine({super.key});
   @override
-  Widget build(BuildContext context) => const Padding(
-    padding: EdgeInsets.only(top: 8),
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 8),
     child: Text(
       responsibleGamblingNote,
-      style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.5),
+      style: EdgeType.label.copyWith(height: 1.45),
     ),
   );
 }
@@ -1595,7 +1580,7 @@ Widget _title(String text) => Padding(
   padding: const EdgeInsets.only(bottom: 8),
   child: Text(
     text,
-    style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w600),
+    style: EdgeType.title,
   ),
 );
 

@@ -16,7 +16,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(OddsEdgeApp(researchStore: MemoryResearchStore()));
     expect(find.text('DEMO'), findsOneWidget);
-    expect(find.byType(NavigationDestination), findsNWidgets(6));
+    expect(find.byType(NavigationDestination), findsNWidgets(5));
     expect(find.textContaining('Snapshot as of'), findsWidgets);
     expect(find.text('Ask Coach'), findsOneWidget);
     await tester.tap(find.text('More', skipOffstage: false));
@@ -55,7 +55,7 @@ void main() {
     expect(find.widgetWithText(ListTile, 'NFL matchups'), findsNothing);
     expect(find.widgetWithText(ListTile, 'Player stats'), findsNothing);
     expect(find.widgetWithText(ListTile, 'Proof Lab'), findsNothing);
-    await tester.tap(find.widgetWithText(ListTile, 'More'));
+    await tester.tap(find.byKey(const Key('more-menu')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Odds comparison'));
     await tester.pumpAndSettle();
@@ -78,6 +78,8 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(OddsEdgeApp(researchStore: MemoryResearchStore()));
     await tester.tap(find.text('More', skipOffstage: false));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tools'));
     await tester.pumpAndSettle();
     expect(find.text('Best price'), findsOneWidget);
     expect(find.text('Arbitrage and middles'), findsOneWidget);
