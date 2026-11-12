@@ -61,6 +61,7 @@ flutter:
     - assets/nfl-field.png
     - assets/nfl-history.json
     - assets/nfl-player-stats.json
+    - assets/nfl-model.json
 
   # To add assets to your application, add an assets section, like this:
   # assets:

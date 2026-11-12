@@ -28,6 +28,7 @@ Grounding:
 - If an input id is listed under notProvided, do not cite it and do not guess its contents.
 - User assumptions are assumptions, not measurements. Hypothetical expected value is conditional on those assumptions. It is not a validated forecast and it is not evidence of an edge.
 - A selection without a frozen quote is the on-screen research subject, not a live price.
+- If team_evidence includes a Coach's Line, explain those numbers as the app's own past-seasons model. They are not a guarantee, not a recommendation to bet, and not outside knowledge.
 
 Uncertainty and responsible gambling:
 - Clearly flag uncertainty and missing inputs.
@@ -37,7 +38,7 @@ Uncertainty and responsible gambling:
 Response format:
 - Return one JSON object and nothing else: {"answer":"...","cited":["input_id"]}
 - cited must list only provided input ids you actually used. Allowed ids are frozen_quote, team_evidence, player_evidence, assumptions, and question.
-- The answer is plain language. Do not present it as a sourced fact or a model forecast.
+- The answer is plain language. Do not present it as a guarantee, and do not add a number that was not in the inputs.
 - Mode explain: describe what the provided inputs say and what they do not say.
 - Mode challenge: point out gaps, sensitivity, and ways the assumption-based conclusion can fail, without inventing counter-evidence.
 ''';

@@ -30,6 +30,8 @@ NBA, NHL, and MLB hit rates are not fetched. balldontlie's free tier still requi
 
 The Odds API free plan includes 500 credits a month. A main-line snapshot of moneyline, spread, and total, with a list of up to 10 books, costs 3 credits. The schedule is one daily snapshot plus about an hour and about 10 minutes before kickoff. A busy NFL month is about 70–80 of those, about 240 credits. Details are in `backend/README.md`.
 
+Each of those responses, and each prop response, is also appended to `backend/data/line-history.jsonl` with the time it was fetched. `GET /v1/lines?event=<event id>` reads one game back. That read does not spend a credit. The file drops snapshots older than about 45 days and compacts so it stays small. There is no line chart in the app yet.
+
 Player props are priced per event. The server requests only `player_pass_yds` and `player_receptions` (both can be counted from the box scores), for the next 2 games that have not started. With a bookmaker list, that is 2 markets × 2 games = **4 credits per refresh**.
 
 Guards, all in `backend/prop_odds.dart`:
@@ -48,6 +50,12 @@ Guards, all in `backend/prop_odds.dart`:
 `GET /v1/props` reads the cache. `GET /v1/props?refresh=1` may spend, inside those caps. Keys are `THE_ODDS_API_KEY` or, if that is empty, `ODDS_API_KEY`. They stay in the server environment. They are not printed and not committed.
 
 Each prop row keeps the book's `last_update` time. The card says how old that time is. A price with no time is dropped, not shown as live.
+
+## Coach's Line
+
+The Games list and the game page show Coach's Line: our spread and total next to the books, the chance the favorite covers, the chance the over hits, and an Edge badge when the gap clears the setting on More → Coach's model. The number is this app's own past-seasons model. It reads the odds already on the screen. It does not spend Odds API credits. Sample mode uses the bundled model file with the sample prices. How to refresh it, and what the past test means, is in `docs/MODEL.md`. The history is nflverse, CC BY 4.0, the same license file as the hit rates. Odds Edge is not affiliated with nflverse.
+
+My Bets saves the number on the ticket when a bet is logged. After the game, the closing number can be typed on that bet. The log says whether that number beat the close. The model page states the past test in plain language, including when there is no edge. A model does not guarantee the result.
 
 ## Words on the screen
 

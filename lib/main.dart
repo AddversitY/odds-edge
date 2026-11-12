@@ -6,12 +6,14 @@ import 'package:flutter/material.dart';
 import 'coach/ask_coach.dart';
 import 'coach/games_screen.dart';
 import 'coach/home_screen.dart';
+import 'coach/model_screen.dart';
 import 'coach/my_bets_screen.dart';
 import 'coach/parlays_screen.dart';
 import 'coach/props_screen.dart';
 import 'data/demo.dart';
 import 'data/repository.dart';
 import 'domain/coach_board.dart';
+import 'domain/coach_model.dart';
 import 'domain/odds.dart';
 import 'research_workspace.dart';
 import 'data/research_store.dart';
@@ -103,6 +105,13 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
   String market = 'h2h';
   Set<String>? enabledBooks;
   bool backend = false, loading = false, scenario = false;
+  CoachModel? coachModel;
+  bool edgeEdited = false;
+  EdgeSettings edgeSettings = const EdgeSettings(
+    spreadPoints: 2.5,
+    totalPoints: 2.5,
+    minExpectedValue: 0.02,
+  );
   double win = .55;
   String? error;
   String? preferenceNotice;
@@ -216,6 +225,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
             );
           }
         });
+    unawaited(loadCoachModel());
     // Re-evaluate freshness even if no successful network request arrives.
     timer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (backend && !loading) {
@@ -252,6 +262,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
         }
       });
       if (backend) unawaited(loadProps());
+      if (onDemand || coachModel == null) unawaited(loadCoachModel());
     } catch (_) {
       if (mounted) {
         setState(
@@ -340,19 +351,74 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
     );
   }
 
+  Future<void> loadCoachModel() async {
+    CoachModel? next;
+    if (backend) {
+      try {
+        next = CoachModel.fromJson(await repository.coachModel());
+      } catch (_) {
+        next = null;
+      }
+    }
+    if (next == null) {
+      try {
+        next = await loadBundledCoachModel();
+      } catch (_) {
+        next = coachModel;
+      }
+    }
+    if (!mounted || next == null) return;
+    setState(() {
+      coachModel = next;
+      if (!edgeEdited) edgeSettings = next!.settings;
+    });
+  }
+
+  List<CoachLine> get coachLines {
+    final model = coachModel;
+    if (model == null) return const [];
+    final lines = <CoachLine>[];
+    for (final event in board.events) {
+      final line = model.lineFor(
+        event,
+        board.quotes,
+        settings: edgeSettings,
+        books: enabledBooks,
+      );
+      if (line != null) lines.add(line);
+    }
+    return lines;
+  }
+
   CoachBrief? coachBrief() {
     final slate = summarizeSlate(board, now, books: enabledBooks);
     final play = slate.topPlays.where((item) => item.quote.decimal > 1);
     if (play.isEmpty) return null;
     final first = play.first;
+    final lines = coachLines;
+    final edged = [for (final line in lines) if (line.flagged) line];
+    final shown = (edged.isEmpty ? lines : edged).take(8).toList();
+    final modelNote = shown.isEmpty ? '' : ' ${shown.first.askCoachSentence}';
+    final backtest = coachModel?.backtest.plainEnglish ?? '';
+    var note =
+        '${first.explanation} Price ${americanLabel(first.quote.decimal)} at ${first.quote.book}. ${priceAge(first.quote.sourceAt, now)}. ${board.demo ? 'Sample prices.' : 'Saved snapshot.'}$modelNote';
+    if (note.length > 500) note = note.substring(0, 500);
     return CoachBrief(
       label: first.title,
       matchup: first.subtitle,
       price: first.quote.decimal,
       demo: first.quote.demo || board.demo,
       identity: first.quote.selection.key,
-      note:
-          '${first.explanation} Price ${americanLabel(first.quote.decimal)} at ${first.quote.book}. ${priceAge(first.quote.sourceAt, now)}. ${board.demo ? 'Sample prices.' : 'Saved snapshot.'}',
+      note: note,
+      teamEvidence: [
+        for (final line in shown) line.evidence(),
+        if (backtest.isNotEmpty)
+          {
+            'source': "Coach's Line backtest",
+            'hasEdge': coachModel?.backtest.hasEdge ?? false,
+            'summary': backtest.length > 500 ? backtest.substring(0, 500) : backtest,
+          },
+      ],
     );
   }
 
@@ -585,13 +651,20 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       board: board,
       now: now,
       enabledBooks: enabledBooks,
+      model: coachModel,
+      settings: edgeSettings,
     ),
     3 => ParlaysScreen(
       board: board,
       now: now,
       enabledBooks: enabledBooks,
     ),
-    4 => MyBetsScreen(store: researchStore),
+    4 => MyBetsScreen(
+      store: researchStore,
+      board: board,
+      now: now,
+      books: enabledBooks,
+    ),
     _ => const SizedBox(),
   };
 
@@ -622,6 +695,13 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
             page = 5;
           }),
           child: const Text('Price tools'),
+        ),
+        OutlinedButton(
+          onPressed: () => setState(() {
+            shell = 5;
+            page = 6;
+          }),
+          child: const Text("Coach's model"),
         ),
       ],
     ),
@@ -658,6 +738,22 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
               comparison()
             else if (page == 4)
               PlayerStatsScreen(onInvestigate: investigatePlayer)
+            else if (page == 6)
+              ModelScreen(
+                model: coachModel,
+                settings: edgeSettings,
+                onPoints: (value) => setState(() {
+                  edgeEdited = true;
+                  edgeSettings = edgeSettings.copyWith(
+                    spreadPoints: value,
+                    totalPoints: value,
+                  );
+                }),
+                onMinExpectedValue: (value) => setState(() {
+                  edgeEdited = true;
+                  edgeSettings = edgeSettings.copyWith(minExpectedValue: value);
+                }),
+              )
             else if (page == 5)
               ToolsPage(
                 key: const Key('tools-page'),
@@ -800,7 +896,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
         const SizedBox(height: 4),
         Text(
           board.demo
-              ? 'Synthetic NFL fixtures and odds · no live feed or predictive model connected. This sample is a snapshot, not a live stream.'
+              ? "Sample NFL prices. Coach's Line, when it is loaded, uses real past seasons. These prices are not a live book."
               : 'These odds are a saved snapshot, not a live stream. A quote counts as current only when the sportsbook time and our collection time are both within 120 seconds before kickoff or 20 seconds after kickoff.',
           style: const TextStyle(color: Colors.white60, fontSize: 12),
         ),

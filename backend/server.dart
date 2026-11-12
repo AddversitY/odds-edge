@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:odds_edge/domain/assistant.dart';
 
+import 'line_history.dart';
 import 'llm.dart';
 import 'prop_odds.dart';
 import 'providers.dart';
@@ -35,9 +36,11 @@ Future<void> main() async {
     file: File('backend/data/credits.json'),
   );
   if (live != null) await ledger.load();
+  final lines = LineHistory(File('backend/data/line-history.jsonl'));
   final service = OddsService(
     providers,
     SnapshotStore(File(snapshotJournalPath(providers.single.id))),
+    lines: lines,
     refreshInterval: config.demoRefreshInterval,
     freeTier: live == null
         ? null
@@ -80,6 +83,7 @@ Future<void> main() async {
             );
             unawaited(ledger.save());
           },
+          lines: lines,
         );
   if (live != null) {
     await service.restore();
@@ -108,6 +112,7 @@ Future<void> main() async {
         service: service,
         assistant: assistant,
         props: props,
+        lines: lines,
       );
     } finally {
       await request.response.close();
@@ -121,6 +126,8 @@ Future<void> handleRequest(
   required OddsService service,
   required XaiAssistant assistant,
   PropCoordinator? props,
+  LineHistory? lines,
+  String modelPath = 'assets/nfl-model.json',
 }) async {
   _cors(request);
   if (request.method == 'OPTIONS') {
@@ -159,6 +166,40 @@ Future<void> handleRequest(
                 DateTime.now().toUtc(),
                 refresh: request.uri.queryParameters['refresh'] == '1',
               )).toJson();
+      case '/v1/model':
+        final modelFile = File(modelPath);
+        if (!modelFile.existsSync()) {
+          request.response.statusCode = 404;
+          result = {'error': "Coach's Line file is not on this server."};
+        } else {
+          try {
+            final decoded = jsonDecode(modelFile.readAsStringSync());
+            if (decoded is! Map) {
+              request.response.statusCode = 500;
+              result = {'error': "Coach's Line file could not be read."};
+            } else {
+              result = decoded;
+            }
+          } on FormatException {
+            request.response.statusCode = 500;
+            result = {'error': "Coach's Line file could not be read."};
+          }
+        }
+      case '/v1/lines':
+        final event = request.uri.queryParameters['event'];
+        if (event == null || event.isEmpty) {
+          throw const FormatException('event required');
+        }
+        final history = lines;
+        result = {
+          'origin': 'collected_since_installation',
+          'event': event,
+          'snapshots': history == null
+              ? <Object>[]
+              : await history.forEvent(event),
+          'notice':
+              'Prices this server already fetched. Reading them does not call The Odds API.',
+        };
       case '/v1/history':
         final selection = request.uri.queryParameters['selection'];
         if (selection == null) {

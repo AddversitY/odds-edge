@@ -18,6 +18,7 @@ class CoachBrief {
     required this.note,
     this.quote,
     this.event,
+    this.teamEvidence = const [],
   });
 
   final String label, matchup, identity, note;
@@ -25,6 +26,7 @@ class CoachBrief {
   final bool demo;
   final OddsQuote? quote;
   final SportEvent? event;
+  final List<Map<String, dynamic>> teamEvidence;
 
   AssistantRequest request(String question) => AssistantRequest(
     mode: 'explain',
@@ -43,6 +45,9 @@ class CoachBrief {
     ).toJson(),
     quote: quote?.toJson(),
     event: event?.toJson(),
+    teamEvidence: [
+      for (final item in teamEvidence) Map<String, dynamic>.from(item),
+    ],
     playerEvidence: [
       {'note': note.length > 500 ? note.substring(0, 500) : note},
     ],

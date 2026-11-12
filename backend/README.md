@@ -108,6 +108,8 @@ never in the URL. `reasoning.effort` defaults to `low`.
 - `GET /v1/odds?refresh=1`: ask for a new snapshot. Every user shares the
   result. A cooldown (default 10 minutes) and the credit reserve can skip the
   upstream call and return the cached snapshot instead.
+- `GET /v1/model`: the Coach's Line file (`assets/nfl-model.json`). Ratings, the logistic fit, and the walk-forward backtest. This route does not call The Odds API and does not use a key. If the file is missing the response is HTTP 404 and the app keeps the copy bundled with the client.
+- `GET /v1/lines?event=<event id>`: line movement for one game, built only from odds responses this server already fetched (main lines and props). It does not call The Odds API and does not spend a credit. Each snapshot has `at`, `kind` (`lines` or `props`), the teams, and `prices` (`market`, `outcome`, `point`, `bookId`, `decimal`, `status`, and `player` on a prop). The journal is `backend/data/line-history.jsonl`. It keeps about 45 days, at most 240 snapshots per game, and stays under about 2 MB by rewriting itself. The folder is not committed. An empty `event` is HTTP 400.
 - `GET /v1/history?selection=<encoded selection key>&at=<optional ISO time>`:
   collected snapshots for an exact selection. Both source and collection times
   must be at or before `at`. This is not a complete Replay Lab or purchased archive.
