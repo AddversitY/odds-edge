@@ -19,6 +19,7 @@ import 'domain/coach_board.dart';
 import 'domain/coach_model.dart';
 import 'domain/injury_report.dart';
 import 'domain/odds.dart';
+import 'domain/parlay_slip.dart';
 import 'domain/public_sharp.dart';
 import 'research_workspace.dart';
 import 'data/research_store.dart';
@@ -29,6 +30,7 @@ import 'player_investigation_page.dart';
 import 'domain/player_stats.dart';
 import 'tools_page.dart';
 import 'theme/edge_theme.dart';
+import 'ui/wordmark.dart';
 
 void main() => runApp(const OddsEdgeApp());
 
@@ -82,6 +84,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
   late final researchStore = widget.researchStore ?? ResearchStore();
   ResearchContext? researchContext;
   int researchLaunch = 0;
+  final slip = ParlaySlipController();
   final repository = BackendRepository(
     const String.fromEnvironment(
       'ODDS_API_BASE_URL',
@@ -214,6 +217,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
   void dispose() {
     timer?.cancel();
     injuryTimer?.cancel();
+    slip.dispose();
     repository.close();
     super.dispose();
   }
@@ -497,7 +501,11 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          brand(),
+                          const FittedBox(
+                            alignment: Alignment.centerLeft,
+                            fit: BoxFit.scaleDown,
+                            child: OddsWordmark(height: 22),
+                          ),
                           const SizedBox(height: 28),
                           for (var i = 0; i < navLabels.length; i++)
                             Padding(
@@ -536,13 +544,22 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                       child: Row(
                         children: [
                           Expanded(
-                            child: Text(
-                              wide ? screenTitle : 'Odds Edge',
-                              overflow: TextOverflow.ellipsis,
-                              style: EdgeType.body.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
+                            child: wide || inMore
+                                ? Text(
+                                    screenTitle,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: EdgeType.body.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  )
+                                : const Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      alignment: Alignment.centerLeft,
+                                      child: OddsWordmark(height: 22),
+                                    ),
+                                  ),
                           ),
                           badge(
                             !wide
@@ -568,6 +585,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                               ),
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               textStyle: const TextStyle(
+                                fontFamily: EdgeFont.sans,
                                 fontSize: 15,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -588,6 +606,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                               ),
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               textStyle: const TextStyle(
+                                fontFamily: EdgeFont.sans,
                                 fontSize: 15,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -677,10 +696,17 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
 
   Widget coachPage() => switch (shell) {
     0 => HomeScreen(
-      board: board,
+      board: propSource,
+      games: pricedBoard,
       now: now,
       stamp: stamp,
       enabledBooks: enabledBooks,
+      injuries: injuryReport,
+      slip: slip,
+      onOpenGame: (id) => setState(() {
+        openGameId = id;
+        shell = 2;
+      }),
     ),
     1 => PropsScreen(
       board: propSource,
@@ -692,6 +718,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
           : null,
       injuries: injuryReport,
       focusMarket: focusPropMarket,
+      slip: slip,
     ),
     2 => GamesScreen(
       board: pricedBoard,
@@ -714,6 +741,10 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       enabledBooks: enabledBooks,
       model: coachModel,
       settings: edgeSettings,
+      slip: slip,
+      store: researchStore,
+      injuries: injuryReport,
+      onAddLeg: () => openShell(1),
     ),
     4 => MyBetsScreen(
       store: researchStore,
@@ -911,21 +942,6 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
     );
   }
 
-  Widget brand() => const Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Icon(Icons.stacked_line_chart, color: mint, size: 28),
-      SizedBox(width: 8),
-      Text(
-        'ODDS EDGE',
-        style: TextStyle(
-          fontWeight: FontWeight.w800,
-          fontSize: 14,
-          letterSpacing: 1.0,
-        ),
-      ),
-    ],
-  );
   Widget badge(String text, Color color) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
     decoration: BoxDecoration(

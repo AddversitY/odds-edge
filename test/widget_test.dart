@@ -428,7 +428,8 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(OddsEdgeApp(researchStore: MemoryResearchStore()));
     await tester.pump();
-    expect(find.text('CHECK MY SLIP'), findsOneWidget);
+    expect(find.text('Value'), findsOneWidget);
+    expect(find.textContaining('best prices'), findsOneWidget);
     expect(find.text('Ask Coach'), findsOneWidget);
 
     await tester.tap(find.text('Props', skipOffstage: false));
@@ -452,6 +453,11 @@ void main() {
     await tester.tap(find.text('Parlays', skipOffstage: false));
     await tester.pumpAndSettle();
     expect(find.text('PARLAYS'), findsOneWidget);
+    expect(find.textContaining('No legs yet'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('How these tickets are built'),
+      300,
+    );
     expect(find.text('How these tickets are built'), findsOneWidget);
     expect(tester.takeException(), isNull);
 

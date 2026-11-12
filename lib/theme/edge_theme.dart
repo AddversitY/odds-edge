@@ -1,49 +1,65 @@
 import 'package:flutter/material.dart';
 
-/// One dark theme for every screen. Neutral black, one blue accent,
-/// and green / amber / red only for value.
+/// Night-ledger ink with a chartreuse mark. Green, amber, and coral
+/// are reserved for the value check, not for the wordmark.
 class EdgeColors {
-  static const background = Color(0xFF0B0B0D);
-  static const surface = Color(0xFF1C1C1E);
-  static const surfaceHigh = Color(0xFF2C2C2E);
-  static const border = Color(0xFF3A3A3C);
-  static const text = Color(0xFFF2F2F7);
-  static const textSecondary = Color(0xFFAEAEB2);
-  static const textTertiary = Color(0xFF8E8E93);
-  static const accent = Color(0xFF0A84FF);
-  static const good = Color(0xFF30D158);
-  static const warn = Color(0xFFFFD60A);
-  static const bad = Color(0xFFFF453A);
-  static const onAccent = Color(0xFFFFFFFF);
+  static const background = Color(0xFF100E0C);
+  static const surface = Color(0xFF1B1814);
+  static const surfaceHigh = Color(0xFF28231D);
+  static const border = Color(0xFF3A332B);
+  static const text = Color(0xFFF7F2E9);
+  static const textSecondary = Color(0xFFC9BBA9);
+  static const textTertiary = Color(0xFF8F8274);
+  static const accent = Color(0xFFD6F25C);
+  static const good = Color(0xFF3DDB9A);
+  static const warn = Color(0xFFE6B15A);
+  static const bad = Color(0xFFFF6E5A);
+  static const onAccent = Color(0xFF17140A);
+}
+
+class EdgeFont {
+  static const sans = 'Outfit';
+  static const display = 'Fraunces';
 }
 
 /// Four sizes, used everywhere: 34, 22, 17, 15.
 class EdgeType {
   static const display = TextStyle(
+    fontFamily: EdgeFont.display,
     fontSize: 34,
     fontWeight: FontWeight.w600,
-    letterSpacing: -0.6,
-    height: 1.1,
+    letterSpacing: -0.8,
+    height: 1.05,
     color: EdgeColors.text,
   );
   static const title = TextStyle(
+    fontFamily: EdgeFont.sans,
     fontSize: 22,
     fontWeight: FontWeight.w600,
-    letterSpacing: -0.3,
+    letterSpacing: -0.4,
     height: 1.2,
     color: EdgeColors.text,
   );
   static const body = TextStyle(
+    fontFamily: EdgeFont.sans,
     fontSize: 17,
     fontWeight: FontWeight.w400,
     height: 1.4,
     color: EdgeColors.text,
   );
   static const label = TextStyle(
+    fontFamily: EdgeFont.sans,
     fontSize: 15,
     fontWeight: FontWeight.w600,
     height: 1.3,
     color: EdgeColors.textSecondary,
+  );
+  static const number = TextStyle(
+    fontFamily: EdgeFont.display,
+    fontWeight: FontWeight.w600,
+    letterSpacing: -0.6,
+    fontFeatures: [FontFeature.tabularFigures()],
+    color: EdgeColors.text,
   );
 }
 
@@ -78,7 +94,8 @@ ThemeData edgeTheme() {
     brightness: Brightness.dark,
     scaffoldBackgroundColor: EdgeColors.background,
     colorScheme: scheme,
-    fontFamily: 'Segoe UI',
+    fontFamily: EdgeFont.sans,
+    fontFamilyFallback: const ['Segoe UI', 'sans-serif'],
     textTheme: const TextTheme(
       displayLarge: EdgeType.display,
       headlineMedium: EdgeType.title,

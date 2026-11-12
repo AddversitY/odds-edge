@@ -101,6 +101,9 @@ void main() {
     expect(find.text('Bet'), findsWidgets);
     expect(find.text('Skip'), findsWidgets);
     expect(find.text('Lean'), findsWidgets);
+    expect(find.text('1 out'), findsWidgets);
+    await tester.tap(find.text('Josh Allen').first);
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.widgetWithText(TextButton, 'Why').first);
     await tester.tap(find.widgetWithText(TextButton, 'Why').first);
     await tester.pumpAndSettle();
