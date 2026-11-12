@@ -6,16 +6,19 @@ import 'package:flutter/services.dart';
 
 import '../data/research_store.dart';
 import '../domain/coach_board.dart';
+import '../domain/coach_model.dart';
 import '../domain/hit_rate.dart';
+import '../domain/matchup.dart';
 import '../domain/nfl_teams.dart';
 import '../domain/odds.dart';
 import '../domain/player_stats.dart';
 import '../domain/prop_history.dart';
+import '../domain/prop_value.dart';
 import '../domain/saved_play.dart';
 import '../explained_number.dart';
 import '../theme/edge_theme.dart';
-import '../theme/reveal.dart';
 import 'coach_widgets.dart';
+import 'value_view.dart';
 
 class PropsScreen extends StatefulWidget {
   const PropsScreen({
@@ -24,6 +27,7 @@ class PropsScreen extends StatefulWidget {
     required this.now,
     required this.store,
     this.loadPlayers,
+    this.loadMatchup,
     this.history,
     this.enabledBooks,
   });
@@ -32,6 +36,7 @@ class PropsScreen extends StatefulWidget {
   final DateTime now;
   final ResearchStore store;
   final Future<PlayerStatsDataset> Function()? loadPlayers;
+  final Future<MatchupContext> Function()? loadMatchup;
   final Future<List<OddsQuote>> Function(Selection selection)? history;
   final Set<String>? enabledBooks;
 
@@ -41,6 +46,7 @@ class PropsScreen extends StatefulWidget {
 
 class _PropsScreenState extends State<PropsScreen> {
   late Future<PlayerDirectory> directory;
+  late Future<MatchupContext?> matchup;
   PropFilter filter = const PropFilter();
 
   @override
@@ -49,6 +55,21 @@ class _PropsScreenState extends State<PropsScreen> {
     directory = (widget.loadPlayers ?? loadBundledNflPlayers)().then(
       PlayerDirectory.new,
     );
+    matchup = _loadMatchup();
+  }
+
+  Future<MatchupContext?> _loadMatchup() async {
+    try {
+      return await (widget.loadMatchup ?? loadBundledMatchup)();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<_PropFacts> _facts() async {
+    final players = await directory;
+    final report = await matchup;
+    return _PropFacts(players, report);
   }
 
   @override
@@ -86,24 +107,25 @@ class _PropsScreenState extends State<PropsScreen> {
             ),
           )
         else
-          FutureBuilder<PlayerDirectory>(
-            future: directory,
+          FutureBuilder<_PropFacts>(
+            future: _facts(),
             builder: (context, snapshot) {
               if (snapshot.hasError) {
                 return const Text(
                   'The NFL box scores could not be read, so hit rates are left blank.',
                 );
               }
+              final facts = snapshot.data;
               return Column(
                 children: [
                   for (final card in cards) ...[
                     _PropCard(
                       card: card,
+                      cards: cards,
                       now: widget.now,
-                      windows: snapshot.data == null
-                          ? null
-                          : _windows(snapshot.data!, card),
-                      onOpen: () => _open(card, snapshot.data, cards),
+                      board: widget.board,
+                      facts: facts,
+                      onOpen: () => _open(card, facts, cards),
                       onSave: () => _save(card),
                     ),
                     const SizedBox(height: 12),
@@ -116,34 +138,8 @@ class _PropsScreenState extends State<PropsScreen> {
     );
   }
 
-  PropWindows _windows(PlayerDirectory directory, PropCardModel card) {
-    final event = card.event;
-    String? opponent;
-    if (event != null) {
-      final away = canonicalTeam(event.away);
-      final home = canonicalTeam(event.home);
-      final looked = directory.lookup(
-        playerName: card.player,
-        market: card.market,
-        line: card.line,
-        side: card.lineSide,
-      );
-      final team = looked.team;
-      if (team != null && team == away) {
-        opponent = home;
-      } else if (team != null && team == home) {
-        opponent = away;
-      }
-    }
-    return directory.lookup(
-      playerName: card.player,
-      market: card.market,
-      line: card.line,
-      side: card.lineSide,
-      opponent: opponent,
-      through: widget.now,
-    );
-  }
+  PropWindows _windows(PlayerDirectory directory, PropCardModel card) =>
+      propWindows(directory, card, widget.now);
 
   Future<void> _save(PropCardModel card) async {
     final quote = card.best;
@@ -165,22 +161,28 @@ class _PropsScreenState extends State<PropsScreen> {
     );
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Saved to My Bets. Double-tap a card to do the same.')),
+      const SnackBar(
+        content: Text(
+          'Saved to My Bets. Double-tap the player\'s name to do the same.',
+        ),
+      ),
     );
   }
 
-  void _open(PropCardModel card, PlayerDirectory? directory, List<PropCardModel> cards) {
-    final windows = directory == null ? null : _windows(directory, card);
+  void _open(PropCardModel card, _PropFacts? facts, List<PropCardModel> cards) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => _PropDetail(
           card: card,
           cards: cards,
-          windows: windows,
+          facts: facts,
+          board: widget.board,
           now: widget.now,
           history: widget.history,
-          directory: directory,
           boardNow: widget.now,
+          windowsFor: facts == null
+              ? null
+              : (item) => _windows(facts.players, item),
         ),
       ),
     );
@@ -188,7 +190,8 @@ class _PropsScreenState extends State<PropsScreen> {
 
   Future<void> _openFilters(List<PropCardModel> cards) async {
     final markets = {
-      for (final card in propCards(widget.board, widget.now)) card.market: card.marketLabel,
+      for (final card in propCards(widget.board, widget.now))
+        card.market: card.marketLabel,
     };
     final books = {
       for (final card in cards)
@@ -197,11 +200,8 @@ class _PropsScreenState extends State<PropsScreen> {
     final next = await showModalBottomSheet<PropFilter>(
       context: context,
       isScrollControlled: true,
-      builder: (context) => _FilterSheet(
-        filter: filter,
-        markets: markets,
-        books: books,
-      ),
+      builder: (context) =>
+          _FilterSheet(filter: filter, markets: markets, books: books),
     );
     if (next != null) setState(() => filter = next);
   }
@@ -212,22 +212,42 @@ Future<PlayerStatsDataset> loadBundledNflPlayers() async {
   return compute(_decodeNflPlayers, json);
 }
 
-PlayerStatsDataset _decodeNflPlayers(String json) => PlayerStatsDataset.fromJson(
+PlayerStatsDataset _decodeNflPlayers(String json) =>
+    PlayerStatsDataset.fromJson(
+      Map<String, dynamic>.from(jsonDecode(json.replaceFirst('\uFEFF', ''))),
+    );
+
+Future<MatchupContext> loadBundledMatchup() async {
+  final json = await rootBundle.loadString('assets/nfl-matchup.json');
+  return compute(_decodeMatchup, json);
+}
+
+MatchupContext _decodeMatchup(String json) => MatchupContext.fromJson(
   Map<String, dynamic>.from(jsonDecode(json.replaceFirst('\uFEFF', ''))),
 );
+
+class _PropFacts {
+  const _PropFacts(this.players, this.matchup);
+  final PlayerDirectory players;
+  final MatchupContext? matchup;
+}
 
 class _PropCard extends StatelessWidget {
   const _PropCard({
     required this.card,
+    required this.cards,
     required this.now,
-    required this.windows,
+    required this.board,
+    required this.facts,
     required this.onOpen,
     required this.onSave,
   });
 
   final PropCardModel card;
+  final List<PropCardModel> cards;
   final DateTime now;
-  final PropWindows? windows;
+  final OddsBoard board;
+  final _PropFacts? facts;
   final VoidCallback onOpen;
   final VoidCallback onSave;
 
@@ -235,120 +255,192 @@ class _PropCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final quote = card.best;
     final event = card.event;
+    final windows = facts == null
+        ? null
+        : propWindows(facts!.players, card, now);
+    final priced = _priced(facts, windows);
     final gap = historyGap(
       clearRate: windows?.season?.clearRate,
       fairProbability: card.fairProbability,
     );
-    final last5 = windows?.last5;
-    final hitSentence = last5 == null
-        ? 'Hit rates stay blank until the box scores load.'
-        : last5.observed == 0
-        ? 'No recorded stat in the last 5 games.'
-        : 'Last 5: ${last5.hits} of ${last5.observed} cleared the line. That is a count, not a prediction.';
+    final matchup = priced.matchup;
     return CoachCard(
-      onDoubleTap: onSave,
-      child: InkWell(
-        onTap: onOpen,
-        child: Reveal(
-          verdict: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: Text(card.player, style: EdgeType.title)),
-                  IconButton(
-                    tooltip: 'Save play',
-                    onPressed: onSave,
-                    icon: const Icon(Icons.bookmark_add_outlined),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ValueView(
+            verdict: priced.verdict,
+            caption: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                GestureDetector(
+                  onDoubleTap: onSave,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: Text(card.player, style: EdgeType.title)),
+                      IconButton(
+                        tooltip: 'Save play',
+                        onPressed: onSave,
+                        icon: const Icon(Icons.bookmark_add_outlined),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                [
-                  if ((windows?.position ?? '').isNotEmpty) windows!.position,
-                  if ((windows?.team ?? '').isNotEmpty) windows!.team,
-                  if (event != null) '${event.away} at ${event.home}',
-                ].join(' · '),
-                style: EdgeType.label,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                '${card.marketLabel}  ${card.lineLabel}',
-                style: EdgeType.body.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                quote == null
-                    ? 'No open price'
-                    : '${quote.book} ${americanLabel(quote.decimal)}',
-                style: EdgeType.display.copyWith(fontSize: 28),
-              ),
-            ],
-          ),
-          reasons: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(hitSentence, style: EdgeType.body),
-              const SizedBox(height: 8),
-              Text(
-                windows?.note ??
-                    'Box scores are still loading. Hit rates stay blank until they load.',
-                style: EdgeType.body.copyWith(color: EdgeColors.textSecondary),
-              ),
-              if (quote != null) ...[
-                const SizedBox(height: 8),
+                ),
                 Text(
-                  '${quote.demo ? 'Sample price' : 'Saved price'} · ${priceAge(quote.sourceAt, now)}',
+                  [
+                    if ((windows?.position ?? '').isNotEmpty) windows!.position,
+                    if ((windows?.team ?? '').isNotEmpty) windows!.team,
+                    if (event != null) '${event.away} at ${event.home}',
+                  ].join(' · '),
                   style: EdgeType.label,
                 ),
+                const SizedBox(height: 8),
+                Text(
+                  '${card.marketLabel}  ${card.lineLabel}',
+                  style: EdgeType.body.copyWith(fontWeight: FontWeight.w700),
+                ),
+                Text(
+                  quote == null
+                      ? 'No open price'
+                      : '${quote.book} ${americanLabel(quote.decimal)}',
+                  style: EdgeType.title,
+                ),
               ],
-              const SizedBox(height: 8),
-              const Text(
-                'Snap share and injuries are not in the free box scores, so that context is left blank.',
-                style: EdgeType.body,
-              ),
-            ],
-          ),
-          math: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ChanceBar(
-                fraction: card.fairProbability,
-                label: 'Books\' fee-free chance',
-              ),
-              const SizedBox(height: 12),
-              _blocks(quote, gap),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  HitChip(label: 'L5', rate: windows?.last5),
-                  HitChip(label: 'L10', rate: windows?.last10),
-                  HitChip(label: 'L20', rate: windows?.last20),
-                  HitChip(label: 'H2H', rate: windows?.headToHead),
-                  HitChip(
-                    label: windows?.seasonYear == null
-                        ? 'Season'
-                        : '${windows!.seasonYear}',
-                    rate: windows?.season,
+            ),
+            extraWhy: matchup == null
+                ? null
+                : Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(matchup.sentence, style: EdgeType.body),
+                        const SizedBox(height: 8),
+                        Text(matchup.defenseLine, style: EdgeType.body),
+                        const SizedBox(height: 8),
+                        Text(matchup.injuryLine, style: EdgeType.body),
+                        const SizedBox(height: 8),
+                        Text(matchup.scriptLine, style: EdgeType.body),
+                        const SizedBox(height: 8),
+                        Text(matchup.snapLine, style: EdgeType.body),
+                        const SizedBox(height: 12),
+                        LineChart(
+                          samples:
+                              windows?.season?.samples ??
+                              windows?.last10?.samples ??
+                              const [],
+                          line: card.line,
+                        ),
+                      ],
+                    ),
                   ),
+            extraMath: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 12),
+                ChanceBar(
+                  fraction: card.fairProbability,
+                  label: 'Books\' fee-free chance',
+                ),
+                const SizedBox(height: 12),
+                _blocks(quote, gap),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    HitChip(label: 'L5', rate: windows?.last5),
+                    HitChip(label: 'L10', rate: windows?.last10),
+                    HitChip(label: 'L20', rate: windows?.last20),
+                    HitChip(label: 'H2H', rate: windows?.headToHead),
+                    HitChip(
+                      label: windows?.seasonYear == null
+                          ? 'Season'
+                          : '${windows!.seasonYear}',
+                      rate: windows?.season,
+                    ),
+                  ],
+                ),
+                if (matchup != null) ...[
+                  const SizedBox(height: 12),
+                  Text(matchup.credit, style: EdgeType.label),
                 ],
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: onOpen,
+              child: const Text('Open this prop'),
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  PropValue _priced(_PropFacts? facts, PropWindows? windows) {
+    final players = facts?.players;
+    return priceProp(
+      card: card,
+      cards: cards,
+      rateFor: (item) => preferredRate(
+        players == null
+            ? (item.id == card.id ? windows : null)
+            : propWindows(players, item, now),
+      ),
+      context: facts?.matchup,
+      rows: players?.data.rows ?? const [],
+      playerTeam: windows?.team,
+      position: windows?.position,
+      opponent: _opponent(windows),
+      teamSpread: _teamSpread(windows),
+      total: _total(),
+      seasonYear: windows?.seasonYear,
+      recent: windows?.last5,
+    );
+  }
+
+  String? _opponent(PropWindows? windows) {
+    final event = card.event;
+    final team = windows?.team;
+    if (event == null || team == null) return null;
+    final away = canonicalTeam(event.away);
+    final home = canonicalTeam(event.home);
+    final club = boxScoreTeam(team);
+    if (club == boxScoreTeam(away ?? '')) return home;
+    if (club == boxScoreTeam(home ?? '')) return away;
+    return null;
+  }
+
+  double? _teamSpread(PropWindows? windows) {
+    final event = card.event;
+    final team = windows?.team;
+    if (event == null || team == null) return null;
+    final line = readMarketLine(event, board.quotes);
+    final home = line.homeSpread;
+    if (home == null) return null;
+    final club = boxScoreTeam(team);
+    if (club == boxScoreTeam(canonicalTeam(event.home) ?? '')) return home;
+    if (club == boxScoreTeam(canonicalTeam(event.away) ?? '')) return -home;
+    return null;
+  }
+
+  double? _total() {
+    final event = card.event;
+    if (event == null) return null;
+    return readMarketLine(event, board.quotes).total;
   }
 
   Widget _blocks(OddsQuote? quote, double? gap) {
     final blocks = [
       StatBlock(
         kicker: 'Best price',
-        value: quote == null ? '—' : '${quote.book} ${americanLabel(quote.decimal)}',
+        value: quote == null
+            ? '—'
+            : '${quote.book} ${americanLabel(quote.decimal)}',
         title: 'Best price',
         body: bestPriceExplanation,
         valueColor: quote == null ? null : EdgeColors.accent,
@@ -404,24 +496,59 @@ class _PropCard extends StatelessWidget {
   }
 }
 
+PropWindows propWindows(
+  PlayerDirectory directory,
+  PropCardModel card,
+  DateTime now,
+) {
+  final event = card.event;
+  String? opponent;
+  if (event != null) {
+    final away = canonicalTeam(event.away);
+    final home = canonicalTeam(event.home);
+    final looked = directory.lookup(
+      playerName: card.player,
+      market: card.market,
+      line: card.line,
+      side: card.lineSide,
+    );
+    final team = looked.team;
+    if (team != null && boxScoreTeam(team) == boxScoreTeam(away ?? '')) {
+      opponent = home;
+    } else if (team != null && boxScoreTeam(team) == boxScoreTeam(home ?? '')) {
+      opponent = away;
+    }
+  }
+  return directory.lookup(
+    playerName: card.player,
+    market: card.market,
+    line: card.line,
+    side: card.lineSide,
+    opponent: opponent,
+    through: now,
+  );
+}
+
 class _PropDetail extends StatefulWidget {
   const _PropDetail({
     required this.card,
     required this.cards,
-    required this.windows,
+    required this.facts,
+    required this.board,
     required this.now,
     required this.history,
-    required this.directory,
     required this.boardNow,
+    required this.windowsFor,
   });
 
   final PropCardModel card;
   final List<PropCardModel> cards;
-  final PropWindows? windows;
+  final _PropFacts? facts;
+  final OddsBoard board;
   final DateTime now;
   final Future<List<OddsQuote>> Function(Selection selection)? history;
-  final PlayerDirectory? directory;
   final DateTime boardNow;
+  final PropWindows Function(PropCardModel card)? windowsFor;
 
   @override
   State<_PropDetail> createState() => _PropDetailState();
@@ -432,8 +559,11 @@ class _PropDetailState extends State<_PropDetail> {
 
   @override
   Widget build(BuildContext context) {
-    final shown = card.id == widget.card.id ? widget.windows : _rewindow();
-    final samples = shown?.last20?.samples ?? const <HitSample>[];
+    final shown = _rewindow();
+    final samples =
+        shown?.season?.samples ?? shown?.last10?.samples ?? const <HitSample>[];
+    final priced = _priced(shown);
+    final matchup = priced.matchup;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Prop detail'),
@@ -460,6 +590,31 @@ class _PropDetailState extends State<_PropDetail> {
             ),
           ),
           const SizedBox(height: 8),
+          ValueView(
+            verdict: priced.verdict,
+            extraWhy: matchup == null
+                ? null
+                : Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(matchup.sentence, style: EdgeType.body),
+                        const SizedBox(height: 8),
+                        Text(matchup.defenseLine, style: EdgeType.body),
+                        const SizedBox(height: 8),
+                        Text(matchup.injuryLine, style: EdgeType.body),
+                        const SizedBox(height: 8),
+                        Text(matchup.scriptLine, style: EdgeType.body),
+                        const SizedBox(height: 8),
+                        Text(matchup.snapLine, style: EdgeType.body),
+                        const SizedBox(height: 8),
+                        Text(matchup.credit, style: EdgeType.label),
+                      ],
+                    ),
+                  ),
+          ),
+          const SizedBox(height: 12),
           const ToolNote(
             'Over and under use the other side only when that price is in the snapshot.',
           ),
@@ -500,12 +655,7 @@ class _PropDetailState extends State<_PropDetail> {
           const SizedBox(height: 16),
           const SectionLabel('RECORDED GAMES'),
           const SizedBox(height: 8),
-          StatBars(samples: samples, line: card.line),
-          const SizedBox(height: 8),
-          Text(
-            'Each bar is a recorded game, oldest to newest. Green cleared ${card.line.toStringAsFixed(1)}, red missed, gray pushed. Bar height is the stat, not a forecast.',
-            style: EdgeType.label,
-          ),
+          LineChart(samples: samples, line: card.line),
           const SizedBox(height: 16),
           const SectionLabel('BOOKS, BEST PRICE FIRST'),
           const SizedBox(height: 8),
@@ -537,16 +687,50 @@ class _PropDetailState extends State<_PropDetail> {
     );
   }
 
-  PropWindows? _rewindow() {
-    final directory = widget.directory;
-    if (directory == null) return widget.windows;
-    return directory.lookup(
-      playerName: card.player,
-      market: card.market,
-      line: card.line,
-      side: card.lineSide,
-      through: widget.boardNow,
+  PropWindows? _rewindow() => widget.windowsFor?.call(card);
+
+  PropValue _priced(PropWindows? windows) {
+    final players = widget.facts?.players;
+    return priceProp(
+      card: card,
+      cards: widget.cards,
+      rateFor: (item) => preferredRate(widget.windowsFor?.call(item)),
+      context: widget.facts?.matchup,
+      rows: players?.data.rows ?? const [],
+      playerTeam: windows?.team,
+      position: windows?.position,
+      opponent: _opponent(windows),
+      teamSpread: _teamSpread(windows),
+      total: card.event == null
+          ? null
+          : readMarketLine(card.event!, widget.board.quotes).total,
+      seasonYear: windows?.seasonYear,
+      recent: windows?.last5,
     );
+  }
+
+  String? _opponent(PropWindows? windows) {
+    final event = card.event;
+    final team = windows?.team;
+    if (event == null || team == null) return null;
+    final away = canonicalTeam(event.away);
+    final home = canonicalTeam(event.home);
+    final club = boxScoreTeam(team);
+    if (club == boxScoreTeam(away ?? '')) return home;
+    if (club == boxScoreTeam(home ?? '')) return away;
+    return null;
+  }
+
+  double? _teamSpread(PropWindows? windows) {
+    final event = card.event;
+    final team = windows?.team;
+    if (event == null || team == null) return null;
+    final home = readMarketLine(event, widget.board.quotes).homeSpread;
+    if (home == null) return null;
+    final club = boxScoreTeam(team);
+    if (club == boxScoreTeam(canonicalTeam(event.home) ?? '')) return home;
+    if (club == boxScoreTeam(canonicalTeam(event.away) ?? '')) return -home;
+    return null;
   }
 
   void _toggle() {
@@ -556,7 +740,9 @@ class _PropDetailState extends State<_PropDetail> {
     if (match.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('The other side is not in this snapshot, so it was not switched.'),
+          content: Text(
+            'The other side is not in this snapshot, so it was not switched.',
+          ),
         ),
       );
       return;
@@ -608,7 +794,10 @@ class _FilterSheetState extends State<_FilterSheet> {
           initialValue: market,
           decoration: const InputDecoration(labelText: 'Stat'),
           items: [
-            const DropdownMenuItem(value: null, child: Text('All stats in the snapshot')),
+            const DropdownMenuItem(
+              value: null,
+              child: Text('All stats in the snapshot'),
+            ),
             for (final entry in widget.markets.entries)
               DropdownMenuItem(value: entry.key, child: Text(entry.value)),
           ],
@@ -626,9 +815,7 @@ class _FilterSheetState extends State<_FilterSheet> {
           onChanged: (value) => setState(() => book = value),
         ),
         const SizedBox(height: 12),
-        Text(
-          'American odds from ${odds.start.round()} to ${odds.end.round()}',
-        ),
+        Text('American odds from ${odds.start.round()} to ${odds.end.round()}'),
         RangeSlider(
           min: -250,
           max: 250,

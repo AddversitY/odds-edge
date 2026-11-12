@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../domain/coach_board.dart';
 import '../domain/odds.dart';
+import '../domain/parlay_value.dart';
 import '../explained_number.dart';
 import '../theme/edge_theme.dart';
 import '../theme/reveal.dart';
@@ -80,7 +81,12 @@ class HomeScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    Text(play.title, style: EdgeType.body.copyWith(fontWeight: FontWeight.w700)),
+                    Text(
+                      play.title,
+                      style: EdgeType.body.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                     Text(play.subtitle, style: EdgeType.label),
                     const SizedBox(height: 8),
                     Text(
@@ -121,10 +127,12 @@ class _SlipBox extends StatefulWidget {
 class _SlipBoxState extends State<_SlipBox> {
   final legs = [TextEditingController(), TextEditingController()];
   final chances = [TextEditingController(), TextEditingController()];
+  final payout = TextEditingController();
+  bool sameGame = false;
 
   @override
   void dispose() {
-    for (final controller in [...legs, ...chances]) {
+    for (final controller in [...legs, ...chances, payout]) {
       controller.dispose();
     }
     super.dispose();
@@ -134,13 +142,16 @@ class _SlipBoxState extends State<_SlipBox> {
   Widget build(BuildContext context) {
     String? message;
     try {
+      final inputs = <TicketLegInput>[];
       final parsed = <SlipLeg>[];
       for (var i = 0; i < legs.length; i++) {
         final text = legs[i].text.trim();
         if (text.isEmpty) continue;
         final odds = int.tryParse(text);
         if (odds == null) {
-          throw ArgumentError('Leg ${i + 1} needs American odds such as -110 or +150.');
+          throw ArgumentError(
+            'Leg ${i + 1} needs American odds such as -110 or +150.',
+          );
         }
         final chanceText = chances[i].text.trim();
         double? chance;
@@ -153,15 +164,42 @@ class _SlipBoxState extends State<_SlipBox> {
           }
           chance = percent / 100;
         }
-        parsed.add(SlipLeg(decimal: americanToDecimal(odds), winProbability: chance));
+        final decimal = americanToDecimal(odds);
+        parsed.add(SlipLeg(decimal: decimal, winProbability: chance));
+        inputs.add(
+          TicketLegInput(
+            label: 'Leg ${i + 1}',
+            eventId: sameGame ? 'slip' : 'slip-$i',
+            market: 'h2h',
+            outcome: 'Leg ${i + 1}',
+            decimal: decimal,
+            ourChance: chance,
+            source: 'the chance you typed',
+          ),
+        );
       }
-      if (parsed.length >= 2) {
-        message = checkSlip(parsed).plainEnglish;
-      } else if (parsed.length == 1) {
+      double? pasted;
+      final payoutText = payout.text.trim();
+      if (payoutText.isNotEmpty) {
+        final odds = int.tryParse(payoutText);
+        if (odds == null) {
+          throw ArgumentError(
+            'The ticket payout needs American odds such as +264.',
+          );
+        }
+        pasted = americanToDecimal(odds);
+      }
+      if (inputs.length >= 2) {
+        final ticket = priceTicket(inputs, pastedDecimal: pasted);
+        final slip = checkSlip(parsed).plainEnglish;
+        final missing = inputs.any((leg) => leg.ourChance == null);
+        message = missing
+            ? '${ticket.wordLabel}. A chance is missing, so this ticket is a skip. $slip'
+            : '${ticket.wordLabel}. ${ticket.why}';
+      } else if (inputs.length == 1) {
         message = 'Add a second leg. A parlay needs at least two prices.';
       } else {
-        message =
-            'Type the American odds on each leg. You will see the break-even rate. Enter a chance for every leg if you want the real chance. This box will not guess it.';
+        message = 'Type the American odds on each leg. Add the chance you believe for a Bet, Lean, or Skip. A payout you paste is the real price. Leave it blank and a same-game payout is estimated.';
       }
     } on ArgumentError catch (error) {
       message = error.message ?? 'Those odds could not be priced.';
@@ -175,18 +213,46 @@ class _SlipBoxState extends State<_SlipBox> {
             style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
           ),
           const SizedBox(height: 8),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Same game', style: EdgeType.body),
+            subtitle: const Text(
+              'Legs in one game move together. The payout you paste is used as-is.',
+              style: EdgeType.label,
+            ),
+            value: sameGame,
+            onChanged: (value) => setState(() => sameGame = value),
+          ),
+          TextField(
+            controller: payout,
+            keyboardType: const TextInputType.numberWithOptions(signed: true),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[0-9+-]')),
+            ],
+            decoration: const InputDecoration(
+              labelText: 'Ticket American payout (optional, from the slip)',
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 8),
           for (var i = 0; i < legs.length; i++) ...[
             TextField(
               controller: legs[i],
               keyboardType: const TextInputType.numberWithOptions(signed: true),
-              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9+-]'))],
-              decoration: InputDecoration(labelText: 'Leg ${i + 1} American odds'),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9+-]')),
+              ],
+              decoration: InputDecoration(
+                labelText: 'Leg ${i + 1} American odds',
+              ),
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 8),
             TextField(
               controller: chances[i],
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               decoration: InputDecoration(
                 labelText: 'Leg ${i + 1} chance you believe, % (optional)',
               ),

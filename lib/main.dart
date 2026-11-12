@@ -49,6 +49,7 @@ class EdgeWorkspace extends StatefulWidget {
 class _EdgeWorkspaceState extends State<EdgeWorkspace> {
   late OddsBoard board;
   OddsBoard? propBoard;
+  OddsBoard? sharpBoard;
   Timer? timer;
   int page = 0;
   int shell = 0;
@@ -217,6 +218,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
         }
       });
       if (backend) unawaited(loadProps());
+      if (backend) unawaited(loadSharp());
       if (onDemand || coachModel == null) unawaited(loadCoachModel());
     } catch (_) {
       if (mounted) {
@@ -292,9 +294,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
         events: board.events,
         quotes: const [],
         fetchedAt: board.fetchedAt,
-        notices: const [
-          'Player-prop prices have not been saved yet.',
-        ],
+        notices: const ['Player-prop prices have not been saved yet.'],
       );
     }
     return OddsBoard(
@@ -303,6 +303,34 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       fetchedAt: props.fetchedAt,
       demo: props.demo,
       notices: props.notices,
+    );
+  }
+
+  Future<void> loadSharp() async {
+    if (!backend || board.demo) {
+      if (mounted) setState(() => sharpBoard = null);
+      return;
+    }
+    try {
+      final next = await repository.sharp();
+      if (mounted) setState(() => sharpBoard = next);
+    } catch (_) {
+      if (mounted) setState(() => sharpBoard = null);
+    }
+  }
+
+  /// The odds board plus Pinnacle spreads and totals, when a live
+  /// snapshot has them. Sample mode already includes Pinnacle.
+  OddsBoard get pricedBoard {
+    final sharp = sharpBoard;
+    if (!backend || board.demo || sharp == null || sharp.quotes.isEmpty) {
+      return board;
+    }
+    return OddsBoard(
+      events: board.events,
+      quotes: [...board.quotes, ...sharp.quotes],
+      fetchedAt: board.fetchedAt,
+      notices: [...board.notices, ...sharp.notices],
     );
   }
 
@@ -333,10 +361,10 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
     final model = coachModel;
     if (model == null) return const [];
     final lines = <CoachLine>[];
-    for (final event in board.events) {
+    for (final event in pricedBoard.events) {
       final line = model.lineFor(
         event,
-        board.quotes,
+        pricedBoard.quotes,
         settings: edgeSettings,
         books: enabledBooks,
       );
@@ -351,7 +379,10 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
     if (play.isEmpty) return null;
     final first = play.first;
     final lines = coachLines;
-    final edged = [for (final line in lines) if (line.flagged) line];
+    final edged = [
+      for (final line in lines)
+        if (line.flagged) line,
+    ];
     final shown = (edged.isEmpty ? lines : edged).take(8).toList();
     final modelNote = shown.isEmpty ? '' : ' ${shown.first.askCoachSentence}';
     final backtest = coachModel?.backtest.plainEnglish ?? '';
@@ -371,7 +402,9 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
           {
             'source': "Coach's Line backtest",
             'hasEdge': coachModel?.backtest.hasEdge ?? false,
-            'summary': backtest.length > 500 ? backtest.substring(0, 500) : backtest,
+            'summary': backtest.length > 500
+                ? backtest.substring(0, 500)
+                : backtest,
           },
       ],
     );
@@ -384,152 +417,160 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       return Scaffold(
         backgroundColor: EdgeColors.background,
         body: SafeArea(
-              child: Row(
-                children: [
-                  if (wide)
-                    Material(
-                      color: EdgeColors.surface,
-                      child: SizedBox(
-                        width: 220,
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              brand(),
-                              const SizedBox(height: 28),
-                              for (var i = 0; i < navLabels.length; i++)
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 4),
-                                  child: ListTile(
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    selected: !inMore && shell == navShells[i],
-                                    selectedColor: EdgeColors.accent,
-                                    selectedTileColor: EdgeColors.accent.withValues(
-                                      alpha: .12,
-                                    ),
-                                    leading: Icon(navIcons[i]),
-                                    title: Text(navLabels[i]),
-                                    onTap: () => openShell(navShells[i]),
-                                  ),
+          child: Row(
+            children: [
+              if (wide)
+                Material(
+                  color: EdgeColors.surface,
+                  child: SizedBox(
+                    width: 220,
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          brand(),
+                          const SizedBox(height: 28),
+                          for (var i = 0; i < navLabels.length; i++)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: ListTile(
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
                                 ),
-                            ],
-                          ),
-                        ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                selected: !inMore && shell == navShells[i],
+                                selectedColor: EdgeColors.accent,
+                                selectedTileColor: EdgeColors.accent.withValues(
+                                  alpha: .12,
+                                ),
+                                leading: Icon(navIcons[i]),
+                                title: Text(navLabels[i]),
+                                onTap: () => openShell(navShells[i]),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
-                  if (wide) const VerticalDivider(width: 1),
-                  Expanded(
-                    child: Column(
-                      children: [
-                        Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: wide ? 30 : 16,
-                            vertical: 18,
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  wide ? screenTitle : 'Odds Edge',
-                                  overflow: TextOverflow.ellipsis,
-                                  style: EdgeType.body.copyWith(fontWeight: FontWeight.w700),
-                                ),
-                              ),
-                              badge(
-                                !wide
-                                    ? (board.demo ? 'DEMO' : 'FEED')
-                                    : shell == 5 && page == 4
-                                    ? 'HISTORICAL STATS'
-                                    : board.demo
-                                    ? 'DEMONSTRATION'
-                                    : 'PROVIDER FEED',
-                                shell == 5 && page == 4
-                                    ? mint
-                                    : board.demo
-                                    ? EdgeColors.warn
-                                    : EdgeColors.accent,
-                              ),
-                              TextButton(
-                                key: const Key('more-menu'),
-                                style: TextButton.styleFrom(
-                                  visualDensity: VisualDensity.compact,
-                                  minimumSize: const Size(44, 44),
-                                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  textStyle: const TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                  backgroundColor: inMore
-                                      ? EdgeColors.accent.withValues(alpha: .16)
-                                      : null,
-                                ),
-                                onPressed: openMore,
-                                child: const Text('More'),
-                              ),
-                              TextButton(
-                                key: const Key('ask-coach'),
-                                style: TextButton.styleFrom(
-                                  visualDensity: VisualDensity.compact,
-                                  minimumSize: const Size(44, 44),
-                                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  textStyle: const TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                onPressed: () => showAskCoach(
-                                  context,
-                                  brief: backend && error == null
-                                      ? coachBrief()
-                                      : null,
-                                  ask: backend && error == null
-                                      ? repository.assistant
-                                      : null,
-                                ),
-                                child: const Text('Ask Coach'),
-                              ),
-                              if (!(shell == 5 && page == 4))
-                                IconButton(
-                                  tooltip: 'Refresh odds',
-                                  visualDensity: VisualDensity.compact,
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(
-                                    minWidth: 48,
-                                    minHeight: 48,
-                                  ),
-                                  onPressed: loading
-                                      ? null
-                                      : () => refresh(onDemand: true),
-                                  icon: loading
-                                      ? const SizedBox(
-                                          width: 18,
-                                          height: 18,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                          ),
-                                        )
-                                      : const Icon(Icons.refresh),
-                                ),
-                            ],
-                          ),
-                        ),
-                        const Divider(height: 1),
-                        if (shell == 5 && inResearch) researchTabs(),
-                        Expanded(child: shell == 5 ? legacyPage(wide) : coachPage()),
-                      ],
-                    ),
                   ),
-                ],
+                ),
+              if (wide) const VerticalDivider(width: 1),
+              Expanded(
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: wide ? 30 : 16,
+                        vertical: 18,
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              wide ? screenTitle : 'Odds Edge',
+                              overflow: TextOverflow.ellipsis,
+                              style: EdgeType.body.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          badge(
+                            !wide
+                                ? (board.demo ? 'DEMO' : 'FEED')
+                                : shell == 5 && page == 4
+                                ? 'HISTORICAL STATS'
+                                : board.demo
+                                ? 'DEMONSTRATION'
+                                : 'PROVIDER FEED',
+                            shell == 5 && page == 4
+                                ? mint
+                                : board.demo
+                                ? EdgeColors.warn
+                                : EdgeColors.accent,
+                          ),
+                          TextButton(
+                            key: const Key('more-menu'),
+                            style: TextButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              minimumSize: const Size(44, 44),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                              ),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              textStyle: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              backgroundColor: inMore
+                                  ? EdgeColors.accent.withValues(alpha: .16)
+                                  : null,
+                            ),
+                            onPressed: openMore,
+                            child: const Text('More'),
+                          ),
+                          TextButton(
+                            key: const Key('ask-coach'),
+                            style: TextButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              minimumSize: const Size(44, 44),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                              ),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              textStyle: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            onPressed: () => showAskCoach(
+                              context,
+                              brief: backend && error == null
+                                  ? coachBrief()
+                                  : null,
+                              ask: backend && error == null
+                                  ? repository.assistant
+                                  : null,
+                            ),
+                            child: const Text('Ask Coach'),
+                          ),
+                          if (!(shell == 5 && page == 4))
+                            IconButton(
+                              tooltip: 'Refresh odds',
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 48,
+                                minHeight: 48,
+                              ),
+                              onPressed: loading
+                                  ? null
+                                  : () => refresh(onDemand: true),
+                              icon: loading
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.refresh),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    if (shell == 5 && inResearch) researchTabs(),
+                    Expanded(
+                      child: shell == 5 ? legacyPage(wide) : coachPage(),
+                    ),
+                  ],
+                ),
               ),
-            ),
+            ],
+          ),
+        ),
         bottomNavigationBar: wide
             ? null
             : NavigationBarTheme(
@@ -583,16 +624,18 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
           : null,
     ),
     2 => GamesScreen(
-      board: board,
+      board: pricedBoard,
       now: now,
       enabledBooks: enabledBooks,
       model: coachModel,
       settings: edgeSettings,
     ),
     3 => ParlaysScreen(
-      board: board,
+      board: pricedBoard,
       now: now,
       enabledBooks: enabledBooks,
+      model: coachModel,
+      settings: edgeSettings,
     ),
     4 => MyBetsScreen(
       store: researchStore,
@@ -658,7 +701,10 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
         padding: const EdgeInsets.only(bottom: 12),
         child: Card(
           child: ListTile(
-            title: Text(title, style: EdgeType.body.copyWith(fontWeight: FontWeight.w700)),
+            title: Text(
+              title,
+              style: EdgeType.body.copyWith(fontWeight: FontWeight.w700),
+            ),
             subtitle: Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(subtitle, style: EdgeType.label),
@@ -688,10 +734,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (page != 4) ...[
-              sourcePanel(),
-              const SizedBox(height: 26),
-            ],
+            if (page != 4) ...[sourcePanel(), const SizedBox(height: 26)],
             if (page == 0)
               overview()
             else if (page == 1)
@@ -1344,55 +1387,53 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
           ),
           const SizedBox(height: 16),
           ...rows.map(
-              (q) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: box(
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              q.book,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
+            (q) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: box(
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            q.book,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
-                          Text(
-                            americanLabel(q.decimal),
-                            style: const TextStyle(fontSize: 24, color: mint),
-                          ),
-                        ],
-                      ),
-                      Text(
-                        '${pct(impliedProbability(q.decimal))} break-even · ${quoteFreshness(q)}',
-                      ),
-                      Text(
-                        'Profit on \$100 win: \$${((q.decimal - 1) * 100).toStringAsFixed(2)}',
-                      ),
-                      ExpansionTile(
-                        key: PageStorageKey(
-                          'quote-details-${q.bookId}-${q.selection.key}',
                         ),
-                        tilePadding: EdgeInsets.zero,
-                        title: const Text('Timestamps and calculation'),
-                        children: [
-                          Text(
-                            'Source ${stamp(q.sourceAt)}\nCollected ${stamp(q.collectedAt)}\nProvider ${q.provider}\n${scenario ? 'Scenario EV ${pct(expectedValue(q.decimal, win))}' : 'MODEL EV: unavailable'}',
-                          ),
-                        ],
+                        Text(
+                          americanLabel(q.decimal),
+                          style: const TextStyle(fontSize: 24, color: mint),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      '${pct(impliedProbability(q.decimal))} break-even · ${quoteFreshness(q)}',
+                    ),
+                    Text(
+                      'Profit on \$100 win: \$${((q.decimal - 1) * 100).toStringAsFixed(2)}',
+                    ),
+                    ExpansionTile(
+                      key: PageStorageKey(
+                        'quote-details-${q.bookId}-${q.selection.key}',
                       ),
-                      TextButton(
-                        onPressed: canResearch(q) ? () => investigate(q) : null,
-                        child: const Text('Research this price'),
-                      ),
-                    ],
-                  ),
+                      tilePadding: EdgeInsets.zero,
+                      title: const Text('Timestamps and calculation'),
+                      children: [
+                        Text(
+                          'Source ${stamp(q.sourceAt)}\nCollected ${stamp(q.collectedAt)}\nProvider ${q.provider}\n${scenario ? 'Scenario EV ${pct(expectedValue(q.decimal, win))}' : 'MODEL EV: unavailable'}',
+                        ),
+                      ],
+                    ),
+                    TextButton(
+                      onPressed: canResearch(q) ? () => investigate(q) : null,
+                      child: const Text('Research this price'),
+                    ),
+                  ],
                 ),
               ),
             ),
+          ),
           const SizedBox(height: 12),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,

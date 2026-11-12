@@ -10,14 +10,13 @@ import 'coach_widgets.dart';
 /// The comparison a person sees before opening a game.
 /// One word, then the two numbers being compared. Nothing else.
 class CoachLineSummary extends StatelessWidget {
-  const CoachLineSummary({super.key, required this.line, this.compact = true});
+  const CoachLineSummary({super.key, required this.line});
 
   final CoachLine line;
-  final bool compact;
 
   @override
   Widget build(BuildContext context) {
-    final verdict = line.flagged ? 'Edge' : 'No gap';
+    final verdict = line.flagged ? 'Differs from books' : 'Close to the books';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -31,9 +30,7 @@ class CoachLineSummary extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           verdict,
-          style: EdgeType.title.copyWith(
-            color: line.flagged ? EdgeColors.good : EdgeColors.textSecondary,
-          ),
+          style: EdgeType.title.copyWith(color: EdgeColors.textSecondary),
         ),
         const SizedBox(height: 8),
         Text('Our number: ${line.ourSpread}', style: EdgeType.body),
@@ -43,13 +40,11 @@ class CoachLineSummary extends StatelessWidget {
               : 'The books: ${line.booksSpread}',
           style: EdgeType.body,
         ),
-        if (!compact) ...[
-          const SizedBox(height: 8),
-          Text(
-            'Shown for comparison, not a pick.',
-            style: EdgeType.label.copyWith(color: EdgeColors.textSecondary),
-          ),
-        ],
+        const SizedBox(height: 8),
+        Text(
+          'Shown for comparison, not a pick.',
+          style: EdgeType.label.copyWith(color: EdgeColors.textSecondary),
+        ),
       ],
     );
   }
@@ -78,7 +73,7 @@ class CoachLineCard extends StatelessWidget {
     ].whereType<SideEdge>();
     return CoachCard(
       child: Reveal(
-        verdict: CoachLineSummary(line: line, compact: false),
+        verdict: CoachLineSummary(line: line),
         reasons: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -89,7 +84,7 @@ class CoachLineCard extends StatelessWidget {
             Text(line.edgeReason, style: EdgeType.body),
             const SizedBox(height: 6),
             Text(
-              'An Edge is our number compared with the books. It is a comparison, not a promise.',
+              'This is our number compared with the books. It is a comparison, not a pick.',
               style: EdgeType.body.copyWith(color: EdgeColors.textSecondary),
             ),
           ],
@@ -112,11 +107,13 @@ class CoachLineCard extends StatelessWidget {
                   child: Text(
                     '${edge.label} · best price ${edge.quote!.book} ${americanLabel(edge.quote!.decimal)}'
                     '${edge.expectedProfit == null ? '' : ' · ${signedPercent(edge.expectedProfit!)} if our chance is right'}',
-                    style: EdgeType.body.copyWith(color: EdgeColors.textSecondary),
+                    style: EdgeType.body.copyWith(
+                      color: EdgeColors.textSecondary,
+                    ),
                   ),
                 ),
             Text(
-              'The badge appears when our number and the books differ by at least '
+              'The mark appears when our number and the books differ by at least '
               '${line.settings.spreadPoints.toStringAsFixed(1)} points, or the best price '
               'is at least ${(line.settings.minExpectedValue * 100).toStringAsFixed(0)}% '
               'ahead of our chance.',

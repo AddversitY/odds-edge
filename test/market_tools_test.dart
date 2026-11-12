@@ -351,21 +351,30 @@ void main() {
     expect(explanation, isNot(contains('loses one side and wins the other')));
   });
 
-  test(
-    'demo snapshot exposes sample arbitrage and no sharp book or middle',
-    () {
-      final scan = scanMarkets(demoBoard(now), now);
-      expect(scan.demo, isTrue);
-      expect(scan.arbitrage, isNotEmpty);
-      expect(scan.arbitrage.every((arb) => arb.sameBook), isTrue);
-      expect(scan.middles, isEmpty);
-      expect(scan.markets.every((market) => market.sharpLabel == null), isTrue);
-      expect(
-        scan.markets.any((market) => (market.bestMarketEv ?? 0) > 0),
-        isTrue,
-      );
-    },
-  );
+  test('demo snapshot exposes sample arbitrage, a Pinnacle spread or total, and no middle', () {
+    final scan = scanMarkets(demoBoard(now), now);
+    expect(scan.demo, isTrue);
+    expect(scan.arbitrage, isNotEmpty);
+    expect(scan.arbitrage.every((arb) => arb.sameBook), isTrue);
+    expect(scan.middles, isEmpty);
+    expect(
+      scan.markets.any((market) => market.sharpLabel == 'Pinnacle'),
+      isTrue,
+    );
+    expect(
+      scan.markets
+          .where(
+            (market) =>
+                market.market == 'h2h' || market.market.startsWith('player_'),
+          )
+          .every((market) => market.sharpLabel == null),
+      isTrue,
+    );
+    expect(
+      scan.markets.any((market) => (market.bestMarketEv ?? 0) > 0),
+      isTrue,
+    );
+  });
 
   test('parlay fair price multiplies unrelated chances and refuses same-game multiplication', () {
     final unrelated = priceParlay(

@@ -158,6 +158,24 @@ does not call this route for the Props screen: the sample board already
 includes one passing-yards example. `ODDS_API_KEY` is accepted when
 `THE_ODDS_API_KEY` is empty. The key is never written into an error.
 
+Pinnacle is a third, smaller budget, and only for NFL spreads and totals.
+`GET /v1/sharp` returns the saved snapshot and does not spend a credit.
+`GET /v1/sharp?refresh=1` may spend. The request uses the eu region and
+`bookmakers=pinnacle`, which The Odds API bills as one region, so spreads
+and totals cost 2 credits. The cache lasts 8 hours. A day allows 3 pulls
+and 6 credits. A month allows 18 pulls and 36 credits. A pull is skipped
+when the credits left would fall below the regular-snapshot hold
+(`ODDS_CREDIT_RESERVE`, default 50) plus those 2 credits. The one-minute
+timer asks for this board, and a fresh cache does not call the network.
+A missing or zero `x-requests-last` header still counts as 2 credits, so
+a pull cannot be retried for free. The cache file is
+`backend/data/sharp-snapshot.json` and is not committed. Sample mode does
+not call the network: the sample board already includes a Pinnacle price
+on the spread and the total. The key is never written into an error, a
+log line, or the cache file. About 200 free credits were left when this
+cap was added. The regular board and props still come first. Pinnacle
+adds at most 36 credits in a month.
+
 The Odds API's $30/month plan includes 20,000 credits, which is enough to
 refresh about every 60 seconds during games. That upgrade is not turned on
 here. A 60-second poll of three markets would use up the free 500 credits in
