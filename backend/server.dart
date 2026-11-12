@@ -11,6 +11,7 @@ import 'prop_odds.dart';
 import 'providers.dart';
 import 'quota.dart';
 import 'service.dart';
+import 'sharp_odds.dart';
 
 Future<void> main() async {
   final env = Platform.environment;
@@ -85,14 +86,33 @@ Future<void> main() async {
           },
           lines: lines,
         );
+  final sharp = live == null
+      ? null
+      : SharpCoordinator(
+          apiKey: config.apiKey,
+          transport: live.transport,
+          cache: SharpCache(File('backend/data/sharp-snapshot.json')),
+          scheduledHold: config.creditReserve,
+          creditsRemaining: () => ledger.remaining,
+          onCredit: (observation, {required bool oddsCall}) {
+            ledger.apply(
+              observation,
+              at: DateTime.now().toUtc(),
+              updateLastCost: oddsCall,
+            );
+            unawaited(ledger.save());
+          },
+        );
   if (live != null) {
     await service.restore();
     // The timer keeps the shared snapshot current even when nobody has the
     // app open. It only calls The Odds API when a planned slot is due.
     // Prop prices are a separate, smaller budget and are not polled here.
+    // Pinnacle uses its own cache. A fresh cache does not call the network.
     unawaited(service.maintain());
     Timer.periodic(const Duration(minutes: 1), (_) {
       unawaited(service.maintain());
+      unawaited(sharp!.board(DateTime.now().toUtc()));
     });
   }
   final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 8787);
@@ -113,6 +133,7 @@ Future<void> main() async {
         assistant: assistant,
         props: props,
         lines: lines,
+        sharp: sharp,
       );
     } finally {
       await request.response.close();
@@ -127,6 +148,7 @@ Future<void> handleRequest(
   required XaiAssistant assistant,
   PropCoordinator? props,
   LineHistory? lines,
+  SharpCoordinator? sharp,
   String modelPath = 'assets/nfl-model.json',
 }) async {
   _cors(request);
@@ -166,6 +188,21 @@ Future<void> handleRequest(
                 DateTime.now().toUtc(),
                 refresh: request.uri.queryParameters['refresh'] == '1',
               )).toJson();
+      case '/v1/sharp':
+        result = sharp == null
+            ? {
+                'events': <Object>[],
+                'quotes': <Object>[],
+                'fetchedAt': DateTime.now().toUtc().toIso8601String(),
+                'demo': true,
+                'notices': [
+                  'Pinnacle spreads and totals are requested only when the server is using The Odds API. Sample mode already includes a Pinnacle price on the main board.',
+                ],
+              }
+            : (await sharp.board(
+                DateTime.now().toUtc(),
+                refresh: request.uri.queryParameters['refresh'] == '1',
+              )).toJson();
       case '/v1/model':
         final modelFile = File(modelPath);
         if (!modelFile.existsSync()) {
@@ -197,8 +234,7 @@ Future<void> handleRequest(
           'snapshots': history == null
               ? <Object>[]
               : await history.forEvent(event),
-          'notice':
-              'Prices this server already fetched. Reading them does not call The Odds API.',
+          'notice': 'Prices this server already fetched. Reading them does not call The Odds API.',
         };
       case '/v1/history':
         final selection = request.uri.queryParameters['selection'];
@@ -267,7 +303,10 @@ Future<Map<String, dynamic>> _readJsonObject(HttpRequest request) async {
 
 void _cors(HttpRequest request) {
   request.response.headers.set('Access-Control-Allow-Origin', '*');
-  request.response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  request.response.headers.set(
+    'Access-Control-Allow-Methods',
+    'GET, POST, OPTIONS',
+  );
   request.response.headers.set('Access-Control-Allow-Headers', 'Content-Type');
 }
 

@@ -53,7 +53,15 @@ Each prop row keeps the book's `last_update` time. The card says how old that ti
 
 ## Coach's Line
 
-The Games list and the game page show Coach's Line: our spread and total next to the books, the chance the favorite covers, the chance the over hits, and an Edge badge when the gap clears the setting on More → Coach's model. The number is this app's own past-seasons model. It reads the odds already on the screen. It does not spend Odds API credits. Sample mode uses the bundled model file with the sample prices. How to refresh it, and what the past test means, is in `docs/MODEL.md`. The history is nflverse, CC BY 4.0, the same license file as the hit rates. Odds Edge is not affiliated with nflverse.
+The Games list and the game page show Coach's Line: our spread and total next to the books, the chance the favorite covers, and the chance the over hits. When our number and the books differ, the list says "Differs from books" in a neutral color, with "Shown for comparison, not a pick." The past test of this number lost money, so that mark is not a pick. The number is this app's own past-seasons model. It reads the odds already on the screen. It does not spend Odds API credits. Sample mode uses the bundled model file with the sample prices. How to refresh it, and what the past test means, is in `docs/MODEL.md`. The history is nflverse, CC BY 4.0, the same license file as the hit rates. Odds Edge is not affiliated with nflverse.
+
+Each side on the game page, each prop, and each parlay leg is one word: Bet, Lean, or Skip. Bet means the price is ahead of our chance by at least 3 cents per dollar. Lean is a smaller profit. Skip is a loss, a tie, or a missing chance. A side that has cleared often can still be Skip when the price is short. The app then names a better price in this order: the same line at another book, a different line, or a different leg. If none of those is better, it says so.
+
+Prop matchup cards use the bundled nflverse injury report and snap counts (`assets/nfl-matchup.json`, CC BY 4.0). Participation, the play-by-play record of who was on the field, is not updated during the season, so the card uses snap counts and says so. A missing injury or snap is left blank.
+
+A parlay is judged leg by leg and then as one ticket. Legs in different games have their chances multiplied. Legs in the same game move together, so those chances are not just multiplied. A same-game payout the app builds is labeled estimated. A payout typed from a slip is the real price. The math names the book in the snapshot that has every leg at the best combined price.
+
+Pinnacle is the sharp-book reference for NFL spreads and totals only. It is fetched from The Odds API's eu region, at most a few times a day, and cached for 8 hours. The route is `GET /v1/sharp`. Details and the credit caps are in `backend/README.md`.
 
 My Bets saves the number on the ticket when a bet is logged. After the game, the closing number can be typed on that bet. The log says whether that number beat the close. The model page states the past test in plain language, including when there is no edge. A model does not guarantee the result.
 

@@ -4,11 +4,13 @@ import '../domain/coach_board.dart';
 import '../domain/coach_model.dart';
 import '../domain/market_math.dart';
 import '../domain/odds.dart';
+import '../domain/value_check.dart';
 import '../explained_number.dart';
 import '../theme/edge_theme.dart';
 import '../theme/reveal.dart';
 import 'coach_line_view.dart';
 import 'coach_widgets.dart';
+import 'value_view.dart';
 
 enum _When { all, today, upcoming }
 
@@ -216,7 +218,9 @@ class _GameDetail extends StatelessWidget {
                 if (game.awayChance == null || game.homeChance == null)
                   Text(
                     'Unavailable',
-                    style: EdgeType.title.copyWith(color: EdgeColors.textSecondary),
+                    style: EdgeType.title.copyWith(
+                      color: EdgeColors.textSecondary,
+                    ),
                   )
                 else
                   _SplitBar(
@@ -241,6 +245,7 @@ class _GameDetail extends StatelessWidget {
               board: board,
               now: now,
               books: books,
+              line: line,
             ),
           const SizedBox(height: 12),
           const ToolNote(
@@ -287,11 +292,11 @@ class _SplitBar extends StatelessWidget {
                     child: FittedBox(
                       child: Text(
                         '$away ${percentLabel(awayChance)}',
-                          style: const TextStyle(
-                            color: EdgeColors.onAccent,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 15,
-                          ),
+                        style: const TextStyle(
+                          color: EdgeColors.onAccent,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                        ),
                       ),
                     ),
                   ),
@@ -308,7 +313,7 @@ class _SplitBar extends StatelessWidget {
                     child: FittedBox(
                       child: Text(
                         '$home ${percentLabel(homeChance)}',
-                          style: const TextStyle(
+                        style: const TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 15,
                         ),
@@ -332,6 +337,7 @@ class _MarketBlock extends StatelessWidget {
     required this.board,
     required this.now,
     required this.books,
+    this.line,
   });
 
   final String title;
@@ -339,6 +345,7 @@ class _MarketBlock extends StatelessWidget {
   final OddsBoard board;
   final DateTime now;
   final Set<String>? books;
+  final CoachLine? line;
 
   @override
   Widget build(BuildContext context) {
@@ -362,6 +369,7 @@ class _MarketBlock extends StatelessWidget {
                     board: board,
                     now: now,
                     books: books,
+                    line: line,
                   ),
           ],
         ),
@@ -377,20 +385,20 @@ class _SideRow extends StatefulWidget {
     required this.board,
     required this.now,
     required this.books,
+    this.line,
   });
   final PricedSide side;
   final PricedMarket market;
   final OddsBoard board;
   final DateTime now;
   final Set<String>? books;
+  final CoachLine? line;
 
   @override
   State<_SideRow> createState() => _SideRowState();
 }
 
 class _SideRowState extends State<_SideRow> {
-  bool open = false;
-
   @override
   Widget build(BuildContext context) {
     final best = widget.side.best;
@@ -401,51 +409,153 @@ class _SideRowState extends State<_SideRow> {
       books: widget.books,
       fairProbability: widget.side.fairProbability,
     );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          minVerticalPadding: 12,
-          onTap: () => setState(() => open = !open),
-          title: Text(widget.side.selection.label, style: EdgeType.body),
-          subtitle: Text(
-            best == null
-                ? 'No open price'
-                : '${best.book} ${americanLabel(best.decimal)} · ${priceAge(best.sourceAt, widget.now)}',
-            style: EdgeType.label,
-          ),
-          trailing: Text(
-            open ? 'Hide the math' : 'The math',
-            style: EdgeType.label.copyWith(color: EdgeColors.accent),
-          ),
-        ),
-        if (open) ...[
-          if (widget.side.marketEv != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                '${signedPercent(widget.side.marketEv!)} expected profit versus the fee-free chance',
-                style: EdgeType.body,
-              ),
+    final other = _otherSide(widget.market, widget.side);
+    final chance = _ourChance(widget.line, widget.side.selection);
+    final verdict = judgeValue(
+      ValueInput(
+        label: widget.side.selection.label,
+        ourChance: chance,
+        decimal: best?.decimal,
+        otherDecimal: best == null || other == null
+            ? null
+            : _priceAt(widget.board, other, best.bookId),
+        consensusFair: widget.side.fairProbability,
+        source: "Coach's Line",
+        modelUnproven: chance != null,
+      ),
+    );
+    final sharp = pinnacleFairChance(
+      widget.board,
+      widget.side.selection,
+      other,
+      widget.now,
+    );
+    final alternative = suggestAlternative(
+      current: verdict,
+      sameLine: [
+        for (final row in ladder)
+          if (best == null || row.quote.bookId != best.bookId)
+            ValueInput(
+              label: '${row.quote.book} ${widget.side.selection.label}',
+              ourChance: chance,
+              decimal: row.quote.decimal,
+              otherDecimal: other == null
+                  ? null
+                  : _priceAt(widget.board, other, row.quote.bookId),
+              consensusFair: widget.side.fairProbability,
+              source: "Coach's Line",
+              modelUnproven: chance != null,
             ),
-          for (final row in ladder)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                '${row.quote.book}  ${americanLabel(row.quote.decimal)}'
-                '${row.expectedProfit == null ? '' : '  ${signedPercent(row.expectedProfit!)}'}'
-                '  · ${priceAge(row.quote.sourceAt, widget.now)}',
-                style: EdgeType.body,
-              ),
+      ],
+      altLines: const [],
+      otherLegs: [
+        for (final side in widget.market.sides)
+          if (side.selection.key != widget.side.selection.key &&
+              side.best != null)
+            ValueInput(
+              label: side.selection.label,
+              ourChance: _ourChance(widget.line, side.selection),
+              decimal: side.best!.decimal,
+              consensusFair: side.fairProbability,
+              source: "Coach's Line",
+              modelUnproven: _ourChance(widget.line, side.selection) != null,
             ),
-          if (widget.market.rulesUnverified)
-            Text(
-              unverifiedRulesNote,
-              style: EdgeType.label.copyWith(color: EdgeColors.textSecondary),
-            ),
-        ],
       ],
     );
+    final shown = alternative == null
+        ? verdict
+        : ValueVerdict(
+            word: verdict.word,
+            why: '${verdict.why} $alternative',
+            math: verdict.math,
+            ourChance: verdict.ourChance,
+            fairChance: verdict.fairChance,
+            breakEven: verdict.breakEven,
+            expectedValue: verdict.expectedValue,
+            alternative: alternative,
+            overpriced: verdict.overpriced,
+          );
+    final pinnacle = sharp == null
+        ? 'Pinnacle is not in this snapshot for this side. The fee-free chance is the books that are here.'
+        : 'Pinnacle\'s fee-free chance is ${percentLabel(sharp)}. That is the sharp book\'s number for the spread or total, not a pick.';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: ValueView(
+        verdict: shown,
+        caption: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 4),
+            Text(widget.side.selection.label, style: EdgeType.body),
+            Text(
+              best == null
+                  ? 'No open price'
+                  : '${best.book} ${americanLabel(best.decimal)} · ${priceAge(best.sourceAt, widget.now)}',
+              style: EdgeType.label,
+            ),
+          ],
+        ),
+        extraWhy: Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(pinnacle, style: EdgeType.body),
+        ),
+        extraMath: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 8),
+            for (final row in ladder)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  '${row.quote.book}  ${americanLabel(row.quote.decimal)}'
+                  '${row.expectedProfit == null ? '' : '  ${signedPercent(row.expectedProfit!)} if the fee-free chance is right'}'
+                  '  · ${priceAge(row.quote.sourceAt, widget.now)}',
+                  style: EdgeType.body,
+                ),
+              ),
+            if (widget.market.rulesUnverified)
+              Text(
+                unverifiedRulesNote,
+                style: EdgeType.label.copyWith(color: EdgeColors.textSecondary),
+              ),
+          ],
+        ),
+      ),
+    );
   }
+}
+
+Selection? _otherSide(PricedMarket market, PricedSide side) {
+  for (final item in market.sides) {
+    if (item.selection.key != side.selection.key) return item.selection;
+  }
+  return null;
+}
+
+double? _priceAt(OddsBoard board, Selection selection, String bookId) {
+  for (final quote in board.quotes) {
+    if (quote.bookId != bookId || quote.selection.key != selection.key) {
+      continue;
+    }
+    return quote.decimal;
+  }
+  return null;
+}
+
+double? _ourChance(CoachLine? line, Selection selection) {
+  if (line == null) return null;
+  if (selection.market == 'spreads') {
+    if (selection.outcome == line.event.home) return line.homeCoverProbability;
+    if (selection.outcome == line.event.away &&
+        line.homeCoverProbability != null) {
+      return 1 - line.homeCoverProbability!;
+    }
+  }
+  if (selection.market == 'totals') {
+    if (selection.outcome == 'Over') return line.overProbability;
+    if (selection.outcome == 'Under' && line.overProbability != null) {
+      return 1 - line.overProbability!;
+    }
+  }
+  return null;
 }

@@ -38,52 +38,62 @@ void main() {
     collectedAt: now,
   );
 
-  test('prop cards use the best open price and leave a one-sided edge blank', () {
-    final board = demoBoard(now);
-    final cards = propCards(board, now);
-    final over = cards.singleWhere(
-      (card) => card.player == 'Josh Allen' && card.lineSide.name == 'over',
-    );
-    expect(over.marketLabel, 'Passing yards');
-    expect(over.line, 249.5);
-    expect(over.best!.bookId, 'hardrock');
-    expect(over.implied, closeTo(1 / over.best!.decimal, 1e-12));
-    expect(over.fairProbability, isNotNull);
-    expect(over.expectedProfit, isNotNull);
-    expect(over.bookRows.first.quote.decimal, over.best!.decimal);
-    expect(
-      over.bookRows.map((row) => row.quote.decimal).toList(),
-      orderedEquals(
-        [...over.bookRows.map((row) => row.quote.decimal)]..sort(
-          (a, b) => b.compareTo(a),
+  test(
+    'prop cards use the best open price and leave a one-sided edge blank',
+    () {
+      final board = demoBoard(now);
+      final cards = propCards(board, now);
+      final over = cards.singleWhere(
+        (card) =>
+            card.player == 'Josh Allen' &&
+            card.lineSide.name == 'over' &&
+            card.line == 249.5,
+      );
+      expect(over.marketLabel, 'Passing yards');
+      expect(over.line, 249.5);
+      expect(over.best!.bookId, 'hardrock');
+      expect(over.implied, closeTo(1 / over.best!.decimal, 1e-12));
+      expect(over.fairProbability, isNotNull);
+      expect(over.expectedProfit, isNotNull);
+      expect(over.bookRows.first.quote.decimal, over.best!.decimal);
+      expect(
+        over.bookRows.map((row) => row.quote.decimal).toList(),
+        orderedEquals(
+          [...over.bookRows.map((row) => row.quote.decimal)]
+            ..sort((a, b) => b.compareTo(a)),
         ),
-      ),
-    );
+      );
 
-    final oneSided = OddsBoard(
-      events: [
-        NflEvent('g', 'Buffalo Bills', 'Kansas City Chiefs', now.add(const Duration(days: 1))),
-      ],
-      quotes: [
-        quote(
-          eventId: 'g',
-          market: 'player_pass_yds',
-          outcome: 'Over',
-          bookId: 'draftkings',
-          book: 'DraftKings',
-          decimal: 1.91,
-          point: 249.5,
-          participant: 'Josh Allen',
-        ),
-      ],
-      fetchedAt: now,
-    );
-    final lonely = propCards(oneSided, now).single;
-    expect(lonely.best!.book, 'DraftKings');
-    expect(lonely.fairProbability, isNull);
-    expect(lonely.expectedProfit, isNull);
-    expect(lonely.implied, closeTo(impliedProbability(1.91), 1e-12));
-  });
+      final oneSided = OddsBoard(
+        events: [
+          NflEvent(
+            'g',
+            'Buffalo Bills',
+            'Kansas City Chiefs',
+            now.add(const Duration(days: 1)),
+          ),
+        ],
+        quotes: [
+          quote(
+            eventId: 'g',
+            market: 'player_pass_yds',
+            outcome: 'Over',
+            bookId: 'draftkings',
+            book: 'DraftKings',
+            decimal: 1.91,
+            point: 249.5,
+            participant: 'Josh Allen',
+          ),
+        ],
+        fetchedAt: now,
+      );
+      final lonely = propCards(oneSided, now).single;
+      expect(lonely.best!.book, 'DraftKings');
+      expect(lonely.fairProbability, isNull);
+      expect(lonely.expectedProfit, isNull);
+      expect(lonely.implied, closeTo(impliedProbability(1.91), 1e-12));
+    },
+  );
 
   test('a prop filter keeps a book and a longer price, and drops the rest', () {
     final cards = propCards(demoBoard(now), now);
@@ -116,7 +126,9 @@ void main() {
     }
     final scan = scanMarkets(board, now);
     final first = slate.games.first;
-    final markets = scan.markets.where((market) => market.eventId == first.event.id);
+    final markets = scan.markets.where(
+      (market) => market.eventId == first.event.id,
+    );
     expect(
       first.positiveEvMarkets,
       markets.where((market) => (market.bestMarketEv ?? 0) > 0).length,
@@ -125,7 +137,8 @@ void main() {
       first.arbitrageCount,
       scan.arbitrage
           .where(
-            (item) => item.matchup == '${first.event.away} at ${first.event.home}',
+            (item) =>
+                item.matchup == '${first.event.away} at ${first.event.home}',
           )
           .length,
     );
@@ -162,81 +175,91 @@ void main() {
       scan: scanMarkets(demoBoard(now), now),
     );
     expect(suggestions, isNotEmpty);
-    expect(suggestions.first.legs.map((leg) => leg.eventId).toSet(), hasLength(2));
+    expect(
+      suggestions.first.legs.map((leg) => leg.eventId).toSet(),
+      hasLength(2),
+    );
     expect(suggestions.first.plainEnglish, contains('unrelated games'));
     expect(
       suggestions.every(
-        (ticket) => ticket.legs.map((leg) => leg.quote.bookId).toSet().length == 1,
+        (ticket) =>
+            ticket.legs.map((leg) => leg.quote.bookId).toSet().length == 1,
       ),
       isTrue,
     );
   });
 
-  test('a slip without a chance for every leg leaves the real chance blank', () {
-    final blank = checkSlip(const [
-      SlipLeg(decimal: 2),
-      SlipLeg(decimal: 1.91, winProbability: 0.5),
-    ]);
-    expect(blank.price.fairProbability, isNull);
-    expect(blank.plainEnglish, contains('real chance is blank'));
-    final told = checkSlip(const [
-      SlipLeg(decimal: 2, winProbability: 0.5),
-      SlipLeg(decimal: 2, winProbability: 0.4),
-    ]);
-    expect(told.price.fairProbability, closeTo(0.2, 1e-12));
-    expect(told.plainEnglish, contains('unrelated games'));
-  });
+  test(
+    'a slip without a chance for every leg leaves the real chance blank',
+    () {
+      final blank = checkSlip(const [
+        SlipLeg(decimal: 2),
+        SlipLeg(decimal: 1.91, winProbability: 0.5),
+      ]);
+      expect(blank.price.fairProbability, isNull);
+      expect(blank.plainEnglish, contains('real chance is blank'));
+      final told = checkSlip(const [
+        SlipLeg(decimal: 2, winProbability: 0.5),
+        SlipLeg(decimal: 2, winProbability: 0.4),
+      ]);
+      expect(told.price.fairProbability, closeTo(0.2, 1e-12));
+      expect(told.plainEnglish, contains('unrelated games'));
+    },
+  );
 
-  test('the bet calendar sums a local day and leaves pending out of profit', () {
-    final day = DateTime(2026, 10, 4, 15);
-    final bets = [
-      TrackedBet(
-        id: 'w',
-        placedAt: day,
-        description: 'Bills moneyline',
-        book: 'FanDuel',
-        decimal: 2,
-        stake: 10,
-        result: BetResult.won,
-      ),
-      TrackedBet(
-        id: 'l',
-        placedAt: day.add(const Duration(hours: 2)),
-        description: 'Under',
-        book: 'FanDuel',
-        decimal: 1.91,
-        stake: 5,
-        result: BetResult.lost,
-      ),
-      TrackedBet(
-        id: 'p',
-        placedAt: day,
-        description: 'Still open',
-        book: 'FanDuel',
-        decimal: 1.91,
-        stake: 20,
-        result: BetResult.pending,
-      ),
-      TrackedBet(
-        id: 'v',
-        placedAt: day.add(const Duration(days: 1)),
-        description: 'Voided',
-        book: 'FanDuel',
-        decimal: 1.91,
-        stake: 8,
-        result: BetResult.voided,
-      ),
-    ];
-    final reports = betCalendar(bets);
-    expect(reports, hasLength(2));
-    expect(reports.first.day, calendarDay(day));
-    expect(reports.first.settledProfit, closeTo(5, 1e-9));
-    expect(reports.first.pendingStake, 20);
-    expect(reports.first.settledCount, 2);
-    expect(reports.last.settledCount, 0);
-    expect(reports.last.settledProfit, 0);
-    expect(pendingStake(bets), 20);
-  });
+  test(
+    'the bet calendar sums a local day and leaves pending out of profit',
+    () {
+      final day = DateTime(2026, 10, 4, 15);
+      final bets = [
+        TrackedBet(
+          id: 'w',
+          placedAt: day,
+          description: 'Bills moneyline',
+          book: 'FanDuel',
+          decimal: 2,
+          stake: 10,
+          result: BetResult.won,
+        ),
+        TrackedBet(
+          id: 'l',
+          placedAt: day.add(const Duration(hours: 2)),
+          description: 'Under',
+          book: 'FanDuel',
+          decimal: 1.91,
+          stake: 5,
+          result: BetResult.lost,
+        ),
+        TrackedBet(
+          id: 'p',
+          placedAt: day,
+          description: 'Still open',
+          book: 'FanDuel',
+          decimal: 1.91,
+          stake: 20,
+          result: BetResult.pending,
+        ),
+        TrackedBet(
+          id: 'v',
+          placedAt: day.add(const Duration(days: 1)),
+          description: 'Voided',
+          book: 'FanDuel',
+          decimal: 1.91,
+          stake: 8,
+          result: BetResult.voided,
+        ),
+      ];
+      final reports = betCalendar(bets);
+      expect(reports, hasLength(2));
+      expect(reports.first.day, calendarDay(day));
+      expect(reports.first.settledProfit, closeTo(5, 1e-9));
+      expect(reports.first.pendingStake, 20);
+      expect(reports.first.settledCount, 2);
+      expect(reports.last.settledCount, 0);
+      expect(reports.last.settledProfit, 0);
+      expect(pendingStake(bets), 20);
+    },
+  );
 
   test('saved plays round-trip and a removal is a later write', () async {
     final dir = await Directory.systemTemp.createTemp('saved-plays');

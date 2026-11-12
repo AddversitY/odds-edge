@@ -87,8 +87,92 @@ OddsBoard demoBoard(DateTime now) {
           1.94 + b * .005,
           participant: 'Josh Allen',
         );
+        if (b < 4) {
+          add(
+            'player_pass_yds',
+            'Over',
+            149.5,
+            1.18 + b * .01,
+            participant: 'Josh Allen',
+          );
+          add(
+            'player_pass_yds',
+            'Under',
+            149.5,
+            4.40 + b * .05,
+            participant: 'Josh Allen',
+          );
+        }
       }
     }
+    quotes.add(
+      OddsQuote(
+        selection: Selection(
+          eventId: event.id,
+          market: 'spreads',
+          outcome: event.away,
+          point: 3.5,
+        ),
+        bookId: 'pinnacle',
+        book: 'Pinnacle',
+        provider: 'demonstration',
+        decimal: 1.90,
+        sourceAt: now.subtract(const Duration(minutes: 8)),
+        collectedAt: now,
+        demo: true,
+      ),
+    );
+    quotes.add(
+      OddsQuote(
+        selection: Selection(
+          eventId: event.id,
+          market: 'spreads',
+          outcome: event.home,
+          point: -3.5,
+        ),
+        bookId: 'pinnacle',
+        book: 'Pinnacle',
+        provider: 'demonstration',
+        decimal: 1.90,
+        sourceAt: now.subtract(const Duration(minutes: 8)),
+        collectedAt: now,
+        demo: true,
+      ),
+    );
+    quotes.add(
+      OddsQuote(
+        selection: Selection(
+          eventId: event.id,
+          market: 'totals',
+          outcome: 'Over',
+          point: 47.5,
+        ),
+        bookId: 'pinnacle',
+        book: 'Pinnacle',
+        provider: 'demonstration',
+        decimal: 1.90,
+        sourceAt: now.subtract(const Duration(minutes: 8)),
+        collectedAt: now,
+        demo: true,
+      ),
+    );
+    quotes.add(
+      OddsQuote(
+        selection: Selection(
+          eventId: event.id,
+          market: 'totals',
+          outcome: 'Under',
+          point: 47.5,
+        ),
+        bookId: 'pinnacle',
+        book: 'Pinnacle',
+        provider: 'demonstration',
+        decimal: 1.90,
+        sourceAt: now.subtract(const Duration(minutes: 8)),
+        collectedAt: now,
+        demo: true,
+      ),
+    );
   }
   return OddsBoard(
     events: events,

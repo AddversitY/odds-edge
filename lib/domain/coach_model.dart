@@ -101,7 +101,10 @@ bool? overHit(double total, double totalLine) {
 }
 
 /// Chance the side the books favored covers. Null when the line is a pick'em.
-double? favoriteCoverProbability(double homeCoverProbability, double marketMargin) {
+double? favoriteCoverProbability(
+  double homeCoverProbability,
+  double marketMargin,
+) {
   if (marketMargin.abs() < 1e-9) return null;
   if (marketMargin > 0) return homeCoverProbability;
   return 1 - homeCoverProbability;
@@ -183,7 +186,10 @@ class LogisticModel {
       }
       return [
         for (final value in raw)
-          if (value is num) value.toDouble() else throw FormatException('Model $key is not numeric.'),
+          if (value is num)
+            value.toDouble()
+          else
+            throw FormatException('Model $key is not numeric.'),
       ];
     }
 
@@ -501,9 +507,15 @@ class CoachModel {
         changes: '${source['changes'] ?? ''}',
       ),
       settings: EdgeSettings(
-        spreadPoints: _asDouble(settings['spreadEdgePoints'], 'spreadEdgePoints'),
+        spreadPoints: _asDouble(
+          settings['spreadEdgePoints'],
+          'spreadEdgePoints',
+        ),
         totalPoints: _asDouble(settings['totalEdgePoints'], 'totalEdgePoints'),
-        minExpectedValue: _asDouble(settings['minExpectedValue'], 'minExpectedValue'),
+        minExpectedValue: _asDouble(
+          settings['minExpectedValue'],
+          'minExpectedValue',
+        ),
       ),
       marginScale: _asDouble(projection['marginScale'], 'marginScale'),
       homeFieldAdvantage: _asDouble(
@@ -516,7 +528,8 @@ class CoachModel {
       total: LogisticModel.fromJson(Map<String, dynamic>.from(total)),
       teams: [
         for (final team in teams)
-          if (team is Map) TeamStrength.fromJson(Map<String, dynamic>.from(team)),
+          if (team is Map)
+            TeamStrength.fromJson(Map<String, dynamic>.from(team)),
       ],
       backtest: BacktestReport(
         method: '${backtest['method'] ?? ''}',
@@ -636,7 +649,8 @@ class CoachLine {
   double? get marketMargin =>
       marketHomeSpread == null ? null : -marketHomeSpread!;
 
-  double? get favoriteCover => homeCoverProbability == null || marketMargin == null
+  double? get favoriteCover =>
+      homeCoverProbability == null || marketMargin == null
       ? null
       : favoriteCoverProbability(homeCoverProbability!, marketMargin!);
 
@@ -672,7 +686,7 @@ class CoachLine {
       if (underEdge?.flagged ?? false) underEdge!.reason,
     ];
     if (reasons.isEmpty) {
-      return 'No Edge at the current setting. Our number can still be compared with the books.';
+      return 'Our number is close to the books at the current setting. It can still be compared. This is a comparison, not a pick.';
     }
     return reasons.join(' ');
   }
@@ -684,7 +698,7 @@ class CoachLine {
     final over = overProbability == null
         ? 'Over chance was not computed.'
         : 'Chance the over hits ${(overProbability! * 100).toStringAsFixed(1)}%.';
-    return "Coach's Line $ourSpread. The books: ${booksSpread ?? 'no spread'}. $cover $over ${flagged ? 'Edge badge: yes.' : 'Edge badge: no.'}";
+    return "Coach's Line $ourSpread. The books: ${booksSpread ?? 'no spread'}. $cover $over ${flagged ? 'Differs from the books: yes.' : 'Differs from the books: no.'} Comparison, not a pick.";
   }
 
   Map<String, dynamic> evidence() => {
@@ -782,12 +796,12 @@ String _reason({
   final byPrice = profit != null && profit > 0;
   final gapText = pointGap.abs().toStringAsFixed(1);
   if (byPoints && byPrice) {
-    return '$name is an Edge: our $kind differs by $gapText points and the best price in this snapshot is ahead of our chance.';
+    return '$name differs from the books by $gapText points, and the best price in this snapshot is ahead of our chance. Comparison, not a pick.';
   }
   if (byPoints) {
-    return '$name is an Edge: our $kind and the books differ by $gapText points.';
+    return '$name differs from the books by $gapText points. Comparison, not a pick.';
   }
-  return '$name is an Edge: the best price in this snapshot is ahead of our chance.';
+  return 'The best price on $name is ahead of our chance. Comparison, not a pick.';
 }
 
 /// Days from the last game to kickoff, using the UTC date. Null when the last
@@ -820,7 +834,9 @@ String signedNumber(double value) {
 /// [homeMargin] positive means the home team is favored by that many points.
 String spreadLabel(String away, String home, double homeMargin) {
   if (homeMargin.abs() < 0.05) return "Pick'em";
-  if (homeMargin > 0) return '${shortClub(home)} -${homeMargin.toStringAsFixed(1)}';
+  if (homeMargin > 0) {
+    return '${shortClub(home)} -${homeMargin.toStringAsFixed(1)}';
+  }
   return '${shortClub(away)} -${(-homeMargin).toStringAsFixed(1)}';
 }
 
@@ -838,10 +854,12 @@ MarketLine readMarketLine(
   final totals = <double>[];
   for (final quote in quotes) {
     if (!open(quote) || quote.selection.point == null) continue;
-    if (quote.selection.market == 'spreads' && quote.selection.outcome == event.home) {
+    if (quote.selection.market == 'spreads' &&
+        quote.selection.outcome == event.home) {
       homeSpreads.add(quote.selection.point!);
     } else if (quote.selection.market == 'totals' &&
-        (quote.selection.outcome == 'Over' || quote.selection.outcome == 'Under')) {
+        (quote.selection.outcome == 'Over' ||
+            quote.selection.outcome == 'Under')) {
       totals.add(quote.selection.point!);
     }
   }
@@ -850,7 +868,8 @@ MarketLine readMarketLine(
     final awaySpreads = <double>[];
     for (final quote in quotes) {
       if (!open(quote) || quote.selection.point == null) continue;
-      if (quote.selection.market == 'spreads' && quote.selection.outcome == event.away) {
+      if (quote.selection.market == 'spreads' &&
+          quote.selection.outcome == event.away) {
         awaySpreads.add(-quote.selection.point!);
       }
     }

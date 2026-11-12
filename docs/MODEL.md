@@ -2,7 +2,7 @@
 
 Odds Edge has its own NFL number. It is a team-strength rating plus a small logistic regression. The app shows it as **Coach's Line** on the Games list and the game page, and the full write-up is under More → Coach's model.
 
-The number is not a tip. The model page repeats the past-seasons test, including when that test lost money. A difference from the books, and an Edge badge, do not guarantee the result.
+The number is not a tip. The model page repeats the past-seasons test, including when that test lost money. A difference from the books is marked "Differs from books". That mark is a comparison, not a pick.
 
 ## What it uses
 
@@ -41,7 +41,7 @@ For every scored game the test bets the side the model likes, at the closing num
 
 A separate line in the report counts only games where our number and the close differed by 2.5 points or more. That slice is easier to overread. The headline is the test that bets every game.
 
-The Edge badge on a current game uses the books in the snapshot, not a new download. It lights up when our number and those books differ by at least the setting (default 2.5 points) or the best price is at least 2% ahead of our chance per dollar, if our chance were right. The setting is on the model page. Moving it does not rewrite the past test.
+The "Differs from books" mark on a current game uses the books in the snapshot, not a new download. It appears when our number and those books differ by at least the setting (default 2.5 points) or the best price is at least 2% ahead of our chance per dollar, if our chance were right. The setting is on the model page. Moving it does not rewrite the past test. The mark is a comparison, not a pick. The past test of this number lost money.
 
 ## Run it
 
@@ -59,7 +59,7 @@ The GitHub Actions workflow `.github/workflows/nfl-model.yml` runs the unit test
 
 ## Where it shows up
 
-- Games list and game page: Coach's Line, the books' number, the chance the favorite covers, the chance the over hits, and an Edge badge when the setting is cleared.
-- More → Coach's model: the strength table, a plain-language explanation, the past test, the Edge setting, and the nflverse credit.
+- Games list and game page: Coach's Line, the books' number, the chance the favorite covers, the chance the over hits, and "Differs from books" when the setting is cleared. Each spread, total, and moneyline also gets Bet, Lean, or Skip from the price against our chance. A moneyline is Skip because this model has no moneyline chance. Pinnacle's fee-free chance, when the snapshot has it, is extra context for spreads and totals only.
+- More → Coach's model: the strength table, a plain-language explanation, the past test, the difference setting, and the nflverse credit.
 - Ask Coach: when the local backend is connected, the same numbers are included in the note the assistant is allowed to see. It still cannot invent a number that is not in that note, and it is told not to treat the model as a guarantee.
 - My Bets → Bet log: the number on the ticket is saved when you log the bet. The closing number is what you enter after the game. The line says whether you beat the close, and by how many points.

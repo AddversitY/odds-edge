@@ -18,16 +18,9 @@ void main() {
     expect(decayWeight(0), 1);
     expect(decayWeight(42), closeTo(0.5, 1e-12));
     expect(decayWeight(84), closeTo(0.25, 1e-12));
+    expect(() => decayWeight(-1), throwsArgumentError);
     expect(
-      () => decayWeight(-1),
-      throwsArgumentError,
-    );
-    expect(
-      shrunkAverage(
-        [(1.0, 200.0, 0)],
-        priorValue: 0,
-        priorPlays: 200,
-      ),
+      shrunkAverage([(1.0, 200.0, 0)], priorValue: 0, priorPlays: 200),
       closeTo(0.5, 1e-12),
     );
     expect(
@@ -86,36 +79,44 @@ void main() {
     );
   });
 
-  test('home cover uses the betting number, and a logged line beats the close', () {
-    expect(homeCovered(4, -3.5), isTrue);
-    expect(homeCovered(3, -3.5), isFalse);
-    expect(homeCovered(3, -3), isNull);
-    final bet = TrackedBet(
-      id: '1',
-      placedAt: DateTime.utc(2026, 11, 1),
-      description: 'Bills +3.5',
-      book: 'FanDuel',
-      decimal: americanToDecimal(-110),
-      stake: 10,
-      result: BetResult.pending,
-      market: 'spreads',
-      side: 'away',
-      line: 3.5,
-      closingLine: 2.5,
-    );
-    expect(bet.lineClvPoints, closeTo(1, 1e-9));
-    final over = bet.copyWith(market: 'totals', side: 'over', line: 47.5, closingLine: 48.5);
-    expect(over.lineClvPoints, closeTo(1, 1e-9));
-    final under = over.copyWith(side: 'under');
-    expect(under.lineClvPoints, closeTo(-1, 1e-9));
-    final roundTrip = TrackedBet.fromJson(bet.toJson());
-    expect(roundTrip.line, 3.5);
-    expect(roundTrip.closingLine, 2.5);
-    expect(roundTrip.market, 'spreads');
-    final ledger = BetLedger([bet, over]);
-    expect(ledger.beatClosingNumber, 2);
-    expect(ledger.averageLineClv, closeTo(1, 1e-9));
-  });
+  test(
+    'home cover uses the betting number, and a logged line beats the close',
+    () {
+      expect(homeCovered(4, -3.5), isTrue);
+      expect(homeCovered(3, -3.5), isFalse);
+      expect(homeCovered(3, -3), isNull);
+      final bet = TrackedBet(
+        id: '1',
+        placedAt: DateTime.utc(2026, 11, 1),
+        description: 'Bills +3.5',
+        book: 'FanDuel',
+        decimal: americanToDecimal(-110),
+        stake: 10,
+        result: BetResult.pending,
+        market: 'spreads',
+        side: 'away',
+        line: 3.5,
+        closingLine: 2.5,
+      );
+      expect(bet.lineClvPoints, closeTo(1, 1e-9));
+      final over = bet.copyWith(
+        market: 'totals',
+        side: 'over',
+        line: 47.5,
+        closingLine: 48.5,
+      );
+      expect(over.lineClvPoints, closeTo(1, 1e-9));
+      final under = over.copyWith(side: 'under');
+      expect(under.lineClvPoints, closeTo(-1, 1e-9));
+      final roundTrip = TrackedBet.fromJson(bet.toJson());
+      expect(roundTrip.line, 3.5);
+      expect(roundTrip.closingLine, 2.5);
+      expect(roundTrip.market, 'spreads');
+      final ledger = BetLedger([bet, over]);
+      expect(ledger.beatClosingNumber, 2);
+      expect(ledger.averageLineClv, closeTo(1, 1e-9));
+    },
+  );
 
   test('the bundled model file has 32 teams and a real walk-forward', () {
     final file = File('assets/nfl-model.json');
@@ -145,11 +146,7 @@ void main() {
     final board = demoBoard(now);
     final model = _fixtureModel();
     final game = board.events.first;
-    final line = model.lineFor(
-      game,
-      board.quotes,
-      settings: model.settings,
-    );
+    final line = model.lineFor(game, board.quotes, settings: model.settings);
     expect(line, isNotNull);
     expect(line!.booksSpread, 'Chiefs -3.5');
     expect(line.homeCoverProbability, isNotNull);
@@ -167,7 +164,9 @@ void main() {
     );
   });
 
-  testWidgets('the games list shows Coach\'s Line and an Edge badge', (tester) async {
+  testWidgets('the games list shows Coach\'s Line as a comparison', (
+    tester,
+  ) async {
     final now = DateTime.utc(2026, 11, 12);
     final board = demoBoard(now);
     final model = _fixtureModel();
@@ -186,13 +185,15 @@ void main() {
     expect(find.text("Coach's Line"), findsWidgets);
     expect(find.textContaining('Our number:'), findsWidgets);
     expect(find.text('The books: Chiefs -3.5'), findsWidgets);
-    expect(find.text('Edge'), findsWidgets);
+    expect(find.text('Differs from books'), findsWidgets);
+    expect(find.text('Edge'), findsNothing);
+    expect(find.text('Shown for comparison, not a pick.'), findsWidgets);
     await tester.tap(find.text('Buffalo Bills').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Why').first);
     await tester.pumpAndSettle();
     expect(find.textContaining('Chance the favorite covers'), findsOneWidget);
-    expect(find.textContaining('not a promise'), findsOneWidget);
+    expect(find.textContaining('comparison, not a pick'), findsWidgets);
   });
 
   testWidgets('My Bets compares the logged number with the closing number', (
@@ -215,12 +216,17 @@ void main() {
       ),
     );
     await tester.pumpWidget(
-      MaterialApp(home: Scaffold(body: MyBetsScreen(store: store))),
+      MaterialApp(
+        home: Scaffold(body: MyBetsScreen(store: store)),
+      ),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Bet log'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('beat the closing number by 1.0'), findsOneWidget);
+    expect(
+      find.textContaining('beat the closing number by 1.0'),
+      findsOneWidget,
+    );
     expect(find.textContaining('you beat the close on 1 of 1'), findsOneWidget);
   });
 
@@ -253,7 +259,11 @@ void main() {
 }
 
 CoachModel _fixtureModel() {
-  LogisticModel flat(List<String> names, {double slope = 0, int slopeIndex = 0}) {
+  LogisticModel flat(
+    List<String> names, {
+    double slope = 0,
+    int slopeIndex = 0,
+  }) {
     return LogisticModel(
       features: names,
       mean: List.filled(names.length, 0),
@@ -265,24 +275,25 @@ CoachModel _fixtureModel() {
     );
   }
 
-  TeamStrength team(String abbr, String name, int rank, double net) => TeamStrength(
-    abbr: abbr,
-    name: name,
-    rank: rank,
-    offEpa: net,
-    defEpa: 0,
-    netEpa: net,
-    strengthPoints: 40 * net,
-    offensePoints: 40 * net,
-    defensePoints: 0,
-    successRate: 0.45,
-    explosiveRate: 0.1,
-    turnoverRate: 0.02,
-    formEpa: 0,
-    playersOut: 0,
-    lastGame: '2026-11-08',
-    samplePlays: 800,
-  );
+  TeamStrength team(String abbr, String name, int rank, double net) =>
+      TeamStrength(
+        abbr: abbr,
+        name: name,
+        rank: rank,
+        offEpa: net,
+        defEpa: 0,
+        netEpa: net,
+        strengthPoints: 40 * net,
+        offensePoints: 40 * net,
+        defensePoints: 0,
+        successRate: 0.45,
+        explosiveRate: 0.1,
+        turnoverRate: 0.02,
+        formEpa: 0,
+        playersOut: 0,
+        lastGame: '2026-11-08',
+        samplePlays: 800,
+      );
 
   return CoachModel(
     generatedAt: '2026-11-12T00:00:00Z',
@@ -303,32 +314,26 @@ CoachModel _fixtureModel() {
     homeFieldAdvantage: 1.5,
     totalIntercept: 44,
     totalScale: 10,
-    cover: flat(
-      const [
-        'spread_edge',
-        'off_diff',
-        'def_diff',
-        'form_diff',
-        'rest_diff',
-        'success_diff',
-        'explosive_diff',
-        'turnover_diff',
-        'out_diff',
-      ],
-      slope: 0.1,
-    ),
-    total: flat(
-      const [
-        'total_edge',
-        'off_sum',
-        'def_sum',
-        'explosive_sum',
-        'success_sum',
-        'rest_sum',
-        'out_sum',
-      ],
-      slope: 0.05,
-    ),
+    cover: flat(const [
+      'spread_edge',
+      'off_diff',
+      'def_diff',
+      'form_diff',
+      'rest_diff',
+      'success_diff',
+      'explosive_diff',
+      'turnover_diff',
+      'out_diff',
+    ], slope: 0.1),
+    total: flat(const [
+      'total_edge',
+      'off_sum',
+      'def_sum',
+      'explosive_sum',
+      'success_sum',
+      'rest_sum',
+      'out_sum',
+    ], slope: 0.05),
     teams: [
       team('KC', 'Kansas City Chiefs', 1, 0.15),
       team('BUF', 'Buffalo Bills', 2, -0.05),
@@ -359,8 +364,7 @@ CoachModel _fixtureModel() {
       totalsHitRate: 0.50,
       totalsRoi: -0.03,
       hasEdge: false,
-      plainEnglish:
-          'That is not an edge. A -110 bet needs about 52.4% just to break even.',
+      plainEnglish: 'That is not an edge. A -110 bet needs about 52.4% just to break even.',
     ),
   );
 }

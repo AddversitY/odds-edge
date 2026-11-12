@@ -47,7 +47,9 @@ class ModelScreen extends StatelessWidget {
               Text(
                 verdict,
                 style: EdgeType.display.copyWith(
-                  color: report.hasEdge ? EdgeColors.good : EdgeColors.textSecondary,
+                  color: report.hasEdge
+                      ? EdgeColors.good
+                      : EdgeColors.textSecondary,
                 ),
               ),
               const SizedBox(height: 8),
@@ -81,7 +83,10 @@ class ModelScreen extends StatelessWidget {
                 style: EdgeType.body,
               ),
               const SizedBox(height: 12),
-              Text(report.method, style: EdgeType.body.copyWith(color: EdgeColors.textSecondary)),
+              Text(
+                report.method,
+                style: EdgeType.body.copyWith(color: EdgeColors.textSecondary),
+              ),
               const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
@@ -89,21 +94,29 @@ class ModelScreen extends StatelessWidget {
                 children: [
                   _Stat('Seasons', report.seasonSpan),
                   _Stat('Games', '${report.games}'),
-                  _Stat('Profit at -110', report.roi == null ? '—' : signedPercent(report.roi!)),
+                  _Stat(
+                    'Profit at -110',
+                    report.roi == null ? '—' : signedPercent(report.roi!),
+                  ),
                   _Stat(
                     'Closer than the close',
-                    report.clvBeatRate == null ? '—' : percentLabel(report.clvBeatRate!),
+                    report.clvBeatRate == null
+                        ? '—'
+                        : percentLabel(report.clvBeatRate!),
                   ),
                 ],
               ),
-              if (report.favoriteHitRate != null || report.homeHitRate != null) ...[
+              if (report.favoriteHitRate != null ||
+                  report.homeHitRate != null) ...[
                 const SizedBox(height: 8),
                 Text(
                   'For a baseline on the same games: the favorite covered '
                   '${report.favoriteHitRate == null ? 'an unknown share' : percentLabel(report.favoriteHitRate!)} '
                   'and the home team covered '
                   '${report.homeHitRate == null ? 'an unknown share' : percentLabel(report.homeHitRate!)}.',
-                  style: EdgeType.body.copyWith(color: EdgeColors.textSecondary),
+                  style: EdgeType.body.copyWith(
+                    color: EdgeColors.textSecondary,
+                  ),
                 ),
               ],
             ],
@@ -119,16 +132,17 @@ class ModelScreen extends StatelessWidget {
         const SizedBox(height: 8),
         CoachCard(
           child: Column(
-            children: [
-              for (final team in loaded.teams) _TeamRow(team: team),
-            ],
+            children: [for (final team in loaded.teams) _TeamRow(team: team)],
           ),
         ),
         const SizedBox(height: 24),
-        const Text('When to show an Edge', style: EdgeType.title),
+        const Text(
+          'When the number differs from the books',
+          style: EdgeType.title,
+        ),
         const SizedBox(height: 8),
         Text(
-          'Show the badge when our number and the books differ by at least ${settings.spreadPoints.toStringAsFixed(1)} points.',
+          'Mark the game when our number and the books differ by at least ${settings.spreadPoints.toStringAsFixed(1)} points. The mark is a comparison, not a pick.',
           style: EdgeType.body,
         ),
         Slider(
