@@ -18,7 +18,15 @@ From this folder in a new PowerShell window:
 flutter run -d windows
 ```
 
-Use Overview, NFL matchups, Odds comparison, or Probability lab. Refresh generates
+The main navigation is Overview, Research, and Odds comparison. Research groups
+Matchups, Players, and Proof Lab into tabs, preserving all analysis tools.
+Overview's **Investigate a bet** action starts a player-yardage workflow:
+choose a player, inspect recent evidence, replay workload/efficiency scenarios,
+save a frozen prediction, and review the manual outcome. This uses bundled
+historical records and user-entered prices without refreshing live odds.
+Methodology: [Player simulation](docs/PLAYER_SIMULATION.md). Broader target scope:
+[Competitor capability roadmap](docs/COMPETITOR_CAPABILITIES.md).
+Refresh generates
 new demonstration observations. Stale and suspended examples are deliberately
 included so exclusions are visible. My accessible books applies a session-only
 allowlist; it does not verify legal access in a jurisdiction.

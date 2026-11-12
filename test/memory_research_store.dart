@@ -1,8 +1,27 @@
 import 'package:odds_edge/data/research_store.dart';
 import 'package:odds_edge/domain/research.dart';
 import 'package:odds_edge/domain/autopsy.dart';
+import 'package:odds_edge/domain/player_investigation.dart';
 
 class MemoryResearchStore extends ResearchStore {
+  final List<PlayerInvestigation> investigations = [];
+  final Map<String, PlayerInvestigationReview> investigationReviews = {};
+  @override
+  Future<void> saveInvestigation(PlayerInvestigation r) async {
+    investigations.add(r);
+  }
+
+  @override
+  Future<List<PlayerInvestigation>> loadInvestigations() async =>
+      investigations.reversed.toList();
+  @override
+  Future<void> saveInvestigationReview(PlayerInvestigationReview r) async {
+    investigationReviews[r.id] = r;
+  }
+
+  @override
+  Future<Map<String, PlayerInvestigationReview>>
+  loadInvestigationReviews() async => Map.of(investigationReviews);
   final Map<String, ResearchReview> reviews = {};
   @override
   Future<Map<String, ResearchReview>> loadReviews() async => reviews;

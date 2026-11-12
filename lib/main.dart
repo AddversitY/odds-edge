@@ -11,6 +11,8 @@ import 'data/research_store.dart';
 import 'domain/research.dart';
 import 'historical_evidence.dart';
 import 'player_stats_screen.dart';
+import 'player_investigation_page.dart';
+import 'domain/player_stats.dart';
 
 const mint = Color(0xFF7CE7C0);
 const panel = Color(0xF212211E);
@@ -86,6 +88,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
   late OddsBoard board;
   Timer? timer;
   int page = 0;
+  int lastResearchPage = 1;
   String? eventId, selectionKey;
   String market = 'h2h';
   Set<String>? enabledBooks;
@@ -102,20 +105,73 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       defaultValue: 'http://127.0.0.1:8787',
     ),
   );
-  static const pages = [
-    'Overview',
-    'NFL matchups',
-    'Odds comparison',
-    'Proof Lab',
-    'Player stats',
-  ];
-  static const icons = [
+  static const workspaceNames = ['Overview', 'Research', 'Odds comparison'];
+  static const workspaceIcons = [
     Icons.grid_view_rounded,
-    Icons.sports_football_outlined,
+    Icons.query_stats_rounded,
     Icons.compare_arrows_rounded,
-    Icons.science_outlined,
-    Icons.person_search_outlined,
   ];
+  static const researchPages = [1, 4, 3];
+  static const researchNames = ['Matchups', 'Players', 'Proof Lab'];
+  bool get inResearch => researchPages.contains(page);
+  int get workspaceIndex => page == 0
+      ? 0
+      : page == 2
+      ? 2
+      : 1;
+
+  void navigateTo(int next) => setState(() {
+    page = next;
+    if (inResearch) lastResearchPage = next;
+    if (next != 3) researchContext = null;
+  });
+
+  void openWorkspace(int index) => navigateTo(
+    index == 1
+        ? lastResearchPage
+        : index == 2
+        ? 2
+        : 0,
+  );
+
+  void investigatePlayer(
+    PlayerGame player,
+    List<PlayerGame> games,
+    Map<String, dynamic> metadata,
+  ) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PlayerInvestigationPage(
+          player: player,
+          games: games,
+          metadata: metadata,
+          store: researchStore,
+        ),
+      ),
+    );
+  }
+
+  Widget researchTabs() => DefaultTabController(
+    key: ValueKey('research-tabs-$page'),
+    length: researchPages.length,
+    initialIndex: researchPages.indexOf(page),
+    child: Material(
+      color: const Color(0xE6091718),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: TabBar(
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
+          labelColor: mint,
+          unselectedLabelColor: Colors.white60,
+          indicatorColor: mint,
+          labelPadding: const EdgeInsets.symmetric(horizontal: 18),
+          onTap: (index) => navigateTo(researchPages[index]),
+          tabs: [for (final label in researchNames) Tab(text: label)],
+        ),
+      ),
+    ),
+  );
 
   @override
   void initState() {
@@ -258,7 +314,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                                 ),
                               ),
                               const SizedBox(height: 16),
-                              for (var i = 0; i < pages.length; i++)
+                              for (var i = 0; i < workspaceNames.length; i++)
                                 Padding(
                                   padding: const EdgeInsets.only(bottom: 8),
                                   child: ListTile(
@@ -269,17 +325,14 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(10),
                                     ),
-                                    selected: page == i,
+                                    selected: workspaceIndex == i,
                                     selectedColor: mint,
                                     selectedTileColor: mint.withValues(
                                       alpha: .10,
                                     ),
-                                    leading: Icon(icons[i], size: 20),
-                                    title: Text(pages[i]),
-                                    onTap: () => setState(() {
-                                      page = i;
-                                      if (i != 3) researchContext = null;
-                                    }),
+                                    leading: Icon(workspaceIcons[i], size: 20),
+                                    title: Text(workspaceNames[i]),
+                                    onTap: () => openWorkspace(i),
                                   ),
                                 ),
                               const Spacer(),
@@ -313,7 +366,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                                 const Spacer(),
                               ] else ...[
                                 Text(
-                                  pages[page],
+                                  workspaceNames[workspaceIndex],
                                   style: const TextStyle(fontSize: 16),
                                 ),
                                 const Spacer(),
@@ -351,6 +404,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                           ),
                         ),
                         const Divider(height: 1),
+                        if (inResearch) researchTabs(),
                         Expanded(
                           child: page == 3
                               ? ResearchWorkspace(
@@ -384,7 +438,9 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                                         else if (page == 2)
                                           comparison()
                                         else if (page == 4)
-                                          const PlayerStatsScreen()
+                                          PlayerStatsScreen(
+                                            onInvestigate: investigatePlayer,
+                                          )
                                         else
                                           const SizedBox(),
                                         const SizedBox(height: 30),
@@ -412,16 +468,13 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
         bottomNavigationBar: wide
             ? null
             : NavigationBar(
-                selectedIndex: page,
-                onDestinationSelected: (i) => setState(() {
-                  page = i;
-                  if (i != 3) researchContext = null;
-                }),
+                selectedIndex: workspaceIndex,
+                onDestinationSelected: openWorkspace,
                 destinations: [
-                  for (var i = 0; i < pages.length; i++)
+                  for (var i = 0; i < workspaceNames.length; i++)
                     NavigationDestination(
-                      icon: Icon(icons[i]),
-                      label: ['Home', 'NFL', 'Odds', 'Lab', 'Players'][i],
+                      icon: Icon(workspaceIcons[i]),
+                      label: ['Home', 'Research', 'Odds'][i],
                     ),
                 ],
               ),
@@ -590,9 +643,52 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       children: [
         heading(
           'YOUR RESEARCH DESK',
-          'A clearer view of the game.',
-          'Compare prices. Explore assumptions. Build your own conclusion.',
+          'Does your betting idea hold up?',
+          'Investigate the evidence, test what could change it, and learn from the outcome.',
         ),
+        box(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Start with one question.',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Has a player’s recent production changed because of opportunity or efficiency? Compare the evidence, replay scenarios, and save your prediction.',
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 12,
+                runSpacing: 10,
+                children: [
+                  FilledButton.icon(
+                    key: const Key('investigate-bet'),
+                    onPressed: () => navigateTo(4),
+                    icon: const Icon(Icons.science_outlined),
+                    label: const Text('Investigate a bet'),
+                  ),
+                  OutlinedButton(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) =>
+                            PlayerInvestigationLibrary(store: researchStore),
+                      ),
+                    ),
+                    child: const Text('Review saved predictions'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Player yardage research · real historical records · manually entered prices · unvalidated scenario replay',
+                style: TextStyle(color: Colors.white60, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
         LayoutBuilder(
           builder: (_, c) => Wrap(
             spacing: 14,
@@ -660,17 +756,17 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Your research toolkit',
+                'A repeatable research process',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
               ),
               SizedBox(height: 12),
               Text(
-                'Edge Reliability Analyzer · Historical Replay Lab · Prediction Autopsy · Game Script Simulator',
+                'Investigate evidence → test assumptions → save a prediction → review the result',
                 style: TextStyle(color: mint, height: 1.8),
               ),
               SizedBox(height: 10),
               Text(
-                'Planned analytical tools. Model-based rankings stay unavailable until probabilities have been validated.',
+                'Historical game pairs support conditional player-yardage replay. Odds comparison and the manual probability calculator remain available. Predictive model accuracy has not been validated.',
                 style: TextStyle(color: Colors.white60, height: 1.6),
               ),
             ],
@@ -777,6 +873,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       researchContext = ResearchContext(quote: quote, event: selectedEvent);
       researchLaunch++;
       page = 3;
+      lastResearchPage = 3;
     });
   }
 

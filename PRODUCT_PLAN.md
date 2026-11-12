@@ -2,6 +2,15 @@
 
 ## Recovered original vision
 
+**2026-10-19 update:** The owner approved a guided investigation as the primary
+experience and wants the major competitor capabilities incorporated over time,
+with clearer presentation and original implementation. The concrete delivery
+matrix is `docs/COMPETITOR_CAPABILITIES.md`; current scenario methodology is
+`docs/PLAYER_SIMULATION.md`. This expands the eventual capability target without
+approving subscriptions, signup, extra live API refreshes or prematurely claiming
+feature parity. The first connected player-yardage workflow uses frozen public
+data and explicit conditional replay; broad sport coverage remains the end goal.
+
 The actual original platform and niche replies are now readable from the shared
 conversation. See `docs/ORIGINAL_BRAINSTORM.md` for the source-linked reference.
 Its five pillars are Deep Statistical Explorer, Advanced Simulation Engine,

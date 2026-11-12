@@ -216,7 +216,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(find.text('Overview'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Proof Lab'));
+      await tester.tap(find.text('Research'));
       await tester.pumpAndSettle();
       expect(
         tester

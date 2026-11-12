@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:odds_edge/main.dart';
+import 'package:odds_edge/player_stats_screen.dart';
 
 import 'memory_research_store.dart';
 
@@ -12,12 +13,20 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(OddsEdgeApp(researchStore: MemoryResearchStore()));
     expect(find.text('DEMO'), findsOneWidget);
+    expect(find.byType(NavigationDestination), findsNWidgets(3));
     expect(find.textContaining('Snapshot as of'), findsWidgets);
     await tester.tap(find.text('Odds', skipOffstage: false));
     await tester.pumpAndSettle();
     expect(find.textContaining('Best demo price'), findsOneWidget);
     expect(find.text('Research this price'), findsWidgets);
-    await tester.tap(find.text('Lab', skipOffstage: false));
+    await tester.tap(find.text('Research', skipOffstage: false));
+    await tester.pump();
+    expect(find.widgetWithText(Tab, 'Matchups'), findsOneWidget);
+    expect(find.widgetWithText(Tab, 'Players'), findsOneWidget);
+    await tester.tap(find.widgetWithText(Tab, 'Players'));
+    await tester.pump();
+    expect(find.byType(PlayerStatsScreen), findsOneWidget);
+    await tester.tap(find.widgetWithText(Tab, 'Proof Lab'));
     await tester.pumpAndSettle();
     expect(find.text('Is +125 a good price for Detroit?'), findsOneWidget);
     await tester.ensureVisible(find.byType(Slider).first);
@@ -33,6 +42,10 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(OddsEdgeApp(researchStore: MemoryResearchStore()));
+    expect(find.widgetWithText(ListTile, 'Research'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, 'NFL matchups'), findsNothing);
+    expect(find.widgetWithText(ListTile, 'Player stats'), findsNothing);
+    expect(find.widgetWithText(ListTile, 'Proof Lab'), findsNothing);
     await tester.tap(find.text('Odds comparison'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('My accessible books'));
