@@ -18,12 +18,16 @@ class ValueView extends StatelessWidget {
     super.key,
     required this.verdict,
     this.caption,
+    this.whyBody,
     this.extraWhy,
     this.extraMath,
   });
 
   final ValueVerdict verdict;
   final Widget? caption;
+
+  /// When set, this replaces the long paragraph. The math is unchanged.
+  final Widget? whyBody;
   final Widget? extraWhy;
   final Widget? extraMath;
 
@@ -43,7 +47,10 @@ class ValueView extends StatelessWidget {
       reasons: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(verdict.why, style: EdgeType.body),
+          if (whyBody != null)
+            whyBody!
+          else
+            Text(verdict.why, style: EdgeType.body),
           ?extraWhy,
         ],
       ),
