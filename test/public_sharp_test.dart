@@ -46,7 +46,7 @@ void main() {
       pricesAt: board.fetchedAt,
     );
     expect(reads.first.home, 'Kansas City Chiefs');
-    expect(reads[1].oneLine, contains('Steelers'));
+    expect(reads[1].oneLine, contains('Bengals'));
     expect(reads.last.oneLine, 'No clear move');
     expect(reads.first.clarity, greaterThan(reads[1].clarity));
   });

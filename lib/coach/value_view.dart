@@ -176,10 +176,6 @@ class LineChart extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          Text(
-            'Each bar is a recorded game, oldest to newest. The line across them is ${line.toStringAsFixed(1)}. Green cleared it, red missed.',
-            style: EdgeType.label,
-          ),
         ],
       ),
     );

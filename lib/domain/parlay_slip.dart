@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import 'odds.dart';
+
 /// The parlays the person is building. Keys are selection ids already
 /// in the snapshot. The slip does not invent a price for a missing leg.
 class ParlaySlip {
@@ -52,4 +54,17 @@ class ParlaySlipController extends ChangeNotifier {
   void remove(String key) => setSlip(slip.remove(key));
 
   void clear() => setSlip(slip.clear());
+}
+
+/// Over and Under of one player, one stat, one number. Those two cannot
+/// both win, so they are not a parlay.
+bool oppositeSides(Selection left, Selection right) {
+  if (left.eventId != right.eventId || left.market != right.market) {
+    return false;
+  }
+  if (left.participant != right.participant || left.point != right.point) {
+    return false;
+  }
+  if (left.period != right.period) return false;
+  return left.outcome != right.outcome;
 }

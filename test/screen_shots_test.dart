@@ -49,27 +49,31 @@ void main() {
     await tester.pumpAndSettle(const Duration(milliseconds: 50));
     await _save(tester, '/opt/cursor/artifacts/home-390.png');
 
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Games'));
+    await tester.pumpAndSettle(const Duration(milliseconds: 100));
+    await _save(tester, '/opt/cursor/artifacts/games-390.png');
+
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Props'));
+    await tester.pumpAndSettle(const Duration(milliseconds: 100));
+    await _save(tester, '/opt/cursor/artifacts/props-390.png');
+
     await tester.tap(find.text('Josh Allen').first);
     await tester.pumpAndSettle(const Duration(milliseconds: 100));
     await _save(tester, '/opt/cursor/artifacts/prop-detail-390.png');
 
     await tester.tap(find.text('Add to parlay'));
     await tester.pumpAndSettle(const Duration(milliseconds: 100));
-    final flip = find.text('See over').evaluate().isNotEmpty
-        ? find.text('See over')
-        : find.text('See under');
-    if (flip.evaluate().isNotEmpty) {
-      await tester.tap(flip.first);
-      await tester.pumpAndSettle(const Duration(milliseconds: 100));
-      final add = find.text('Add to parlay');
-      if (add.evaluate().isNotEmpty) {
-        await tester.tap(add);
-        await tester.pumpAndSettle(const Duration(milliseconds: 100));
-      }
-    }
     await tester.pageBack();
     await tester.pumpAndSettle(const Duration(milliseconds: 100));
-    await tester.tap(find.text('Parlays'));
+    await tester.ensureVisible(find.text('Saquon Barkley').first);
+    await tester.pumpAndSettle(const Duration(milliseconds: 100));
+    await tester.tap(find.text('Saquon Barkley').first);
+    await tester.pumpAndSettle(const Duration(milliseconds: 100));
+    await tester.tap(find.text('Add to parlay'));
+    await tester.pumpAndSettle(const Duration(milliseconds: 100));
+    await tester.pageBack();
+    await tester.pumpAndSettle(const Duration(milliseconds: 100));
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Parlays'));
     await tester.pumpAndSettle(const Duration(milliseconds: 100));
     await _save(tester, '/opt/cursor/artifacts/parlay-390.png');
   });

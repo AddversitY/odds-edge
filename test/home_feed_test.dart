@@ -5,6 +5,7 @@ import 'package:odds_edge/coach/parlay_slip_view.dart';
 import 'package:odds_edge/coach/prop_detail_screen.dart';
 import 'package:odds_edge/data/demo.dart';
 import 'package:odds_edge/domain/coach_board.dart';
+import 'package:odds_edge/domain/hit_rate.dart';
 import 'package:odds_edge/domain/odds.dart';
 import 'package:odds_edge/domain/parlay_slip.dart';
 import 'package:odds_edge/domain/player_stats.dart';
@@ -49,10 +50,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(
-      find.textContaining('No player-prop prices'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('No player-prop prices'), findsOneWidget);
     expect(find.textContaining('%'), findsNothing);
     expect(find.text('EXAMPLE'), findsNothing);
     await tester.tap(find.text('Games'));
@@ -100,19 +98,28 @@ void main() {
     final now = DateTime.utc(2026, 11, 12);
     final board = demoBoard(now);
     final cards = propCards(board, now);
+    final allenCard = cards.firstWhere(
+      (card) =>
+          card.player == 'Josh Allen' &&
+          card.market == 'player_pass_yds' &&
+          card.line == 249.5 &&
+          card.lineSide == LineSide.over,
+    );
     final slip = ParlaySlipController();
     addTearDown(slip.dispose);
     await tester.pumpWidget(
       MaterialApp(
         theme: edgeTheme(),
         home: PropDetailScreen(
-          card: cards.first,
+          card: allenCard,
           cards: cards,
           board: board,
           now: now,
           directory: PlayerDirectory(
             PlayerStatsDataset(
-              rows: [for (var week = 1; week <= 6; week++) allen(week, week * 40)],
+              rows: [
+                for (var week = 1; week <= 6; week++) allen(week, week * 40),
+              ],
             ),
           ),
           slip: slip,
@@ -130,51 +137,109 @@ void main() {
     await tester.pump();
     expect(slip.slip.length, 1);
     expect(find.text('Remove from parlay'), findsOneWidget);
+    await tester.tap(find.text('Under'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add to parlay'));
+    await tester.pump();
+    expect(slip.slip.length, 1);
+    expect(find.textContaining('already on the slip'), findsOneWidget);
     await tester.tap(find.text('H2H'));
     await tester.pumpAndSettle();
     expect(find.textContaining('No recorded stat'), findsOneWidget);
   });
 
-  testWidgets('a same-game slip labels the payout estimated and can drop a leg', (
-    tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(390, 1800));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    final now = DateTime.utc(2026, 11, 12);
-    final board = demoBoard(now);
-    final cards = propCards(board, now);
-    final slip = ParlaySlipController()
-      ..add(cards[0].id)
-      ..add(cards[1].id);
-    addTearDown(slip.dispose);
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: edgeTheme(),
-        home: Scaffold(
-          body: SingleChildScrollView(
-            child: ParlaySlipView(
-              slip: slip,
-              board: board,
-              now: now,
-              directory: PlayerDirectory(
-                PlayerStatsDataset(
-                  rows: [for (var week = 1; week <= 6; week++) allen(week, 260)],
+  testWidgets(
+    'a same-game slip labels the payout estimated and can drop a leg',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 1800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final now = DateTime.utc(2026, 11, 12);
+      final board = demoBoard(now);
+      final cards = propCards(board, now);
+      final amon = cards.firstWhere(
+        (card) =>
+            card.player == 'Amon-Ra St. Brown' &&
+            card.lineSide == LineSide.over,
+      );
+      final gibbs = cards.firstWhere(
+        (card) =>
+            card.player == 'Jahmyr Gibbs' && card.lineSide == LineSide.over,
+      );
+      final slip = ParlaySlipController()
+        ..add(amon.id)
+        ..add(gibbs.id);
+      addTearDown(slip.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: edgeTheme(),
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: ParlaySlipView(
+                slip: slip,
+                board: board,
+                now: now,
+                directory: PlayerDirectory(
+                  PlayerStatsDataset(
+                    rows: [
+                      for (var week = 1; week <= 6; week++) allen(week, 260),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
         ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('EXAMPLE'), findsOneWidget);
+      expect(find.textContaining('Estimated payout'), findsWidgets);
+      expect(find.textContaining('Same game'), findsWidgets);
+      expect(find.text('Our combined chance'.toUpperCase()), findsOneWidget);
+      expect(find.byTooltip('Remove leg'), findsNWidgets(2));
+      await tester.tap(find.byTooltip('Remove leg').first);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Add a second leg'), findsOneWidget);
+      expect(find.textContaining('Estimated payout'), findsNothing);
+    },
+  );
+
+  testWidgets('opposite sides of one line are not priced as a parlay', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final now = DateTime.utc(2026, 11, 12);
+    final board = demoBoard(now);
+    final cards = propCards(board, now);
+    final over = cards.firstWhere(
+      (card) =>
+          card.player == 'Josh Allen' &&
+          card.market == 'player_pass_yds' &&
+          card.line == 249.5 &&
+          card.lineSide == LineSide.over,
+    );
+    final under = cards.firstWhere(
+      (card) =>
+          card.player == 'Josh Allen' &&
+          card.market == 'player_pass_yds' &&
+          card.line == 249.5 &&
+          card.lineSide == LineSide.under,
+    );
+    expect(oppositeSides(over.side, under.side), isTrue);
+    final slip = ParlaySlipController()
+      ..add(over.id)
+      ..add(under.id);
+    addTearDown(slip.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: edgeTheme(),
+        home: Scaffold(
+          body: ParlaySlipView(slip: slip, board: board, now: now),
+        ),
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('EXAMPLE'), findsOneWidget);
-    expect(find.textContaining('Estimated payout'), findsWidgets);
-    expect(find.textContaining('Same game'), findsWidgets);
-    expect(find.text('Our combined chance'.toUpperCase()), findsOneWidget);
-    expect(find.byTooltip('Remove leg'), findsNWidgets(2));
-    await tester.tap(find.byTooltip('Remove leg').first);
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Add a second leg'), findsOneWidget);
-    expect(find.textContaining('Estimated payout'), findsNothing);
+    expect(find.textContaining('over and the under'), findsOneWidget);
+    expect(find.text('Our combined chance'.toUpperCase()), findsNothing);
   });
 }

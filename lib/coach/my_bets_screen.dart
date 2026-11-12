@@ -50,9 +50,14 @@ class _MyBetsScreenState extends State<MyBetsScreen> {
       final log = snapshot.data;
       if (log == null) return const Center(child: CircularProgressIndicator());
       return ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
           const SectionLabel('MY BETS'),
+          const SizedBox(height: 4),
+          const Text(
+            'A shortlist and a log. Nothing here is sent to a book.',
+            style: EdgeType.label,
+          ),
           const SizedBox(height: 8),
           Wrap(
             children: [
@@ -69,10 +74,7 @@ class _MyBetsScreenState extends State<MyBetsScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          if (tab == 0)
-            _saved(log.plays)
-          else
-            _logged(log.bets, widget.board),
+          if (tab == 0) _saved(log.plays) else _logged(log.bets, widget.board),
         ],
       );
     },
@@ -82,8 +84,8 @@ class _MyBetsScreenState extends State<MyBetsScreen> {
     if (plays.isEmpty) {
       return const CoachCard(
         child: Text(
-          'No saved plays yet. On a prop card, tap the bookmark or double-tap the card. This is a shortlist, not a bet you have placed.',
-          style: TextStyle(height: 1.4),
+          'No saved plays yet. Save one from a prop card.',
+          style: EdgeType.label,
         ),
       );
     }
@@ -96,7 +98,13 @@ class _MyBetsScreenState extends State<MyBetsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(play.title, style: EdgeType.body.copyWith(fontWeight: FontWeight.w700)),
+                  Text(
+                    play.title,
+                    style: EdgeType.title.copyWith(
+                      fontFamily: EdgeFont.display,
+                      fontSize: 20,
+                    ),
+                  ),
                   Text(play.detail, style: EdgeType.label),
                   Text(
                     [
@@ -111,7 +119,9 @@ class _MyBetsScreenState extends State<MyBetsScreen> {
                     alignment: Alignment.centerLeft,
                     child: TextButton(
                       onPressed: () async {
-                        await widget.store.saveSavedPlay(play.copyWith(removed: true));
+                        await widget.store.saveSavedPlay(
+                          play.copyWith(removed: true),
+                        );
                         setState(() => future = _load());
                       },
                       child: const Text('Remove'),
@@ -205,7 +215,9 @@ class _MyBetsScreenState extends State<MyBetsScreen> {
                     Text(
                       bet.profit == null ? 'Not settled' : money(bet.profit!),
                       style: EdgeType.title.copyWith(
-                        color: bet.profit == null ? EdgeColors.text : valueColor(bet.profit),
+                        color: bet.profit == null
+                            ? EdgeColors.text
+                            : valueColor(bet.profit),
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -228,7 +240,10 @@ class _MyBetsScreenState extends State<MyBetsScreen> {
                       bet: bet,
                       onSave: (closing) async {
                         await widget.store.saveBet(
-                          bet.copyWith(closingLine: closing, replaceClosingLine: true),
+                          bet.copyWith(
+                            closingLine: closing,
+                            replaceClosingLine: true,
+                          ),
                         );
                         setState(() => future = _load());
                       },
@@ -306,7 +321,10 @@ class _ClosingNumberState extends State<_ClosingNumber> {
           const SizedBox(height: 6),
           TextField(
             controller: closing,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+            keyboardType: const TextInputType.numberWithOptions(
+              decimal: true,
+              signed: true,
+            ),
             decoration: const InputDecoration(labelText: 'Closing number'),
           ),
           Align(
@@ -320,7 +338,10 @@ class _ClosingNumberState extends State<_ClosingNumber> {
                 }
                 final value = double.tryParse(text);
                 if (value == null) {
-                  setState(() => message = 'Enter the closing number, such as -3.5 or 47.5.');
+                  setState(
+                    () => message =
+                        'Enter the closing number, such as -3.5 or 47.5.',
+                  );
                   return;
                 }
                 await widget.onSave(value);
@@ -395,7 +416,11 @@ class _MonthGridState extends State<_MonthGrid> {
             children: [
               for (final label in ['S', 'M', 'T', 'W', 'T', 'F', 'S'])
                 Expanded(
-                  child: Text(label, textAlign: TextAlign.center, style: EdgeType.label),
+                  child: Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    style: EdgeType.label,
+                  ),
                 ),
             ],
           ),
@@ -423,9 +448,7 @@ class _MonthGridState extends State<_MonthGrid> {
 
   Widget _cell(int day, DayReport? report) {
     final settled = report != null && report.settledCount > 0;
-    final color = !settled
-        ? EdgeColors.text
-        : valueColor(report.settledProfit);
+    final color = !settled ? EdgeColors.text : valueColor(report.settledProfit);
     final chosen = selected == day;
     return InkWell(
       onTap: report == null
@@ -576,165 +599,180 @@ class _AddBetState extends State<_AddBet> {
           child: Text(open ? 'Hide the bet form' : 'Log a bet you placed'),
         ),
         if (open) ...[
-        const SizedBox(height: 4),
-        const Text(
-          'The number on the ticket is saved now. After the game closes, add the closing number on the bet to see if you beat the close. This does not place the bet.',
-          style: EdgeType.body,
-        ),
-        const SizedBox(height: 8),
-        if (widget.board != null && widget.board!.events.isNotEmpty)
-          DropdownButtonFormField<String>(
-            initialValue: eventId,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Game on this screen'),
-            items: [
-              for (final event in widget.board!.events)
-                DropdownMenuItem(
-                  value: event.id,
-                  child: Text('${event.away} at ${event.home}', overflow: TextOverflow.ellipsis),
-                ),
-            ],
-            onChanged: (value) => setState(() {
-              eventId = value;
-              _fillFromBoard();
-            }),
+          const SizedBox(height: 4),
+          const Text(
+            'The number on the ticket is saved now. After the game closes, add the closing number on the bet to see if you beat the close. This does not place the bet.',
+            style: EdgeType.body,
           ),
-        const SizedBox(height: 8),
-        Wrap(
-          children: [
-            FilterPill(
-              label: 'Spread',
-              selected: kind == 'spreads',
-              onTap: () => setState(() {
-                kind = 'spreads';
-                side = '';
+          const SizedBox(height: 8),
+          if (widget.board != null && widget.board!.events.isNotEmpty)
+            DropdownButtonFormField<String>(
+              initialValue: eventId,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Game on this screen',
+              ),
+              items: [
+                for (final event in widget.board!.events)
+                  DropdownMenuItem(
+                    value: event.id,
+                    child: Text(
+                      '${event.away} at ${event.home}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: (value) => setState(() {
+                eventId = value;
                 _fillFromBoard();
               }),
             ),
-            FilterPill(
-              label: 'Total',
-              selected: kind == 'totals',
-              onTap: () => setState(() {
-                kind = 'totals';
-                side = 'over';
-                _fillFromBoard();
-              }),
-            ),
-            FilterPill(
-              label: 'Moneyline',
-              selected: kind == 'h2h',
-              onTap: () => setState(() {
-                kind = 'h2h';
-                side = '';
-                _fillFromBoard();
-              }),
-            ),
-          ],
-        ),
-        if (kind == 'totals')
+          const SizedBox(height: 8),
           Wrap(
             children: [
               FilterPill(
-                label: 'Over',
-                selected: side != 'under',
+                label: 'Spread',
+                selected: kind == 'spreads',
                 onTap: () => setState(() {
+                  kind = 'spreads';
+                  side = '';
+                  _fillFromBoard();
+                }),
+              ),
+              FilterPill(
+                label: 'Total',
+                selected: kind == 'totals',
+                onTap: () => setState(() {
+                  kind = 'totals';
                   side = 'over';
                   _fillFromBoard();
                 }),
               ),
               FilterPill(
-                label: 'Under',
-                selected: side == 'under',
+                label: 'Moneyline',
+                selected: kind == 'h2h',
                 onTap: () => setState(() {
-                  side = 'under';
+                  kind = 'h2h';
+                  side = '';
                   _fillFromBoard();
                 }),
               ),
             ],
           ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: description,
-          decoration: const InputDecoration(labelText: 'What you bet'),
-        ),
-        if (kind != 'h2h') ...[
+          if (kind == 'totals')
+            Wrap(
+              children: [
+                FilterPill(
+                  label: 'Over',
+                  selected: side != 'under',
+                  onTap: () => setState(() {
+                    side = 'over';
+                    _fillFromBoard();
+                  }),
+                ),
+                FilterPill(
+                  label: 'Under',
+                  selected: side == 'under',
+                  onTap: () => setState(() {
+                    side = 'under';
+                    _fillFromBoard();
+                  }),
+                ),
+              ],
+            ),
           const SizedBox(height: 8),
           TextField(
-            controller: line,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-            decoration: const InputDecoration(
-              labelText: 'Number on your ticket',
-              helperText: 'Spread: -3.5 if you lay points, +3.5 if you get points. Total: 47.5.',
-            ),
+            controller: description,
+            decoration: const InputDecoration(labelText: 'What you bet'),
           ),
-        ],
-        const SizedBox(height: 8),
-        TextField(
-          controller: book,
-          decoration: const InputDecoration(labelText: 'Sportsbook'),
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: odds,
-          keyboardType: const TextInputType.numberWithOptions(signed: true),
-          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9+-]'))],
-          decoration: const InputDecoration(labelText: 'American odds'),
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: stake,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(labelText: 'Stake'),
-        ),
-        const SizedBox(height: 8),
-        FilledButton(
-          onPressed: () async {
-            final american = int.tryParse(odds.text.trim());
-            final amount = double.tryParse(stake.text.trim());
-            if (american == null ||
-                american.abs() < 100 ||
-                amount == null ||
-                amount <= 0 ||
-                description.text.trim().isEmpty ||
-                book.text.trim().isEmpty) {
-              setState(
-                () => message =
-                    'Enter a description, a sportsbook, American odds, and a stake greater than zero.',
-              );
-              return;
-            }
-            final number = kind == 'h2h' ? null : double.tryParse(line.text.trim());
-            if (kind != 'h2h' && number == null) {
-              setState(
-                () => message = 'Enter the number on your ticket, such as -3.5 or 47.5.',
-              );
-              return;
-            }
-            await widget.onAdd(
-              TrackedBet(
-                id: DateTime.now().toUtc().microsecondsSinceEpoch.toString(),
-                placedAt: DateTime.now().toUtc(),
-                description: description.text.trim(),
-                book: book.text.trim(),
-                decimal: americanToDecimal(american),
-                stake: amount,
-                result: BetResult.pending,
-                market: kind,
-                side: side,
-                line: number,
+          if (kind != 'h2h') ...[
+            const SizedBox(height: 8),
+            TextField(
+              controller: line,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+                signed: true,
               ),
-            );
-            description.clear();
-            line.clear();
-            setState(() => message = null);
-          },
-          child: const Text('Add to log'),
-        ),
-        if (message != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(message!, style: EdgeType.body.copyWith(color: EdgeColors.warn)),
+              decoration: const InputDecoration(
+                labelText: 'Number on your ticket',
+                helperText: 'Spread: -3.5 if you lay points, +3.5 if you get points. Total: 47.5.',
+              ),
+            ),
+          ],
+          const SizedBox(height: 8),
+          TextField(
+            controller: book,
+            decoration: const InputDecoration(labelText: 'Sportsbook'),
           ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: odds,
+            keyboardType: const TextInputType.numberWithOptions(signed: true),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[0-9+-]')),
+            ],
+            decoration: const InputDecoration(labelText: 'American odds'),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: stake,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Stake'),
+          ),
+          const SizedBox(height: 8),
+          FilledButton(
+            onPressed: () async {
+              final american = int.tryParse(odds.text.trim());
+              final amount = double.tryParse(stake.text.trim());
+              if (american == null ||
+                  american.abs() < 100 ||
+                  amount == null ||
+                  amount <= 0 ||
+                  description.text.trim().isEmpty ||
+                  book.text.trim().isEmpty) {
+                setState(
+                  () => message = 'Enter a description, a sportsbook, American odds, and a stake greater than zero.',
+                );
+                return;
+              }
+              final number = kind == 'h2h'
+                  ? null
+                  : double.tryParse(line.text.trim());
+              if (kind != 'h2h' && number == null) {
+                setState(
+                  () => message =
+                      'Enter the number on your ticket, such as -3.5 or 47.5.',
+                );
+                return;
+              }
+              await widget.onAdd(
+                TrackedBet(
+                  id: DateTime.now().toUtc().microsecondsSinceEpoch.toString(),
+                  placedAt: DateTime.now().toUtc(),
+                  description: description.text.trim(),
+                  book: book.text.trim(),
+                  decimal: americanToDecimal(american),
+                  stake: amount,
+                  result: BetResult.pending,
+                  market: kind,
+                  side: side,
+                  line: number,
+                ),
+              );
+              description.clear();
+              line.clear();
+              setState(() => message = null);
+            },
+            child: const Text('Add to log'),
+          ),
+          if (message != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                message!,
+                style: EdgeType.body.copyWith(color: EdgeColors.warn),
+              ),
+            ),
         ],
       ],
     ),

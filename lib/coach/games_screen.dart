@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../domain/coach_board.dart';
+import '../domain/eastern.dart';
 import '../domain/coach_model.dart';
 import '../domain/injury_report.dart';
 import '../domain/market_math.dart';
@@ -129,15 +130,15 @@ class _GamesScreenState extends State<GamesScreen> {
         if (_matches(game, today)) game,
     ];
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
         const SectionLabel('GAMES'),
         const SizedBox(height: 8),
         Text(
           widget.board.demo
-              ? 'Sample NFL prices. A word on each game compares our number with the books. It is not a pick.'
-              : 'NFL is the league in this free snapshot. A word on each game compares our number with the books. It is not a pick.',
-          style: EdgeType.body.copyWith(color: EdgeColors.textSecondary),
+              ? 'Example games. The comparison is not a pick.'
+              : 'A comparison with the books. It is not a pick.',
+          style: EdgeType.label,
         ),
         const SizedBox(height: 10),
         Wrap(
@@ -225,45 +226,66 @@ class _GameCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final event = game.event;
     final badge = badgeForClubs(injuries, [event.away, event.home]);
-    return CoachCard(
+    return Material(
+      color: EdgeColors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: const BorderSide(color: EdgeColors.border),
+      ),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onOpen,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '${event.league} · ${event.startsAt.toLocal().toString().substring(0, 16)}',
-                    style: EdgeType.label,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${event.league} · ${formatEastern(event.startsAt)}',
+                      style: EdgeType.label,
+                    ),
                   ),
+                  if (badge != null)
+                    InjuryBadgePill(label: badge.label, severe: badge.severe),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                event.away,
+                style: EdgeType.title.copyWith(
+                  fontFamily: EdgeFont.display,
+                  fontSize: 22,
                 ),
-                if (badge != null)
-                  InjuryBadgePill(label: badge.label, severe: badge.severe),
+              ),
+              Text(
+                event.home,
+                style: EdgeType.title.copyWith(
+                  fontFamily: EdgeFont.display,
+                  fontSize: 22,
+                ),
+              ),
+              const SizedBox(height: 10),
+              if (line != null)
+                CoachLineSummary(line: line!)
+              else
+                Text(
+                  "Coach's Line is not on this game.",
+                  style: EdgeType.label,
+                ),
+              if (sharp.hasSignal) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Sharp  ${sharp.oneLine}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: EdgeType.label.copyWith(color: EdgeColors.text),
+                ),
               ],
-            ),
-            const SizedBox(height: 8),
-            Text(event.away, style: EdgeType.title),
-            Text(event.home, style: EdgeType.title),
-            const SizedBox(height: 12),
-            if (line != null)
-              CoachLineSummary(line: line!)
-            else
-              Text(
-                "Coach's Line is not on this game.",
-                style: EdgeType.body.copyWith(color: EdgeColors.textSecondary),
-              ),
-            if (sharp.hasSignal) ...[
-              const SizedBox(height: 12),
-              Text(
-                'Sharp  ${sharp.oneLine}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: EdgeType.label.copyWith(color: EdgeColors.text),
-              ),
             ],
-          ],
+          ),
         ),
       ),
     );

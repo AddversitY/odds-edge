@@ -15,17 +15,21 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(OddsEdgeApp(researchStore: MemoryResearchStore()));
-    expect(find.text('DEMO'), findsOneWidget);
     expect(find.byType(NavigationDestination), findsNWidgets(5));
     expect(find.textContaining('Snapshot as of'), findsWidgets);
+    await tester.tap(find.byKey(const Key('more-menu')));
+    await tester.pumpAndSettle();
+    expect(find.text('DEMO'), findsOneWidget);
     expect(find.text('Ask Coach'), findsOneWidget);
-    await tester.tap(find.text('More', skipOffstage: false));
+    await tester.tap(find.widgetWithText(ListTile, 'More'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Odds comparison'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Best demo price'), findsOneWidget);
     expect(find.text('Research this price'), findsWidgets);
-    await tester.tap(find.text('More', skipOffstage: false));
+    await tester.tap(find.byKey(const Key('more-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ListTile, 'More'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Research'));
     await tester.pump();
@@ -57,6 +61,8 @@ void main() {
     expect(find.widgetWithText(ListTile, 'Proof Lab'), findsNothing);
     await tester.tap(find.byKey(const Key('more-menu')));
     await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ListTile, 'More'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Odds comparison'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('My accessible books'));
@@ -77,7 +83,9 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(OddsEdgeApp(researchStore: MemoryResearchStore()));
-    await tester.tap(find.text('More', skipOffstage: false));
+    await tester.tap(find.byKey(const Key('more-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ListTile, 'More'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Tools'));
     await tester.pumpAndSettle();
@@ -430,7 +438,11 @@ void main() {
     await tester.pump();
     expect(find.text('Value'), findsOneWidget);
     expect(find.textContaining('best prices'), findsOneWidget);
-    expect(find.text('Ask Coach'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('more-menu')));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(ListTile, 'Ask Coach'), findsOneWidget);
+    Navigator.of(tester.element(find.text('Ask Coach'))).pop();
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('Props', skipOffstage: false));
     await tester.pump();

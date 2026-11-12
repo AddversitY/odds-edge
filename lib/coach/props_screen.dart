@@ -96,7 +96,8 @@ class _PropsScreenState extends State<PropsScreen> {
       filter,
     );
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+      key: const Key('props-list'),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
         const SectionLabel('PLAYER PROPS'),
         const SizedBox(height: 6),
@@ -106,9 +107,9 @@ class _PropsScreenState extends State<PropsScreen> {
         ],
         Text(
           widget.board.demo
-              ? 'Sample prices. The hit rates under a matched name are real box scores, not part of the sample.'
-              : 'Prices are a saved snapshot. The age is on each card.',
-          style: EdgeType.body.copyWith(color: EdgeColors.textSecondary),
+              ? 'Example prices. Hit rates are real box scores.'
+              : 'Prices are a saved snapshot.',
+          style: EdgeType.label,
         ),
         const SizedBox(height: 12),
         Align(
@@ -233,7 +234,6 @@ class _PropFacts {
   final PlayerDirectory players;
   final MatchupContext? matchup;
 }
-
 
 class _FilterSheet extends StatefulWidget {
   const _FilterSheet({

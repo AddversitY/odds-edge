@@ -17,6 +17,7 @@ import 'data/demo_lines.dart';
 import 'data/repository.dart';
 import 'domain/coach_board.dart';
 import 'domain/coach_model.dart';
+import 'domain/eastern.dart';
 import 'domain/injury_report.dart';
 import 'domain/odds.dart';
 import 'domain/parlay_slip.dart';
@@ -139,6 +140,79 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
     page = 7;
     researchContext = null;
   });
+
+  void openAppMenu() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: EdgeColors.surface,
+      showDragHandle: true,
+      builder: (sheet) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: Text(
+                  board.demo ? 'DEMO' : 'FEED',
+                  style: EdgeType.label.copyWith(
+                    color: board.demo ? EdgeColors.warn : EdgeColors.accent,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                subtitle: Text(
+                  board.demo
+                      ? 'Example board. Prices here are not a sportsbook.'
+                      : 'Prices are the saved snapshot.',
+                  style: EdgeType.label,
+                ),
+              ),
+              ListTile(
+                key: const Key('ask-coach'),
+                leading: const Icon(Icons.chat_bubble_outline),
+                title: const Text('Ask Coach'),
+                onTap: () {
+                  Navigator.pop(sheet);
+                  showAskCoach(
+                    context,
+                    brief: backend && error == null ? coachBrief() : null,
+                    ask: backend && error == null ? repository.assistant : null,
+                  );
+                },
+              ),
+              ListTile(
+                leading: loading
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh),
+                title: const Text('Refresh odds'),
+                onTap: loading
+                    ? null
+                    : () {
+                        Navigator.pop(sheet);
+                        refresh(onDemand: true);
+                      },
+              ),
+              ListTile(
+                leading: const Icon(Icons.grid_view_rounded),
+                title: const Text('More'),
+                subtitle: const Text(
+                  'Injuries, research, tools, and the model',
+                ),
+                onTap: () {
+                  Navigator.pop(sheet);
+                  openMore();
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
   void investigatePlayer(
     PlayerGame player,
@@ -304,8 +378,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       selections.firstOrNull;
   DateTime get now => DateTime.now().toUtc();
   bool get inPlay => event != null && !event!.startsAt.isAfter(now);
-  String stamp(DateTime time) =>
-      '${time.toUtc().toIso8601String().replaceFirst('T', ' ').split('.').first} UTC';
+  String stamp(DateTime time) => formatEastern(time, year: true);
   String quoteFreshness(OddsQuote quote) {
     if (error != null) return 'connection lost';
     final value = quote.freshness(now, inPlay: inPlay);
@@ -544,7 +617,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                       child: Row(
                         children: [
                           Expanded(
-                            child: wide || inMore
+                            child: wide
                                 ? Text(
                                     screenTitle,
                                     overflow: TextOverflow.ellipsis,
@@ -561,89 +634,17 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                                     ),
                                   ),
                           ),
-                          badge(
-                            !wide
-                                ? (board.demo ? 'DEMO' : 'FEED')
-                                : shell == 5 && page == 4
-                                ? 'HISTORICAL STATS'
-                                : board.demo
-                                ? 'DEMONSTRATION'
-                                : 'PROVIDER FEED',
-                            shell == 5 && page == 4
-                                ? mint
-                                : board.demo
-                                ? EdgeColors.warn
-                                : EdgeColors.accent,
-                          ),
-                          TextButton(
+                          IconButton(
                             key: const Key('more-menu'),
-                            style: TextButton.styleFrom(
-                              visualDensity: VisualDensity.compact,
-                              minimumSize: const Size(44, 44),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                              ),
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              textStyle: const TextStyle(
-                                fontFamily: EdgeFont.sans,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                              ),
-                              backgroundColor: inMore
-                                  ? EdgeColors.accent.withValues(alpha: .16)
-                                  : null,
+                            tooltip: 'Menu',
+                            onPressed: openAppMenu,
+                            icon: Icon(
+                              Icons.more_horiz,
+                              color: inMore
+                                  ? EdgeColors.accent
+                                  : EdgeColors.text,
                             ),
-                            onPressed: openMore,
-                            child: const Text('More'),
                           ),
-                          TextButton(
-                            key: const Key('ask-coach'),
-                            style: TextButton.styleFrom(
-                              visualDensity: VisualDensity.compact,
-                              minimumSize: const Size(44, 44),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                              ),
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              textStyle: const TextStyle(
-                                fontFamily: EdgeFont.sans,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            onPressed: () => showAskCoach(
-                              context,
-                              brief: backend && error == null
-                                  ? coachBrief()
-                                  : null,
-                              ask: backend && error == null
-                                  ? repository.assistant
-                                  : null,
-                            ),
-                            child: const Text('Ask Coach'),
-                          ),
-                          if (!(shell == 5 && page == 4))
-                            IconButton(
-                              tooltip: 'Refresh odds',
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                minWidth: 48,
-                                minHeight: 48,
-                              ),
-                              onPressed: loading
-                                  ? null
-                                  : () => refresh(onDemand: true),
-                              icon: loading
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(Icons.refresh),
-                            ),
                         ],
                       ),
                     ),
@@ -758,11 +759,14 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
   Widget libraryMenu() => ListView(
     padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
     children: [
-      const Text('More', style: EdgeType.title),
+      Text(
+        'More',
+        style: EdgeType.title.copyWith(fontFamily: EdgeFont.display),
+      ),
       const SizedBox(height: 8),
       const Text(
-        'Injuries, odds, research, tools, and the model. Each one is listed here only.',
-        style: EdgeType.body,
+        'Injuries, odds, research, tools, and the model.',
+        style: EdgeType.label,
       ),
       const SizedBox(height: 16),
       _libraryRow(
@@ -825,18 +829,35 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
 
   Widget _libraryRow(String title, String subtitle, VoidCallback onTap) =>
       Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: Card(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Material(
+          color: EdgeColors.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+            side: const BorderSide(color: EdgeColors.border),
+          ),
+          clipBehavior: Clip.antiAlias,
           child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 6,
+            ),
             title: Text(
               title,
-              style: EdgeType.body.copyWith(fontWeight: FontWeight.w700),
+              style: EdgeType.body.copyWith(
+                fontFamily: EdgeFont.display,
+                fontWeight: FontWeight.w600,
+                fontSize: 20,
+              ),
             ),
             subtitle: Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(subtitle, style: EdgeType.label),
             ),
-            trailing: const Icon(Icons.chevron_right),
+            trailing: const Icon(
+              Icons.chevron_right,
+              color: EdgeColors.textTertiary,
+            ),
             onTap: onTap,
           ),
         ),
@@ -942,22 +963,6 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
     );
   }
 
-  Widget badge(String text, Color color) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-    decoration: BoxDecoration(
-      color: color.withValues(alpha: .10),
-      borderRadius: BorderRadius.circular(6),
-    ),
-    child: Text(
-      text,
-      style: TextStyle(
-        color: color,
-        fontSize: 10,
-        fontWeight: FontWeight.bold,
-        letterSpacing: .8,
-      ),
-    ),
-  );
   Widget heading(String eyebrow, String title, String subtitle) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [

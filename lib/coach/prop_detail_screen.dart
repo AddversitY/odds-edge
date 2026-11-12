@@ -48,6 +48,7 @@ class PropDetailScreen extends StatefulWidget {
 class _PropDetailScreenState extends State<PropDetailScreen> {
   late PropCardModel card = widget.card;
   int window = 1;
+  String? blockNote;
 
   @override
   void initState() {
@@ -125,14 +126,7 @@ class _PropDetailScreenState extends State<PropDetailScreen> {
         ),
         actions: [
           if (card.demo || widget.board.demo) const ExamplePill(),
-          if (card.otherSide != null)
-            TextButton(
-              onPressed: _toggle,
-              child: Text(
-                card.lineSide == LineSide.over ? 'See under' : 'See over',
-              ),
-            ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 8),
         ],
       ),
       bottomNavigationBar: SafeArea(
@@ -142,18 +136,24 @@ class _PropDetailScreenState extends State<PropDetailScreen> {
               ? const EmptyNote(
                   'No open price in this snapshot, so this prop cannot be added.',
                 )
-              : FilledButton(
-                  key: const Key('add-to-parlay'),
-                  onPressed: () {
-                    final slip = widget.slip;
-                    if (slip == null) return;
-                    if (slip.slip.contains(card.id)) {
-                      slip.remove(card.id);
-                    } else {
-                      slip.add(card.id);
-                    }
-                  },
-                  child: Text(held ? 'Remove from parlay' : 'Add to parlay'),
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (blockNote != null) ...[
+                      Text(
+                        blockNote!,
+                        style: EdgeType.label.copyWith(color: EdgeColors.warn),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    FilledButton(
+                      key: const Key('add-to-parlay'),
+                      onPressed: () => _toggleSlip(held),
+                      child: Text(
+                        held ? 'Remove from parlay' : 'Add to parlay',
+                      ),
+                    ),
+                  ],
                 ),
         ),
       ),
@@ -162,6 +162,13 @@ class _PropDetailScreenState extends State<PropDetailScreen> {
         children: [
           if (propMeta(face).isNotEmpty)
             Text(propMeta(face), style: EdgeType.label),
+          if (card.otherSide != null) ...[
+            const SizedBox(height: 10),
+            _SideSwitch(
+              over: card.lineSide == LineSide.over,
+              onChanged: _toggle,
+            ),
+          ],
           if (face.badge != null) ...[
             const SizedBox(height: 8),
             InjuryBadgePill(
@@ -256,10 +263,23 @@ class _PropDetailScreenState extends State<PropDetailScreen> {
           ),
           const SizedBox(height: 8),
           _HitBoard(samples: selected?.samples ?? const [], line: card.line),
-          if (windows?.note != null) ...[
-            const SizedBox(height: 8),
-            Text(windows!.note!, style: EdgeType.label),
-          ],
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Green cleared the line. Red missed.',
+                  style: EdgeType.label,
+                ),
+              ),
+              IconButton(
+                tooltip: 'How these windows are counted',
+                visualDensity: VisualDensity.compact,
+                onPressed: () => _countNote(windows?.note),
+                icon: const Icon(Icons.info_outline, size: 20),
+              ),
+            ],
+          ),
           const SizedBox(height: 18),
           const _SectionHead(title: 'Matchup'),
           const SizedBox(height: 8),
@@ -360,7 +380,86 @@ class _PropDetailScreenState extends State<PropDetailScreen> {
       );
       return;
     }
-    setState(() => card = match.first);
+    setState(() {
+      card = match.first;
+      blockNote = null;
+    });
+  }
+
+  void _toggleSlip(bool held) {
+    final slip = widget.slip;
+    if (slip == null) return;
+    if (held) {
+      slip.remove(card.id);
+      setState(() => blockNote = null);
+      return;
+    }
+    for (final key in slip.slip.selectionKeys) {
+      final heldCard = widget.cards.where((item) => item.id == key);
+      if (heldCard.isEmpty) continue;
+      if (oppositeSides(heldCard.first.side, card.side)) {
+        setState(() {
+          blockNote = 'This is the other side of a leg already on the slip. It was not added.';
+        });
+        return;
+      }
+    }
+    setState(() => blockNote = null);
+    slip.add(card.id);
+  }
+
+  void _countNote(String? detail) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: EdgeColors.surface,
+      showDragHandle: true,
+      builder: (context) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+        child: Text(
+          detail ?? 'Each bar is one recorded game, oldest to newest. Green cleared the line. Red missed. A missing stat is skipped.',
+          style: EdgeType.body,
+        ),
+      ),
+    );
+  }
+}
+
+class _SideSwitch extends StatelessWidget {
+  const _SideSwitch({required this.over, required this.onChanged});
+
+  final bool over;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        _chip('Over', over, over ? null : onChanged),
+        const SizedBox(width: 8),
+        _chip('Under', !over, over ? onChanged : null),
+      ],
+    );
+  }
+
+  Widget _chip(String label, bool selected, VoidCallback? onTap) {
+    return Material(
+      color: selected ? EdgeColors.accent : EdgeColors.surfaceHigh,
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          child: Text(
+            label,
+            style: EdgeType.label.copyWith(
+              color: selected ? EdgeColors.onAccent : EdgeColors.text,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

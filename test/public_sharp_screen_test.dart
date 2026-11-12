@@ -76,7 +76,7 @@ void main() {
     expect(find.textContaining('Sample line history'), findsOneWidget);
     expect(find.textContaining('signals, not picks'), findsOneWidget);
     expect(find.text('Fast move to the Chiefs'), findsOneWidget);
-    expect(find.text('Steelers -1 to -3.5'), findsOneWidget);
+    expect(find.text('Bengals -1 to -3.5'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -85,7 +85,9 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(OddsEdgeApp(researchStore: MemoryResearchStore()));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('More', skipOffstage: false));
+    await tester.tap(find.byKey(const Key('more-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ListTile, 'More'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Public vs sharp'));
     await tester.pumpAndSettle();

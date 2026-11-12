@@ -75,6 +75,15 @@ class _ParlaySlipViewState extends State<ParlaySlipView> {
     if (mounted) setState(() {});
   }
 
+  bool _hasOppositeSides(List<ShownProp> legs) {
+    for (var i = 0; i < legs.length; i++) {
+      for (var j = i + 1; j < legs.length; j++) {
+        if (oppositeSides(legs[i].card.side, legs[j].card.side)) return true;
+      }
+    }
+    return false;
+  }
+
   double? get _stake {
     final value = double.tryParse(stake.text.trim());
     if (value == null || !value.isFinite || value <= 0) return null;
@@ -109,9 +118,12 @@ class _ParlaySlipViewState extends State<ParlaySlipView> {
         ),
       );
     }
+    final opposed = _hasOppositeSides(legs);
     TicketValue? ticket;
     String? ticketError;
-    if (legs.length >= 2 && legs.every((leg) => leg.card.best != null)) {
+    if (opposed) {
+      ticketError = 'Two legs are the over and the under of the same line. Remove one. A combined chance is not shown for that pair.';
+    } else if (legs.length >= 2 && legs.every((leg) => leg.card.best != null)) {
       try {
         ticket = priceTicket(
           [for (final leg in legs) ticketLegFor(leg)],
@@ -170,7 +182,8 @@ class _ParlaySlipViewState extends State<ParlaySlipView> {
             'No legs yet. Open a prop and add it. Prices are not invented to fill a ticket.',
           )
         else ...[
-          if (ticket != null) _TicketSummary(ticket: ticket, returns: returns, stake: dollars),
+          if (ticket != null)
+            _TicketSummary(ticket: ticket, returns: returns, stake: dollars),
           if (ticket == null && legs.length == 1)
             const Padding(
               padding: EdgeInsets.only(bottom: 8),
@@ -278,9 +291,8 @@ class _ParlaySlipViewState extends State<ParlaySlipView> {
       ),
     );
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Saved to My Bets.')),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Saved to My Bets.')));
   }
 }
 
@@ -306,7 +318,9 @@ class _TicketSummary extends StatelessWidget {
     }
     final book = ticket.bestBook;
     final stakeText = stake == null ? null : '\$${stake!.toStringAsFixed(2)}';
-    final returnText = returns == null ? null : '\$${returns!.toStringAsFixed(2)}';
+    final returnText = returns == null
+        ? null
+        : '\$${returns!.toStringAsFixed(2)}';
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 10),
@@ -341,7 +355,8 @@ class _TicketSummary extends StatelessWidget {
             bookChance: implied,
             ourLabel: 'Our combined chance',
             bookLabel: "Payout's implied chance",
-            overpriced: ticket.word == ValueWord.skip &&
+            overpriced:
+                ticket.word == ValueWord.skip &&
                 ticket.expectedValue != null &&
                 ticket.expectedValue! < 0,
             note: ticket.sameGame

@@ -1,4 +1,5 @@
 import '../domain/coach_board.dart';
+import '../domain/eastern.dart';
 import '../domain/coach_model.dart';
 import '../domain/edge_gap.dart';
 import '../domain/hit_rate.dart';
@@ -53,8 +54,7 @@ class ShownProp {
 
   double? get edge => edgePoints(verdict.ourChance, verdict.fairChance);
 
-  String get bookChanceLabel =>
-      pairedBook ? "Book's no-vig" : "Books' no-vig";
+  String get bookChanceLabel => pairedBook ? "Book's no-vig" : "Books' no-vig";
 }
 
 ShownProp showProp({
@@ -359,29 +359,7 @@ String propMeta(ShownProp shown) {
   return bits.join(' · ');
 }
 
-String kickoffLabel(DateTime instant) {
-  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const months = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ];
-  final local = instant.toLocal();
-  final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
-  final minute = local.minute.toString().padLeft(2, '0');
-  final suffix = local.hour >= 12 ? 'PM' : 'AM';
-  final day = days[local.weekday - 1];
-  return '$day ${months[local.month - 1]} ${local.day} · $hour:$minute $suffix';
-}
+String kickoffLabel(DateTime instant) => formatEastern(instant);
 
 String slateTitle(Iterable<DateTime> kickoffs) {
   DateTime? earliest;
@@ -398,7 +376,7 @@ String slateTitle(Iterable<DateTime> kickoffs) {
     'Saturday',
     'Sunday',
   ];
-  return "${days[earliest.toLocal().weekday - 1]}'s best prices";
+  return "${days[easternWall(earliest).weekday - 1]}'s best prices";
 }
 
 String slateDate(Iterable<DateTime> kickoffs) {
@@ -421,8 +399,8 @@ String slateDate(Iterable<DateTime> kickoffs) {
     'Nov',
     'Dec',
   ];
-  final local = earliest.toLocal();
-  return '${months[local.month - 1]} ${local.day} · NFL';
+  final wall = easternWall(earliest);
+  return '${months[wall.month - 1]} ${wall.day} · NFL';
 }
 
 int compareByEdge(ShownProp a, ShownProp b) {

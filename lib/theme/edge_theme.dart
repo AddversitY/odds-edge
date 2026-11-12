@@ -122,7 +122,7 @@ ThemeData edgeTheme() {
       elevation: 0,
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.all(Radius.circular(EdgeSpace.radius)),
+        borderRadius: BorderRadius.all(Radius.circular(18)),
         side: BorderSide(color: EdgeColors.border),
       ),
     ),
