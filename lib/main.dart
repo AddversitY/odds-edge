@@ -6,15 +6,18 @@ import 'package:flutter/material.dart';
 import 'coach/ask_coach.dart';
 import 'coach/games_screen.dart';
 import 'coach/home_screen.dart';
+import 'coach/sharp_view.dart';
 import 'coach/model_screen.dart';
 import 'coach/my_bets_screen.dart';
 import 'coach/parlays_screen.dart';
 import 'coach/props_screen.dart';
 import 'data/demo.dart';
+import 'data/demo_lines.dart';
 import 'data/repository.dart';
 import 'domain/coach_board.dart';
 import 'domain/coach_model.dart';
 import 'domain/odds.dart';
+import 'domain/public_sharp.dart';
 import 'research_workspace.dart';
 import 'data/research_store.dart';
 import 'domain/research.dart';
@@ -50,6 +53,8 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
   late OddsBoard board;
   OddsBoard? propBoard;
   OddsBoard? sharpBoard;
+  Map<String, List<LineSnapshot>> lineHistory = const {};
+  PublicFeed publicFeed = PublicFeed.unavailable;
   Timer? timer;
   int page = 0;
   int shell = 0;
@@ -102,6 +107,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       5 => 'Tools',
       6 => "Coach's model",
       7 => 'More',
+      8 => 'Public vs sharp',
       4 => 'Players',
       1 => 'Matchups',
       3 => 'Proof Lab',
@@ -167,6 +173,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
   void initState() {
     super.initState();
     board = demoBoard(DateTime.now().toUtc());
+    lineHistory = demoLineHistory(board);
     eventId = board.events.first.id;
     researchStore
         .loadBooks()
@@ -217,8 +224,16 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
           selectionKey = null;
         }
       });
-      if (backend) unawaited(loadProps());
-      if (backend) unawaited(loadSharp());
+      if (backend) {
+        unawaited(loadProps());
+        unawaited(loadSharp());
+        unawaited(loadLineContext());
+      } else {
+        setState(() {
+          lineHistory = demoLineHistory(next);
+          publicFeed = PublicFeed.unavailable;
+        });
+      }
       if (onDemand || coachModel == null) unawaited(loadCoachModel());
     } catch (_) {
       if (mounted) {
@@ -316,6 +331,21 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       if (mounted) setState(() => sharpBoard = next);
     } catch (_) {
       if (mounted) setState(() => sharpBoard = null);
+    }
+  }
+
+  Future<void> loadLineContext() async {
+    try {
+      final lines = parseLineSlate(await repository.lineSlate());
+      final splits = PublicFeed.parse(await repository.publicSplits());
+      if (!mounted || !backend) return;
+      setState(() {
+        lineHistory = lines;
+        publicFeed = splits;
+      });
+    } catch (_) {
+      if (!mounted || !backend) return;
+      setState(() => publicFeed = PublicFeed.unavailable);
     }
   }
 
@@ -629,6 +659,9 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       enabledBooks: enabledBooks,
       model: coachModel,
       settings: edgeSettings,
+      lineHistory: lineHistory,
+      publicSplits: publicFeed.splits,
+      sampleHistory: board.demo && !backend,
     ),
     3 => ParlaysScreen(
       board: pricedBoard,
@@ -656,6 +689,11 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
         style: EdgeType.body,
       ),
       const SizedBox(height: 16),
+      _libraryRow(
+        'Public vs sharp',
+        'Where the line moved, and where the public is when we are allowed to show it.',
+        () => navigateTo(8),
+      ),
       _libraryRow(
         'Odds comparison',
         'The same bet at every book in this snapshot.',
@@ -717,6 +755,15 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
 
   Widget legacyPage(bool wide) {
     if (page == 7) return libraryMenu();
+    if (page == 8) {
+      return PublicSharpScreen(
+        board: pricedBoard,
+        now: now,
+        lineHistory: lineHistory,
+        publicSplits: publicFeed.splits,
+        sample: board.demo && !backend,
+      );
+    }
     if (page == 3) {
       return ResearchWorkspace(
         key: ValueKey(researchLaunch),
@@ -734,7 +781,10 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (page != 4) ...[sourcePanel(), const SizedBox(height: 26)],
+            if (page != 4 && page != 8) ...[
+              sourcePanel(),
+              const SizedBox(height: 26),
+            ],
             if (page == 0)
               overview()
             else if (page == 1)
@@ -775,7 +825,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
             else
               const SizedBox(),
             const SizedBox(height: 30),
-            if (page != 4)
+            if (page != 4 && page != 8)
               const Text(
                 'Prices are observations, not guaranteed offers. Confirm the exact line and rules with the operator.',
                 style: TextStyle(color: Colors.white54, fontSize: 12),
@@ -884,6 +934,9 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                           demo: !backend,
                         );
                         propBoard = null;
+                        sharpBoard = null;
+                        lineHistory = const {};
+                        publicFeed = PublicFeed.unavailable;
                       });
                       await refresh();
                     },

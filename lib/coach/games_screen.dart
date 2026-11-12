@@ -4,12 +4,14 @@ import '../domain/coach_board.dart';
 import '../domain/coach_model.dart';
 import '../domain/market_math.dart';
 import '../domain/odds.dart';
+import '../domain/public_sharp.dart';
 import '../domain/value_check.dart';
 import '../explained_number.dart';
 import '../theme/edge_theme.dart';
 import '../theme/reveal.dart';
 import 'coach_line_view.dart';
 import 'coach_widgets.dart';
+import 'sharp_view.dart';
 import 'value_view.dart';
 
 enum _When { all, today, upcoming }
@@ -26,6 +28,9 @@ class GamesScreen extends StatefulWidget {
       totalPoints: 2.5,
       minExpectedValue: 0.02,
     ),
+    this.lineHistory = const {},
+    this.publicSplits = const [],
+    this.sampleHistory = false,
   });
 
   final OddsBoard board;
@@ -33,6 +38,9 @@ class GamesScreen extends StatefulWidget {
   final Set<String>? enabledBooks;
   final CoachModel? model;
   final EdgeSettings settings;
+  final Map<String, List<LineSnapshot>> lineHistory;
+  final List<PublicSplit> publicSplits;
+  final bool sampleHistory;
 
   @override
   State<GamesScreen> createState() => _GamesScreenState();
@@ -94,6 +102,7 @@ class _GamesScreenState extends State<GamesScreen> {
           for (final game in games) ...[
             _GameCard(
               game: game,
+              sharp: _sharpFor(game.event),
               line: widget.model?.lineFor(
                 game.event,
                 widget.board.quotes,
@@ -108,6 +117,7 @@ class _GamesScreenState extends State<GamesScreen> {
                       board: widget.board,
                       now: widget.now,
                       books: widget.enabledBooks,
+                      sharp: _sharpFor(game.event),
                       line: widget.model?.lineFor(
                         game.event,
                         widget.board.quotes,
@@ -125,6 +135,16 @@ class _GamesScreenState extends State<GamesScreen> {
     );
   }
 
+  SharpRead _sharpFor(SportEvent event) => readSharp(
+    event: event,
+    history: historyForEvent(event, widget.lineHistory),
+    currentQuotes: widget.board.quotes,
+    publicSplit: publicSplitFor(event, widget.publicSplits),
+    sample: widget.sampleHistory,
+    now: widget.now,
+    pricesAt: widget.board.fetchedAt,
+  );
+
   bool _matches(GameSummary game, DateTime today) {
     final day = calendarDay(game.event.startsAt);
     return switch (when) {
@@ -138,8 +158,14 @@ class _GamesScreenState extends State<GamesScreen> {
 void _noop() {}
 
 class _GameCard extends StatelessWidget {
-  const _GameCard({required this.game, required this.onOpen, this.line});
+  const _GameCard({
+    required this.game,
+    required this.onOpen,
+    required this.sharp,
+    this.line,
+  });
   final GameSummary game;
+  final SharpRead sharp;
   final CoachLine? line;
   final VoidCallback onOpen;
 
@@ -167,6 +193,15 @@ class _GameCard extends StatelessWidget {
                 "Coach's Line is not on this game.",
                 style: EdgeType.body.copyWith(color: EdgeColors.textSecondary),
               ),
+            if (sharp.hasSignal) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Sharp  ${sharp.oneLine}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: EdgeType.label.copyWith(color: EdgeColors.text),
+              ),
+            ],
           ],
         ),
       ),
@@ -180,6 +215,7 @@ class _GameDetail extends StatelessWidget {
     required this.board,
     required this.now,
     required this.books,
+    required this.sharp,
     this.line,
   });
 
@@ -187,6 +223,7 @@ class _GameDetail extends StatelessWidget {
   final OddsBoard board;
   final DateTime now;
   final Set<String>? books;
+  final SharpRead sharp;
   final CoachLine? line;
 
   @override
@@ -209,6 +246,8 @@ class _GameDetail extends StatelessWidget {
                 style: EdgeType.body,
               ),
             ),
+          SharpWhyRow(read: sharp),
+          const SizedBox(height: 16),
           Reveal(
             verdict: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

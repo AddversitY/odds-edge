@@ -89,6 +89,12 @@ class BackendRepository {
     return Map<String, dynamic>.from(decoded);
   }
 
+  /// Every saved line snapshot. Reading this does not call The Odds API.
+  Future<Object?> lineSlate() => _get('/v1/lines?all=1');
+
+  /// Public ticket and money percentages, or an explicit unavailable report.
+  Future<Object?> publicSplits() => _get('/v1/public-splits');
+
   Future<List<OddsQuote>> history(Selection selection, {DateTime? at}) async {
     final query = <String, String>{'selection': selection.key};
     if (at != null) query['at'] = at.toUtc().toIso8601String();

@@ -28,6 +28,7 @@ class LineHistory {
   final DateTime Function() _clock;
   Future<void> _queue = Future<void>.value();
   int _writes = 0;
+  Set<String>? _seen;
 
   /// [kind] is `lines` for the main moneyline, spread, and total board,
   /// or `props` for a player-prop board.
@@ -38,9 +39,18 @@ class LineHistory {
     return _enqueue(() async {
       final lines = _encode(board, kind);
       if (lines.isEmpty) return;
+      await _loadSeen();
+      final fresh = <String>[];
+      for (final line in lines) {
+        final decoded = jsonDecode(line);
+        if (decoded is! Map) continue;
+        final key = '${decoded['kind']}|${decoded['id']}|${decoded['at']}';
+        if (_seen!.add(key)) fresh.add(line);
+      }
+      if (fresh.isEmpty) return;
       await file.parent.create(recursive: true);
       await file.writeAsString(
-        '${lines.join('\n')}\n',
+        '${fresh.join('\n')}\n',
         mode: FileMode.append,
         flush: true,
       );
@@ -61,11 +71,48 @@ class LineHistory {
         final view = _view(raw);
         if (view != null) snapshots.add(view);
       }
-      snapshots.sort((a, b) => (a['at'] as String).compareTo(b['at'] as String));
+      snapshots.sort(
+        (a, b) => (a['at'] as String).compareTo(b['at'] as String),
+      );
       if (snapshots.length > maxPerEvent) {
         return snapshots.sublist(snapshots.length - maxPerEvent);
       }
       return snapshots;
+    });
+  }
+
+  /// Every main-line snapshot, one pass. Does not call The Odds API.
+  Future<List<Map<String, dynamic>>> slate() {
+    return _enqueue(() async {
+      final grouped = <String, List<Map<String, dynamic>>>{};
+      final names = <String, Map<String, String>>{};
+      await for (final raw in _decoded()) {
+        if (raw['kind'] != 'lines') continue;
+        final view = _view(raw);
+        if (view == null) continue;
+        final id = '${raw['id']}';
+        (grouped[id] ??= []).add(view);
+        names[id] = {
+          'away': '${raw['away'] ?? names[id]?['away'] ?? ''}',
+          'home': '${raw['home'] ?? names[id]?['home'] ?? ''}',
+          'startsAt': '${raw['kick'] ?? names[id]?['startsAt'] ?? ''}',
+        };
+      }
+      final events = <Map<String, dynamic>>[];
+      for (final entry in grouped.entries) {
+        final shots = entry.value
+          ..sort((a, b) => (a['at'] as String).compareTo(b['at'] as String));
+        final name = names[entry.key] ?? const {};
+        events.add({
+          'id': entry.key,
+          'away': name['away'] ?? '',
+          'home': name['home'] ?? '',
+          'startsAt': name['startsAt'] ?? '',
+          'snapshots': shots,
+        });
+      }
+      events.sort((a, b) => '${a['id']}'.compareTo('${b['id']}'));
+      return events;
     });
   }
 
@@ -159,6 +206,16 @@ class LineHistory {
       if (await file.exists()) await file.delete();
       await tmp.rename(file.path);
     }
+    _seen = null;
+  }
+
+  Future<void> _loadSeen() async {
+    if (_seen != null) return;
+    final seen = <String>{};
+    await for (final raw in _decoded()) {
+      seen.add('${raw['kind']}|${raw['id']}|${raw['at']}');
+    }
+    _seen = seen;
   }
 
   Stream<Map<String, dynamic>> _decoded() async* {
