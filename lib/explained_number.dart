@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
-const toolMint = Color(0xFF7CE7C0);
+import 'theme/edge_theme.dart';
+
+const toolMint = EdgeColors.accent;
 
 const responsibleGamblingNote =
     'This is a calculator, not a recommendation and not a promise of profit. '
@@ -55,5 +57,12 @@ class ToolNote extends StatelessWidget {
   final String text;
   @override
   Widget build(BuildContext context) =>
-      Text(text, style: const TextStyle(color: Colors.white60, height: 1.5));
+      Text(
+        text,
+        style: const TextStyle(
+          color: EdgeColors.textSecondary,
+          fontSize: 15,
+          height: 1.45,
+        ),
+      );
 }

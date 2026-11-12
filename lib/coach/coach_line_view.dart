@@ -3,13 +3,62 @@ import 'package:flutter/material.dart';
 import '../domain/coach_board.dart';
 import '../domain/coach_model.dart';
 import '../domain/odds.dart';
+import '../theme/edge_theme.dart';
+import '../theme/reveal.dart';
 import 'coach_widgets.dart';
 
+/// The comparison a person sees before opening a game.
+/// One word, then the two numbers being compared. Nothing else.
 class CoachLineSummary extends StatelessWidget {
   const CoachLineSummary({super.key, required this.line, this.compact = true});
 
   final CoachLine line;
   final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final verdict = line.flagged ? 'Edge' : 'No gap';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          "Coach's Line",
+          style: EdgeType.label.copyWith(
+            color: EdgeColors.accent,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          verdict,
+          style: EdgeType.title.copyWith(
+            color: line.flagged ? EdgeColors.good : EdgeColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text('Our number: ${line.ourSpread}', style: EdgeType.body),
+        Text(
+          line.booksSpread == null
+              ? 'The books: no spread in this snapshot.'
+              : 'The books: ${line.booksSpread}',
+          style: EdgeType.body,
+        ),
+        if (!compact) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Shown for comparison, not a pick.',
+            style: EdgeType.label.copyWith(color: EdgeColors.textSecondary),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class CoachLineCard extends StatelessWidget {
+  const CoachLineCard({super.key, required this.line});
+
+  final CoachLine line;
 
   @override
   Widget build(BuildContext context) {
@@ -21,72 +70,6 @@ class CoachLineSummary extends StatelessWidget {
     final over = line.overProbability == null
         ? 'Over chance needs a total in this snapshot.'
         : 'Chance the over hits ${percentLabel(line.overProbability!)}';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          "Coach's Line",
-          style: TextStyle(
-            color: coachMint,
-            fontSize: 12,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.4,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text('Our number: ${line.ourSpread}'),
-        Text(
-          line.booksSpread == null
-              ? 'The books: no spread in this snapshot.'
-              : 'The books: ${line.booksSpread}',
-        ),
-        Text('Our total: ${line.ourTotal}'),
-        Text(
-          line.booksTotal == null
-              ? 'The books: no total in this snapshot.'
-              : 'The books: ${line.booksTotal}',
-        ),
-        Text(cover, style: const TextStyle(color: Colors.white70)),
-        Text(over, style: const TextStyle(color: Colors.white70)),
-        if (!compact && line.flagged) ...[
-          const SizedBox(height: 6),
-          const _EdgeBadge(),
-          const SizedBox(height: 4),
-          Text(line.edgeReason, style: const TextStyle(height: 1.35)),
-        ],
-      ],
-    );
-  }
-}
-
-class _EdgeBadge extends StatelessWidget {
-  const _EdgeBadge();
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-    decoration: BoxDecoration(
-      color: coachMint.withValues(alpha: .16),
-      borderRadius: BorderRadius.circular(99),
-    ),
-    child: const Text(
-      'Edge',
-      style: TextStyle(
-        color: coachMint,
-        fontSize: 12,
-        fontWeight: FontWeight.w800,
-      ),
-    ),
-  );
-}
-
-class CoachLineCard extends StatelessWidget {
-  const CoachLineCard({super.key, required this.line});
-
-  final CoachLine line;
-
-  @override
-  Widget build(BuildContext context) {
     final edges = [
       line.homeSpreadEdge,
       line.awaySpreadEdge,
@@ -94,30 +77,53 @@ class CoachLineCard extends StatelessWidget {
       line.underEdge,
     ].whereType<SideEdge>();
     return CoachCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CoachLineSummary(line: line, compact: false),
-          const SizedBox(height: 8),
-          for (final edge in edges)
-            if (edge.quote != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
-                  '${edge.label} · best price ${edge.quote!.book} ${americanLabel(edge.quote!.decimal)}'
-                  '${edge.expectedProfit == null ? '' : ' · ${signedPercent(edge.expectedProfit!)} if our chance is right'}',
-                  style: const TextStyle(color: Colors.white70, height: 1.3),
+      child: Reveal(
+        verdict: CoachLineSummary(line: line, compact: false),
+        reasons: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(cover, style: EdgeType.body),
+            const SizedBox(height: 6),
+            Text(over, style: EdgeType.body),
+            const SizedBox(height: 6),
+            Text(line.edgeReason, style: EdgeType.body),
+            const SizedBox(height: 6),
+            Text(
+              'An Edge is our number compared with the books. It is a comparison, not a promise.',
+              style: EdgeType.body.copyWith(color: EdgeColors.textSecondary),
+            ),
+          ],
+        ),
+        math: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Our total: ${line.ourTotal}', style: EdgeType.body),
+            Text(
+              line.booksTotal == null
+                  ? 'The books: no total in this snapshot.'
+                  : 'The books: ${line.booksTotal}',
+              style: EdgeType.body,
+            ),
+            const SizedBox(height: 8),
+            for (final edge in edges)
+              if (edge.quote != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    '${edge.label} · best price ${edge.quote!.book} ${americanLabel(edge.quote!.decimal)}'
+                    '${edge.expectedProfit == null ? '' : ' · ${signedPercent(edge.expectedProfit!)} if our chance is right'}',
+                    style: EdgeType.body.copyWith(color: EdgeColors.textSecondary),
+                  ),
                 ),
-              ),
-          const SizedBox(height: 4),
-          Text(
-            'An Edge means our number and the books differ by at least '
-            '${line.settings.spreadPoints.toStringAsFixed(1)} points, or the best price '
-            'is at least ${(line.settings.minExpectedValue * 100).toStringAsFixed(0)}% '
-            'ahead of our chance. It is a comparison, not a promise.',
-            style: const TextStyle(color: Colors.white60, height: 1.35),
-          ),
-        ],
+            Text(
+              'The badge appears when our number and the books differ by at least '
+              '${line.settings.spreadPoints.toStringAsFixed(1)} points, or the best price '
+              'is at least ${(line.settings.minExpectedValue * 100).toStringAsFixed(0)}% '
+              'ahead of our chance.',
+              style: EdgeType.body.copyWith(color: EdgeColors.textSecondary),
+            ),
+          ],
+        ),
       ),
     );
   }

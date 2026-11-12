@@ -3,17 +3,19 @@ import 'package:flutter/material.dart';
 import '../domain/hit_rate.dart';
 import '../domain/odds.dart';
 import '../explained_number.dart';
+import '../theme/edge_theme.dart';
 
-const coachMint = Color(0xFF7CE7C0);
-const coachPanel = Color(0xF0121A24);
+/// Accent for chrome. Value colors live on [EdgeColors].
+const coachMint = EdgeColors.accent;
+const coachPanel = EdgeColors.surface;
 
 /// Green at 60% and above, amber from 45%, red below. A display choice for
 /// a counted rate, explained in the tooltip. It is not a pick.
 Color hitRateColor(double? rate) {
-  if (rate == null) return Colors.white38;
-  if (rate >= 0.6) return const Color(0xFF3DDC97);
-  if (rate >= 0.45) return const Color(0xFFE6C15A);
-  return const Color(0xFFFF7B7B);
+  if (rate == null) return EdgeColors.textTertiary;
+  if (rate >= 0.6) return EdgeColors.good;
+  if (rate >= 0.45) return EdgeColors.warn;
+  return EdgeColors.bad;
 }
 
 class CoachCard extends StatelessWidget {
@@ -25,7 +27,7 @@ class CoachCard extends StatelessWidget {
   Widget build(BuildContext context) => GestureDetector(
     onDoubleTap: onDoubleTap,
     child: Card(
-      child: Padding(padding: const EdgeInsets.all(14), child: child),
+      child: Padding(padding: const EdgeInsets.all(20), child: child),
     ),
   );
 }
@@ -36,10 +38,8 @@ class SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
     text,
-    style: const TextStyle(
-      color: coachMint,
-      fontSize: 11,
-      letterSpacing: 1.4,
+    style: EdgeType.label.copyWith(
+      color: EdgeColors.accent,
       fontWeight: FontWeight.w700,
     ),
   );
@@ -63,9 +63,9 @@ class FilterPill extends StatelessWidget {
       label: Text(label),
       selected: selected,
       onSelected: (_) => onTap(),
-      selectedColor: coachMint.withValues(alpha: .18),
-      labelStyle: TextStyle(
-        color: selected ? coachMint : Colors.white70,
+      selectedColor: EdgeColors.accent.withValues(alpha: .18),
+      labelStyle: EdgeType.label.copyWith(
+        color: selected ? EdgeColors.accent : EdgeColors.text,
         fontWeight: FontWeight.w600,
       ),
     ),
@@ -93,17 +93,11 @@ class ChanceBar extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: Text(
-                label,
-                style: const TextStyle(color: Colors.white70, fontSize: 12),
-              ),
+              child: Text(label, style: EdgeType.label),
             ),
             Text(
               shown ? '${(value * 100).toStringAsFixed(1)}%' : '—',
-              style: const TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 18,
-              ),
+              style: EdgeType.title,
             ),
           ],
         ),
@@ -113,8 +107,8 @@ class ChanceBar extends StatelessWidget {
           child: LinearProgressIndicator(
             minHeight: 8,
             value: shown ? value.clamp(0, 1).toDouble() : 0,
-            backgroundColor: const Color(0xFF243041),
-            color: coachMint,
+            backgroundColor: EdgeColors.surfaceHigh,
+            color: EdgeColors.accent,
           ),
         ),
       ],
@@ -140,25 +134,22 @@ class StatBlock extends StatelessWidget {
     child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFF0E141C),
+        color: EdgeColors.background,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF243041)),
+        border: Border.all(color: EdgeColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            kicker,
-            style: const TextStyle(color: Colors.white54, fontSize: 10),
-          ),
+          Text(kicker, style: EdgeType.label),
+          const SizedBox(height: 4),
           ExplainedValue(
             value: value,
             title: title,
             body: body,
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 14,
-              color: valueColor ?? Colors.white,
+            style: EdgeType.body.copyWith(
+              fontWeight: FontWeight.w700,
+              color: valueColor ?? EdgeColors.text,
             ),
           ),
         ],
@@ -188,15 +179,15 @@ class HitChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         decoration: BoxDecoration(
-          color: const Color(0xFF0E141C),
+          color: EdgeColors.background,
           borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: EdgeColors.border),
         ),
         child: Text(
           '$label $text',
-          style: TextStyle(
+          style: EdgeType.label.copyWith(
             color: hitRateColor(clear),
             fontWeight: FontWeight.w700,
-            fontSize: 12,
           ),
         ),
       ),
@@ -213,9 +204,9 @@ class StatBars extends StatelessWidget {
   Widget build(BuildContext context) {
     final shown = samples.where((sample) => sample.value != null).toList();
     if (shown.isEmpty) {
-      return const Text(
+      return Text(
         'No recorded stat for this line, so there is no game chart.',
-        style: TextStyle(color: Colors.white60),
+        style: EdgeType.body.copyWith(color: EdgeColors.textSecondary),
       );
     }
     // Hit-rate samples are newest first. The chart reads oldest to newest.
@@ -250,10 +241,10 @@ class StatBars extends StatelessWidget {
                       child: DecoratedBox(
                         decoration: BoxDecoration(
                           color: sample.outcome == 'hit'
-                              ? const Color(0xFF3DDC97)
+                              ? EdgeColors.good
                               : sample.outcome == 'miss'
-                              ? const Color(0xFFFF7B7B)
-                              : Colors.white24,
+                              ? EdgeColors.bad
+                              : EdgeColors.textTertiary,
                           borderRadius: BorderRadius.circular(4),
                         ),
                       ),
@@ -277,9 +268,9 @@ class OddsHistoryChart extends StatelessWidget {
     final points = [...quotes]
       ..sort((a, b) => a.collectedAt.compareTo(b.collectedAt));
     if (points.length < 2) {
-      return const Text(
+      return Text(
         'No odds-over-time chart yet. That needs at least two saved snapshots of this exact prop. Nothing is drawn in its place.',
-        style: TextStyle(color: Colors.white60, height: 1.4),
+        style: EdgeType.body.copyWith(color: EdgeColors.textSecondary),
       );
     }
     return SizedBox(

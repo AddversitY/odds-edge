@@ -8,6 +8,8 @@ import '../domain/coach_model.dart';
 import '../domain/odds.dart';
 import '../domain/saved_play.dart';
 import '../explained_number.dart';
+import '../theme/edge_theme.dart';
+import '../theme/reveal.dart';
 import 'coach_widgets.dart';
 
 class MyBetsScreen extends StatefulWidget {
@@ -48,7 +50,7 @@ class _MyBetsScreenState extends State<MyBetsScreen> {
       final log = snapshot.data;
       if (log == null) return const Center(child: CircularProgressIndicator());
       return ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
         children: [
           const SectionLabel('MY BETS'),
           const SizedBox(height: 8),
@@ -94,11 +96,8 @@ class _MyBetsScreenState extends State<MyBetsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    play.title,
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  Text(play.detail, style: const TextStyle(color: Colors.white60)),
+                  Text(play.title, style: EdgeType.body.copyWith(fontWeight: FontWeight.w700)),
+                  Text(play.detail, style: EdgeType.label),
                   Text(
                     [
                       if (play.book.isNotEmpty) play.book,
@@ -106,6 +105,7 @@ class _MyBetsScreenState extends State<MyBetsScreen> {
                       play.demo ? 'Sample price' : 'Saved price',
                       play.priceNote,
                     ].join(' · '),
+                    style: EdgeType.body,
                   ),
                   Align(
                     alignment: Alignment.centerLeft,
@@ -142,9 +142,10 @@ class _MyBetsScreenState extends State<MyBetsScreen> {
               child: _Report(
                 title: 'Settled',
                 value: bets.isEmpty ? 'Nothing settled' : money(ledger.profit),
+                color: bets.isEmpty ? null : valueColor(ledger.profit),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 12),
             Expanded(
               child: _Report(
                 title: 'At risk',
@@ -155,14 +156,14 @@ class _MyBetsScreenState extends State<MyBetsScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         Text(
-          'Record ${ledger.wins}-${ledger.losses}-${ledger.pushes}. Days below are local dates. A day with no bet is left blank.',
-          style: const TextStyle(color: Colors.white60, height: 1.35),
+          'Record ${ledger.wins}-${ledger.losses}-${ledger.pushes}. A day with no bet is left plain.',
+          style: EdgeType.body.copyWith(color: EdgeColors.textSecondary),
         ),
         const SizedBox(height: 8),
-        Text(_closingSummary(ledger), style: const TextStyle(height: 1.4)),
-        const SizedBox(height: 10),
+        Text(_closingSummary(ledger), style: EdgeType.body),
+        const SizedBox(height: 12),
         _MonthGrid(month: DateTime(month.year, month.month), days: monthDays),
         const SizedBox(height: 16),
         _AddBet(
@@ -175,23 +176,52 @@ class _MyBetsScreenState extends State<MyBetsScreen> {
         ),
         const SizedBox(height: 12),
         if (bets.isEmpty)
-          const Text('No bets in the log yet. Adding one here does not place it.')
+          const Text(
+            'No bets in the log yet. Adding one here does not place it.',
+            style: EdgeType.body,
+          )
         else
           for (final bet in bets)
             Padding(
-              padding: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.only(bottom: 12),
               child: CoachCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(bet.description, style: const TextStyle(fontWeight: FontWeight.w700)),
                     Text(
-                      '${bet.book} · ${americanLabel(bet.decimal)} · stake ${money(bet.stake)} · ${bet.result.name}',
+                      bet.result.name,
+                      style: EdgeType.label.copyWith(
+                        color: switch (bet.result.name) {
+                          'won' => EdgeColors.good,
+                          'lost' => EdgeColors.bad,
+                          'push' => EdgeColors.warn,
+                          _ => EdgeColors.textSecondary,
+                        },
+                      ),
                     ),
+                    const SizedBox(height: 4),
+                    Text(bet.description, style: EdgeType.title),
+                    const SizedBox(height: 4),
                     Text(
-                      bet.profit == null
-                          ? 'Not in the settled total.'
-                          : 'Result ${money(bet.profit!)}',
+                      bet.profit == null ? 'Not settled' : money(bet.profit!),
+                      style: EdgeType.title.copyWith(
+                        color: bet.profit == null ? EdgeColors.text : valueColor(bet.profit),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${bet.book} · ${americanLabel(bet.decimal)} · stake ${money(bet.stake)}',
+                      style: EdgeType.label,
+                    ),
+                    const SizedBox(height: 8),
+                    Reveal(
+                      verdict: Text(_clvSentence(bet), style: EdgeType.body),
+                      math: bet.closingLineValue == null
+                          ? null
+                          : Text(
+                              'Closing price versus the price you took: ${signedPercent(bet.closingLineValue!)}. Positive means the close was a shorter price.',
+                              style: EdgeType.body,
+                            ),
                     ),
                     _ClosingNumber(
                       key: ValueKey(bet.id),
@@ -272,13 +302,6 @@ class _ClosingNumberState extends State<_ClosingNumber> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 6),
-        Text(_clvSentence(widget.bet), style: const TextStyle(height: 1.35)),
-        if (widget.bet.closingLineValue != null)
-          Text(
-            'Closing price versus the price you took: ${signedPercent(widget.bet.closingLineValue!)}. Positive means the close was a shorter price.',
-            style: const TextStyle(color: Colors.white60, height: 1.3),
-          ),
         if (widget.bet.line != null) ...[
           const SizedBox(height: 6),
           TextField(
@@ -308,7 +331,7 @@ class _ClosingNumberState extends State<_ClosingNumber> {
           ),
         ],
         if (message != null)
-          Text(message!, style: const TextStyle(color: Colors.orangeAccent)),
+          Text(message!, style: EdgeType.body.copyWith(color: EdgeColors.warn)),
       ],
     );
   }
@@ -321,89 +344,118 @@ class _Log {
 }
 
 class _Report extends StatelessWidget {
-  const _Report({required this.title, required this.value});
+  const _Report({required this.title, required this.value, this.color});
   final String title, value;
+  final Color? color;
   @override
   Widget build(BuildContext context) => CoachCard(
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: const TextStyle(color: Colors.white60)),
-        const SizedBox(height: 4),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+        Text(title, style: EdgeType.label),
+        const SizedBox(height: 8),
+        Text(
+          value,
+          style: EdgeType.title.copyWith(color: color ?? EdgeColors.text),
+        ),
       ],
     ),
   );
 }
 
-class _MonthGrid extends StatelessWidget {
+class _MonthGrid extends StatefulWidget {
   const _MonthGrid({required this.month, required this.days});
   final DateTime month;
   final List<DayReport> days;
 
   @override
+  State<_MonthGrid> createState() => _MonthGridState();
+}
+
+class _MonthGridState extends State<_MonthGrid> {
+  int? selected;
+
+  @override
   Widget build(BuildContext context) {
-    final byDay = {for (final day in days) day.day.day: day};
-    final first = DateTime(month.year, month.month);
-    final count = DateTime(month.year, month.month + 1, 0).day;
+    final byDay = {for (final day in widget.days) day.day.day: day};
+    final first = DateTime(widget.month.year, widget.month.month);
+    final count = DateTime(widget.month.year, widget.month.month + 1, 0).day;
     final blanks = first.weekday % 7;
+    final picked = selected == null ? null : byDay[selected];
     return CoachCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '${_months[month.month - 1]} ${month.year}',
-            style: const TextStyle(fontWeight: FontWeight.w800),
+            '${_months[widget.month.month - 1]} ${widget.month.year}',
+            style: EdgeType.title,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Row(
             children: [
               for (final label in ['S', 'M', 'T', 'W', 'T', 'F', 'S'])
                 Expanded(
-                  child: Text(
-                    label,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white38, fontSize: 12),
-                  ),
+                  child: Text(label, textAlign: TextAlign.center, style: EdgeType.label),
                 ),
             ],
           ),
+          const SizedBox(height: 8),
           GridView.count(
             crossAxisCount: 7,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            childAspectRatio: 0.8,
+            childAspectRatio: 1,
+            mainAxisSpacing: 4,
+            crossAxisSpacing: 4,
             children: [
               for (var i = 0; i < blanks; i++) const SizedBox(),
-              for (var day = 1; day <= count; day++)
-                _cell(day, byDay[day]),
+              for (var day = 1; day <= count; day++) _cell(day, byDay[day]),
             ],
           ),
+          if (picked != null) ...[
+            const SizedBox(height: 12),
+            Text(_daySentence(picked), style: EdgeType.body),
+          ],
         ],
       ),
     );
   }
 
   Widget _cell(int day, DayReport? report) {
-    final profit = report == null || report.settledCount == 0
-        ? ''
-        : money(report.settledProfit);
-    return Column(
-      children: [
-        Text('$day', style: const TextStyle(fontSize: 12)),
-        if (profit.isNotEmpty)
-          Text(
-            profit,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 9,
-              color: (report?.settledProfit ?? 0) < 0
-                  ? const Color(0xFFFF7B7B)
-                  : coachMint,
+    final settled = report != null && report.settledCount > 0;
+    final color = !settled
+        ? EdgeColors.text
+        : valueColor(report.settledProfit);
+    final chosen = selected == day;
+    return InkWell(
+      onTap: report == null
+          ? null
+          : () => setState(() => selected = chosen ? null : day),
+      borderRadius: BorderRadius.circular(10),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: chosen ? EdgeColors.surfaceHigh : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Center(
+          child: Text(
+            '$day',
+            style: EdgeType.body.copyWith(
+              color: color,
+              fontWeight: settled ? FontWeight.w700 : FontWeight.w500,
             ),
           ),
-      ],
+        ),
+      ),
     );
+  }
+
+  String _daySentence(DayReport report) {
+    final label = '${_months[widget.month.month - 1]} ${report.day.day}';
+    if (report.settledCount == 0) {
+      return '$label: ${report.pendingCount} still open. Nothing settled that day.';
+    }
+    return '$label: ${money(report.settledProfit)} settled across ${report.settledCount} ${report.settledCount == 1 ? 'bet' : 'bets'}.';
   }
 }
 
@@ -441,6 +493,7 @@ class _AddBetState extends State<_AddBet> {
   String side = '';
   String? eventId;
   String? message;
+  bool open = false;
 
   @override
   void dispose() {
@@ -513,11 +566,20 @@ class _AddBetState extends State<_AddBet> {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Log a bet you placed', style: TextStyle(fontWeight: FontWeight.w800)),
+        TextButton(
+          style: TextButton.styleFrom(
+            padding: EdgeInsets.zero,
+            minimumSize: const Size(48, 48),
+            alignment: Alignment.centerLeft,
+          ),
+          onPressed: () => setState(() => open = !open),
+          child: Text(open ? 'Hide the bet form' : 'Log a bet you placed'),
+        ),
+        if (open) ...[
         const SizedBox(height: 4),
         const Text(
           'The number on the ticket is saved now. After the game closes, add the closing number on the bet to see if you beat the close. This does not place the bet.',
-          style: TextStyle(color: Colors.white60, height: 1.35),
+          style: EdgeType.body,
         ),
         const SizedBox(height: 8),
         if (widget.board != null && widget.board!.events.isNotEmpty)
@@ -671,8 +733,9 @@ class _AddBetState extends State<_AddBet> {
         if (message != null)
           Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: Text(message!, style: const TextStyle(color: Colors.orangeAccent)),
+            child: Text(message!, style: EdgeType.body.copyWith(color: EdgeColors.warn)),
           ),
+        ],
       ],
     ),
   );

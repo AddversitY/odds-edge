@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import '../domain/coach_board.dart';
 import '../domain/odds.dart';
 import '../explained_number.dart';
+import '../theme/edge_theme.dart';
+import '../theme/reveal.dart';
 import 'coach_widgets.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -13,16 +15,12 @@ class HomeScreen extends StatelessWidget {
     required this.now,
     required this.stamp,
     this.enabledBooks,
-    this.onOpenProps,
-    this.onOpenGames,
   });
 
   final OddsBoard board;
   final DateTime now;
   final String Function(DateTime time) stamp;
   final Set<String>? enabledBooks;
-  final VoidCallback? onOpenProps;
-  final VoidCallback? onOpenGames;
 
   @override
   Widget build(BuildContext context) {
@@ -30,77 +28,85 @@ class HomeScreen extends StatelessWidget {
     final longer = slate.topPlays.where((play) => play.longerThanTheBooks);
     final closest = slate.topPlays;
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
       children: [
         const SectionLabel('TODAY'),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         Text(
           'Snapshot as of ${stamp(board.fetchedAt)}',
-          style: const TextStyle(fontWeight: FontWeight.w700),
+          style: EdgeType.body.copyWith(fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 4),
         Text(
           board.demo
               ? 'These are sample prices, not a sportsbook. Nothing here is a pick.'
               : 'Saved prices, not a live stream. Nothing here is a pick.',
-          style: const TextStyle(color: Colors.white70, height: 1.4),
+          style: EdgeType.body.copyWith(color: EdgeColors.textSecondary),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 24),
         const SectionLabel('CHECK MY SLIP'),
         const SizedBox(height: 8),
         const _SlipBox(),
-        const SizedBox(height: 20),
+        const SizedBox(height: 24),
         const SectionLabel('CLOSEST PRICES'),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         Text(
           longer.isEmpty
-              ? 'No price in this snapshot pays more than the books\' fee-free chance. The closest gaps are below, so you can see that. They are not plays.'
+              ? 'No price in this snapshot pays more than the books\' fee-free chance. The closest gaps are below. They are not plays.'
               : 'A price is listed when it pays more than the books\' fee-free chance. That is a comparison of the snapshot, not a model and not a recommendation.',
-          style: const TextStyle(color: Colors.white70, height: 1.4),
+          style: EdgeType.body.copyWith(color: EdgeColors.textSecondary),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         if (closest.isEmpty)
           const CoachCard(
             child: Text(
               'No two-sided price in this snapshot, so there is nothing to compare.',
+              style: EdgeType.body,
             ),
           )
         else
           for (final play in closest) ...[
             CoachCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    play.title,
-                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-                  ),
-                  Text(
-                    play.subtitle,
-                    style: const TextStyle(color: Colors.white60),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '${play.quote.book} ${americanLabel(play.quote.decimal)} · ${play.quote.demo ? 'sample' : 'saved'} · ${priceAge(play.quote.sourceAt, now)}',
-                  ),
-                  const SizedBox(height: 6),
-                  Text(play.explanation, style: const TextStyle(height: 1.35)),
-                ],
+              child: Reveal(
+                verdict: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      play.longerThanTheBooks ? 'Longer' : 'Shorter',
+                      style: EdgeType.title.copyWith(
+                        color: play.longerThanTheBooks
+                            ? EdgeColors.good
+                            : EdgeColors.warn,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(play.title, style: EdgeType.body.copyWith(fontWeight: FontWeight.w700)),
+                    Text(play.subtitle, style: EdgeType.label),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${play.quote.book} ${americanLabel(play.quote.decimal)}',
+                      style: EdgeType.title,
+                    ),
+                    Text(
+                      '${play.quote.demo ? 'Sample' : 'Saved'} · ${priceAge(play.quote.sourceAt, now)}',
+                      style: EdgeType.label,
+                    ),
+                  ],
+                ),
+                reasons: Text(
+                  play.longerThanTheBooks
+                      ? 'This price pays more than the books\' fee-free chance. Not a tip.'
+                      : 'This price pays less than the books\' fee-free chance. Shown because it is among the closest, not because it is a play.',
+                  style: EdgeType.body,
+                ),
+                math: Text(
+                  'Expected profit if that chance is right: ${signedPercent(play.expectedProfit)} per dollar.',
+                  style: EdgeType.body,
+                ),
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
           ],
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            if (onOpenProps != null)
-              OutlinedButton(onPressed: onOpenProps, child: const Text('Player props')),
-            if (onOpenGames != null)
-              OutlinedButton(onPressed: onOpenGames, child: const Text('Games')),
-          ],
-        ),
       ],
     );
   }

@@ -189,6 +189,8 @@ void main() {
     expect(find.text('Edge'), findsWidgets);
     await tester.tap(find.text('Buffalo Bills').first);
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Why').first);
+    await tester.pumpAndSettle();
     expect(find.textContaining('Chance the favorite covers'), findsOneWidget);
     expect(find.textContaining('not a promise'), findsOneWidget);
   });

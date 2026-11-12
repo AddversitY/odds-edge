@@ -23,9 +23,7 @@ import 'player_stats_screen.dart';
 import 'player_investigation_page.dart';
 import 'domain/player_stats.dart';
 import 'tools_page.dart';
-
-const mint = Color(0xFF7CE7C0);
-const panel = Color(0xF212211E);
+import 'theme/edge_theme.dart';
 
 void main() => runApp(const OddsEdgeApp());
 
@@ -36,53 +34,7 @@ class OddsEdgeApp extends StatelessWidget {
   Widget build(BuildContext context) => MaterialApp(
     title: 'Odds Edge',
     debugShowCheckedModeBanner: false,
-    theme: ThemeData(
-      useMaterial3: true,
-      brightness: Brightness.dark,
-      scaffoldBackgroundColor: const Color(0xFF0C111A),
-      fontFamily: 'Segoe UI',
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: mint,
-        brightness: Brightness.dark,
-        primary: mint,
-        surface: panel,
-      ),
-      inputDecorationTheme: const InputDecorationTheme(
-        filled: true,
-        fillColor: Color(0xFF101620),
-        contentPadding: EdgeInsets.all(18),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.all(Radius.circular(14)),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.all(Radius.circular(14)),
-          borderSide: BorderSide(color: Color(0xFF293343)),
-        ),
-      ),
-      cardTheme: const CardThemeData(
-        color: panel,
-        elevation: 0,
-        margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(20)),
-          side: BorderSide(color: Color(0xFF242E3C)),
-        ),
-      ),
-      filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 19),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-      ),
-      sliderTheme: const SliderThemeData(
-        trackHeight: 3,
-        thumbShape: RoundSliderThumbShape(enabledThumbRadius: 8),
-        showValueIndicator: ShowValueIndicator.onDrag,
-      ),
-      dividerColor: const Color(0xFF242E3C),
-    ),
+    theme: edgeTheme(),
     home: EdgeWorkspace(researchStore: researchStore),
   );
 }
@@ -124,34 +76,37 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       defaultValue: 'http://127.0.0.1:8787',
     ),
   );
-  static const workspaceNames = [
-    'Home',
-    'Props',
-    'Games',
-    'Parlays',
-    'My Bets',
-    'More',
-  ];
-  static const workspaceIcons = [
+  static const navShells = [0, 2, 1, 3, 4];
+  static const navLabels = ['Home', 'Games', 'Props', 'Parlays', 'Bets'];
+  static const navIcons = [
     Icons.home_outlined,
-    Icons.person_outline,
     Icons.sports_football_outlined,
+    Icons.person_outline,
     Icons.receipt_long_outlined,
     Icons.bookmark_outline,
-    Icons.grid_view_rounded,
-  ];
-  static const phoneLabels = [
-    'Home',
-    'Props',
-    'Games',
-    'Parlays',
-    'Bets',
-    'More',
   ];
   static const researchPages = [1, 4, 3];
   static const researchNames = ['Matchups', 'Players', 'Proof Lab'];
   bool get inResearch => researchPages.contains(page);
-  int get workspaceIndex => shell;
+  bool get inMore => shell == 5;
+  int get navIndex {
+    final index = navShells.indexOf(shell);
+    return index < 0 ? 0 : index;
+  }
+
+  String get screenTitle {
+    if (!inMore) return navLabels[navIndex];
+    return switch (page) {
+      2 => 'Odds',
+      5 => 'Tools',
+      6 => "Coach's model",
+      7 => 'More',
+      4 => 'Players',
+      1 => 'Matchups',
+      3 => 'Proof Lab',
+      _ => 'More',
+    };
+  }
 
   void navigateTo(int next) => setState(() {
     page = next;
@@ -160,12 +115,12 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
     if (next != 3) researchContext = null;
   });
 
-  void openShell(int index) => setState(() {
-    shell = index;
-    if (index == 5) {
-      page = 5;
-      researchContext = null;
-    }
+  void openShell(int index) => setState(() => shell = index);
+
+  void openMore() => setState(() {
+    shell = 5;
+    page = 7;
+    researchContext = null;
   });
 
   void investigatePlayer(
@@ -190,7 +145,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
     length: researchPages.length,
     initialIndex: researchPages.indexOf(page),
     child: Material(
-      color: const Color(0xE6091718),
+      color: EdgeColors.background,
       child: Align(
         alignment: Alignment.centerLeft,
         child: TabBar(
@@ -427,79 +382,42 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
     builder: (context, constraints) {
       final wide = constraints.maxWidth >= 1000;
       return Scaffold(
-        body: Stack(
-          fit: StackFit.expand,
-          children: [
-            Image.asset(
-              'assets/nfl-field.png',
-              fit: BoxFit.cover,
-              alignment: Alignment.bottomCenter,
-              excludeFromSemantics: true,
-            ),
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Color(0xD908151B), Color(0x55081712)],
-                ),
-              ),
-            ),
-            SafeArea(
+        backgroundColor: EdgeColors.background,
+        body: SafeArea(
               child: Row(
                 children: [
                   if (wide)
                     Material(
-                      color: const Color(0xE6091718),
+                      color: EdgeColors.surface,
                       child: SizedBox(
-                        width: 230,
+                        width: 220,
                         child: Padding(
-                          padding: const EdgeInsets.all(22),
+                          padding: const EdgeInsets.all(20),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               brand(),
-                              const SizedBox(height: 36),
-                              const Text(
-                                'WORKSPACE',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  letterSpacing: 1.5,
-                                  color: Colors.white54,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              for (var i = 0; i < workspaceNames.length; i++)
+                              const SizedBox(height: 28),
+                              for (var i = 0; i < navLabels.length; i++)
                                 Padding(
-                                  padding: const EdgeInsets.only(bottom: 8),
+                                  padding: const EdgeInsets.only(bottom: 4),
                                   child: ListTile(
-                                    dense: true,
                                     contentPadding: const EdgeInsets.symmetric(
                                       horizontal: 12,
                                     ),
                                     shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
+                                      borderRadius: BorderRadius.circular(12),
                                     ),
-                                    selected: workspaceIndex == i,
-                                    selectedColor: mint,
-                                    selectedTileColor: mint.withValues(
-                                      alpha: .10,
+                                    selected: !inMore && shell == navShells[i],
+                                    selectedColor: EdgeColors.accent,
+                                    selectedTileColor: EdgeColors.accent.withValues(
+                                      alpha: .12,
                                     ),
-                                    leading: Icon(workspaceIcons[i], size: 20),
-                                    title: Text(workspaceNames[i]),
-                                    onTap: () => openShell(i),
+                                    leading: Icon(navIcons[i]),
+                                    title: Text(navLabels[i]),
+                                    onTap: () => openShell(navShells[i]),
                                   ),
                                 ),
-                              const Spacer(),
-                              const Divider(),
-                              const SizedBox(height: 12),
-                              const Text(
-                                'Research with clarity.\nNFL preview',
-                                style: TextStyle(
-                                  color: Colors.white54,
-                                  height: 1.8,
-                                ),
-                              ),
                             ],
                           ),
                         ),
@@ -516,54 +434,56 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                           ),
                           child: Row(
                             children: [
-                              if (!wide) ...[
-                                const Icon(
-                                  Icons.stacked_line_chart,
-                                  color: mint,
-                                  size: 22,
+                              Expanded(
+                                child: Text(
+                                  wide ? screenTitle : 'Odds Edge',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: EdgeType.body.copyWith(fontWeight: FontWeight.w700),
                                 ),
-                                const SizedBox(width: 6),
-                                const Flexible(
-                                  child: Text(
-                                    'ODDS EDGE',
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 13,
-                                      letterSpacing: 0.4,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                              ] else ...[
-                                Text(
-                                  workspaceNames[workspaceIndex],
-                                  style: const TextStyle(fontSize: 16),
-                                ),
-                                const Spacer(),
-                              ],
+                              ),
                               badge(
-                                shell == 5 && page == 4
+                                !wide
+                                    ? (board.demo ? 'DEMO' : 'FEED')
+                                    : shell == 5 && page == 4
                                     ? 'HISTORICAL STATS'
                                     : board.demo
-                                    ? (wide ? 'DEMONSTRATION' : 'DEMO')
-                                    : (wide ? 'PROVIDER FEED' : 'FEED'),
+                                    ? 'DEMONSTRATION'
+                                    : 'PROVIDER FEED',
                                 shell == 5 && page == 4
                                     ? mint
                                     : board.demo
-                                    ? Colors.amber
-                                    : mint,
+                                    ? EdgeColors.warn
+                                    : EdgeColors.accent,
                               ),
-                              const SizedBox(width: 4),
+                              TextButton(
+                                key: const Key('more-menu'),
+                                style: TextButton.styleFrom(
+                                  visualDensity: VisualDensity.compact,
+                                  minimumSize: const Size(44, 44),
+                                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  textStyle: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  backgroundColor: inMore
+                                      ? EdgeColors.accent.withValues(alpha: .16)
+                                      : null,
+                                ),
+                                onPressed: openMore,
+                                child: const Text('More'),
+                              ),
                               TextButton(
                                 key: const Key('ask-coach'),
                                 style: TextButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                  ),
-                                  minimumSize: const Size(0, 36),
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                   visualDensity: VisualDensity.compact,
+                                  minimumSize: const Size(44, 44),
+                                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  textStyle: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                                 onPressed: () => showAskCoach(
                                   context,
@@ -582,8 +502,8 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                                   visualDensity: VisualDensity.compact,
                                   padding: EdgeInsets.zero,
                                   constraints: const BoxConstraints(
-                                    minWidth: 36,
-                                    minHeight: 36,
+                                    minWidth: 48,
+                                    minHeight: 48,
                                   ),
                                   onPressed: loading
                                       ? null
@@ -610,20 +530,37 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                 ],
               ),
             ),
-          ],
-        ),
         bottomNavigationBar: wide
             ? null
-            : NavigationBar(
-                selectedIndex: workspaceIndex,
-                onDestinationSelected: openShell,
-                destinations: [
-                  for (var i = 0; i < workspaceNames.length; i++)
-                    NavigationDestination(
-                      icon: Icon(workspaceIcons[i]),
-                      label: phoneLabels[i],
-                    ),
-                ],
+            : NavigationBarTheme(
+                data: inMore
+                    ? NavigationBarThemeData(
+                        indicatorColor: Colors.transparent,
+                        iconTheme: WidgetStateProperty.all(
+                          const IconThemeData(
+                            color: EdgeColors.textSecondary,
+                            size: 24,
+                          ),
+                        ),
+                        labelTextStyle: WidgetStateProperty.all(
+                          EdgeType.label.copyWith(
+                            fontSize: 13,
+                            color: EdgeColors.textSecondary,
+                          ),
+                        ),
+                      )
+                    : const NavigationBarThemeData(),
+                child: NavigationBar(
+                  selectedIndex: navIndex,
+                  onDestinationSelected: (index) => openShell(navShells[index]),
+                  destinations: [
+                    for (var i = 0; i < navLabels.length; i++)
+                      NavigationDestination(
+                        icon: Icon(navIcons[i]),
+                        label: navLabels[i],
+                      ),
+                  ],
+                ),
               ),
       );
     },
@@ -635,8 +572,6 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       now: now,
       stamp: stamp,
       enabledBooks: enabledBooks,
-      onOpenProps: () => openShell(1),
-      onOpenGames: () => openShell(2),
     ),
     1 => PropsScreen(
       board: propSource,
@@ -668,46 +603,74 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
     _ => const SizedBox(),
   };
 
-  Widget moreLinks() => Padding(
-    padding: const EdgeInsets.only(bottom: 16),
-    child: Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        OutlinedButton(
-          onPressed: () => navigateTo(2),
-          child: const Text('Odds comparison'),
+  Widget libraryMenu() => ListView(
+    padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+    children: [
+      const Text('More', style: EdgeType.title),
+      const SizedBox(height: 8),
+      const Text(
+        'Odds, research, tools, and the model. Each one is listed here only.',
+        style: EdgeType.body,
+      ),
+      const SizedBox(height: 16),
+      _libraryRow(
+        'Odds comparison',
+        'The same bet at every book in this snapshot.',
+        () => navigateTo(2),
+      ),
+      _libraryRow(
+        'Research',
+        'Matchups, players, and Proof Lab.',
+        () => navigateTo(lastResearchPage),
+      ),
+      _libraryRow(
+        'Tools',
+        'Best price, middles, movement, stake size, and prop history.',
+        () => setState(() {
+          shell = 5;
+          page = 5;
+          researchContext = null;
+        }),
+      ),
+      _libraryRow(
+        "Coach's model",
+        'Team strength, and how the past test turned out.',
+        () => setState(() {
+          shell = 5;
+          page = 6;
+          researchContext = null;
+        }),
+      ),
+      _libraryRow(
+        'Saved predictions',
+        'Predictions you already saved on this device.',
+        () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => PlayerInvestigationLibrary(store: researchStore),
+          ),
         ),
-        OutlinedButton(
-          onPressed: () => navigateTo(lastResearchPage),
-          child: const Text('Research'),
-        ),
-        OutlinedButton(
-          onPressed: () => setState(() {
-            shell = 5;
-            page = 0;
-          }),
-          child: const Text('Overview'),
-        ),
-        OutlinedButton(
-          onPressed: () => setState(() {
-            shell = 5;
-            page = 5;
-          }),
-          child: const Text('Price tools'),
-        ),
-        OutlinedButton(
-          onPressed: () => setState(() {
-            shell = 5;
-            page = 6;
-          }),
-          child: const Text("Coach's model"),
-        ),
-      ],
-    ),
+      ),
+    ],
   );
 
+  Widget _libraryRow(String title, String subtitle, VoidCallback onTap) =>
+      Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Card(
+          child: ListTile(
+            title: Text(title, style: EdgeType.body.copyWith(fontWeight: FontWeight.w700)),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(subtitle, style: EdgeType.label),
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: onTap,
+          ),
+        ),
+      );
+
   Widget legacyPage(bool wide) {
+    if (page == 7) return libraryMenu();
     if (page == 3) {
       return ResearchWorkspace(
         key: ValueKey(researchLaunch),
@@ -725,7 +688,6 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            moreLinks(),
             if (page != 4) ...[
               sourcePanel(),
               const SizedBox(height: 26),
@@ -1381,8 +1343,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
             ),
           ),
           const SizedBox(height: 16),
-          if (MediaQuery.sizeOf(context).width < 700)
-            ...rows.map(
+          ...rows.map(
               (q) => Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: box(
@@ -1431,99 +1392,8 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                   ),
                 ),
               ),
-            )
-          else
-            box(
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  columnSpacing: 24,
-                  headingTextStyle: const TextStyle(
-                    color: Colors.white54,
-                    fontSize: 11,
-                  ),
-                  columns: [
-                    for (final label in [
-                      'SPORTSBOOK',
-                      'ODDS',
-                      'IMPLIED',
-                      'VS BEST¹',
-                      'STATUS',
-                      'SOURCE UPDATED (UTC)',
-                      'COLLECTED (UTC)',
-                      scenario ? 'SCENARIO EV²' : 'MODEL EV',
-                      'RESEARCH',
-                    ])
-                      DataColumn(label: Text(label)),
-                  ],
-                  rows: rows.map((q) {
-                    final status = quoteFreshness(q);
-                    final eligible =
-                        error == null && q.eligible(now, inPlay: inPlay);
-                    return DataRow(
-                      selected: identical(q, best),
-                      cells: [
-                        DataCell(
-                          Text(
-                            '${q.book}${q.bookId == best?.bookId ? '  ★' : ''}',
-                          ),
-                        ),
-                        DataCell(
-                          Text(
-                            americanLabel(q.decimal),
-                            style: TextStyle(
-                              color: eligible ? mint : Colors.white38,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        DataCell(Text(pct(impliedProbability(q.decimal)))),
-                        DataCell(
-                          Text(
-                            !eligible || best == null
-                                ? '—'
-                                : (q.decimal - best.decimal).toStringAsFixed(3),
-                          ),
-                        ),
-                        DataCell(
-                          badge(
-                            status.toUpperCase(),
-                            eligible
-                                ? mint
-                                : status == 'snapshot'
-                                ? Colors.amber
-                                : Colors.orangeAccent,
-                          ),
-                        ),
-                        DataCell(Text(stamp(q.sourceAt))),
-                        DataCell(Text(stamp(q.collectedAt))),
-                        DataCell(
-                          Text(
-                            scenario && eligible
-                                ? pct(expectedValue(q.decimal, win))
-                                : '—',
-                          ),
-                        ),
-                        DataCell(
-                          IconButton(
-                            tooltip: 'Research this price',
-                            onPressed: canResearch(q)
-                                ? () => investigate(q)
-                                : null,
-                            icon: const Icon(Icons.science_outlined),
-                          ),
-                        ),
-                      ],
-                    );
-                  }).toList(),
-                ),
-              ),
             ),
           const SizedBox(height: 12),
-          const Text(
-            '¹ Difference in decimal payout per unit staked. ² Hypothetical, zero-push scenario; not a validated model.',
-            style: TextStyle(fontSize: 12, color: Colors.white54),
-          ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Explore a hypothetical probability'),

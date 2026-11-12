@@ -5,6 +5,8 @@ import '../domain/coach_model.dart';
 import '../domain/market_math.dart';
 import '../domain/odds.dart';
 import '../explained_number.dart';
+import '../theme/edge_theme.dart';
+import '../theme/reveal.dart';
 import 'coach_line_view.dart';
 import 'coach_widgets.dart';
 
@@ -50,15 +52,15 @@ class _GamesScreenState extends State<GamesScreen> {
         if (_matches(game, today)) game,
     ];
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
       children: [
         const SectionLabel('GAMES'),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         Text(
           widget.board.demo
-              ? 'Sample NFL prices. Badges count real comparisons of those samples. They are not live edges.'
-              : 'NFL is the league in this free snapshot. Badges count prices in that snapshot.',
-          style: const TextStyle(color: Colors.white70, height: 1.4),
+              ? 'Sample NFL prices. A word on each game compares our number with the books. It is not a pick.'
+              : 'NFL is the league in this free snapshot. A word on each game compares our number with the books. It is not a pick.',
+          style: EdgeType.body.copyWith(color: EdgeColors.textSecondary),
         ),
         const SizedBox(height: 10),
         Wrap(
@@ -150,67 +152,24 @@ class _GameCard extends StatelessWidget {
           children: [
             Text(
               '${event.league} · ${event.startsAt.toLocal().toString().substring(0, 16)}',
-              style: const TextStyle(color: Colors.white54, fontSize: 12),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              event.away,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-            ),
-            Text(
-              event.home,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              style: EdgeType.label,
             ),
             const SizedBox(height: 8),
-            if (line != null) ...[
-              CoachLineSummary(line: line!),
-              const SizedBox(height: 8),
-            ],
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                if (game.arbitrageCount > 0)
-                  _Badge('${game.arbitrageCount} price gap'),
-                if (game.positiveEvMarkets > 0)
-                  _Badge('${game.positiveEvMarkets} longer price'),
-                if (game.parlayCount > 0)
-                  _Badge('${game.parlayCount} ticket'),
-                if (line?.flagged ?? false) const _Badge('Edge'),
-                if (game.arbitrageCount == 0 &&
-                    game.positiveEvMarkets == 0 &&
-                    game.parlayCount == 0 &&
-                    !(line?.flagged ?? false))
-                  const _Badge('No gap in this snapshot', quiet: true),
-              ],
-            ),
+            Text(event.away, style: EdgeType.title),
+            Text(event.home, style: EdgeType.title),
+            const SizedBox(height: 12),
+            if (line != null)
+              CoachLineSummary(line: line!)
+            else
+              Text(
+                "Coach's Line is not on this game.",
+                style: EdgeType.body.copyWith(color: EdgeColors.textSecondary),
+              ),
           ],
         ),
       ),
     );
   }
-}
-
-class _Badge extends StatelessWidget {
-  const _Badge(this.text, {this.quiet = false});
-  final String text;
-  final bool quiet;
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-    decoration: BoxDecoration(
-      color: (quiet ? Colors.white : coachMint).withValues(alpha: .12),
-      borderRadius: BorderRadius.circular(99),
-    ),
-    child: Text(
-      text,
-      style: TextStyle(
-        color: quiet ? Colors.white70 : coachMint,
-        fontSize: 12,
-        fontWeight: FontWeight.w700,
-      ),
-    ),
-  );
 }
 
 class _GameDetail extends StatelessWidget {
@@ -232,9 +191,10 @@ class _GameDetail extends StatelessWidget {
   Widget build(BuildContext context) {
     final event = game.event;
     return Scaffold(
+      backgroundColor: EdgeColors.background,
       appBar: AppBar(title: Text('${event.away} at ${event.home}')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         children: [
           if (line != null) ...[
             CoachLineCard(line: line!),
@@ -244,24 +204,30 @@ class _GameDetail extends StatelessWidget {
               padding: EdgeInsets.only(bottom: 16),
               child: Text(
                 "Coach's Line is not available for this game. No number was filled in.",
-                style: TextStyle(color: Colors.white60, height: 1.35),
+                style: EdgeType.body,
               ),
             ),
-          const SectionLabel('FEE-FREE WIN CHANCE'),
-          const SizedBox(height: 8),
-          if (game.awayChance == null || game.homeChance == null)
-            Text(game.chanceExplanation)
-          else
-            _SplitBar(
-              away: event.away,
-              home: event.home,
-              awayChance: game.awayChance!,
-              homeChance: game.homeChance!,
+          Reveal(
+            verdict: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SectionLabel('FEE-FREE WIN CHANCE'),
+                const SizedBox(height: 12),
+                if (game.awayChance == null || game.homeChance == null)
+                  Text(
+                    'Unavailable',
+                    style: EdgeType.title.copyWith(color: EdgeColors.textSecondary),
+                  )
+                else
+                  _SplitBar(
+                    away: event.away,
+                    home: event.home,
+                    awayChance: game.awayChance!,
+                    homeChance: game.homeChance!,
+                  ),
+              ],
             ),
-          const SizedBox(height: 8),
-          Text(
-            game.chanceExplanation,
-            style: const TextStyle(color: Colors.white60, height: 1.4),
+            reasons: Text(game.chanceExplanation, style: EdgeType.body),
           ),
           const SizedBox(height: 16),
           for (final market in const ['spreads', 'h2h', 'totals'])
@@ -314,18 +280,18 @@ class _SplitBar extends StatelessWidget {
             Expanded(
               flex: awayFlex,
               child: ColoredBox(
-                color: coachMint.withValues(alpha: .85),
+                color: EdgeColors.accent,
                 child: Center(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     child: FittedBox(
                       child: Text(
                         '$away ${percentLabel(awayChance)}',
-                        style: const TextStyle(
-                          color: Color(0xFF062018),
-                          fontWeight: FontWeight.w800,
-                          fontSize: 12,
-                        ),
+                          style: const TextStyle(
+                            color: EdgeColors.onAccent,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                          ),
                       ),
                     ),
                   ),
@@ -335,16 +301,16 @@ class _SplitBar extends StatelessWidget {
             Expanded(
               flex: homeFlex,
               child: ColoredBox(
-                color: const Color(0xFF243041),
+                color: EdgeColors.surfaceHigh,
                 child: Center(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     child: FittedBox(
                       child: Text(
                         '$home ${percentLabel(homeChance)}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 12,
+                          style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
                         ),
                       ),
                     ),
@@ -383,7 +349,7 @@ class _MarketBlock extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+            Text(title, style: EdgeType.title),
             const SizedBox(height: 8),
             if (list.isEmpty)
               const Text('Not in this snapshot.')
@@ -440,31 +406,45 @@ class _SideRowState extends State<_SideRow> {
       children: [
         ListTile(
           contentPadding: EdgeInsets.zero,
+          minVerticalPadding: 12,
           onTap: () => setState(() => open = !open),
-          title: Text(widget.side.selection.label),
+          title: Text(widget.side.selection.label, style: EdgeType.body),
           subtitle: Text(
             best == null
                 ? 'No open price'
-                : '${best.book} ${americanLabel(best.decimal)} · ${priceAge(best.sourceAt, widget.now)}'
-                      '${widget.side.marketEv == null ? '' : ' · ${signedPercent(widget.side.marketEv!)} expected profit vs the fee-free chance'}',
+                : '${best.book} ${americanLabel(best.decimal)} · ${priceAge(best.sourceAt, widget.now)}',
+            style: EdgeType.label,
           ),
-          trailing: Icon(open ? Icons.expand_less : Icons.expand_more),
+          trailing: Text(
+            open ? 'Hide the math' : 'The math',
+            style: EdgeType.label.copyWith(color: EdgeColors.accent),
+          ),
         ),
-        if (open)
+        if (open) ...[
+          if (widget.side.marketEv != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                '${signedPercent(widget.side.marketEv!)} expected profit versus the fee-free chance',
+                style: EdgeType.body,
+              ),
+            ),
           for (final row in ladder)
             Padding(
-              padding: const EdgeInsets.only(left: 8, bottom: 6),
+              padding: const EdgeInsets.only(bottom: 8),
               child: Text(
                 '${row.quote.book}  ${americanLabel(row.quote.decimal)}'
                 '${row.expectedProfit == null ? '' : '  ${signedPercent(row.expectedProfit!)}'}'
                 '  · ${priceAge(row.quote.sourceAt, widget.now)}',
+                style: EdgeType.body,
               ),
             ),
-        if (widget.market.rulesUnverified && open)
-          const Text(
-            unverifiedRulesNote,
-            style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.35),
-          ),
+          if (widget.market.rulesUnverified)
+            Text(
+              unverifiedRulesNote,
+              style: EdgeType.label.copyWith(color: EdgeColors.textSecondary),
+            ),
+        ],
       ],
     );
   }

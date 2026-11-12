@@ -199,7 +199,7 @@ void main() {
       final store = MemoryResearchStore();
       await tester.pumpWidget(OddsEdgeApp(researchStore: store));
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(ListTile, 'More'));
+      await tester.tap(find.byKey(const Key('more-menu')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Odds comparison'));
       await tester.pumpAndSettle();
@@ -218,7 +218,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(find.widgetWithText(ListTile, 'Home'));
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(ListTile, 'More'));
+      await tester.tap(find.byKey(const Key('more-menu')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Research'));
       await tester.pumpAndSettle();

@@ -4,6 +4,8 @@ import '../domain/coach_board.dart';
 import '../domain/market_math.dart';
 import '../domain/odds.dart';
 import '../explained_number.dart';
+import '../theme/edge_theme.dart';
+import '../theme/reveal.dart';
 import 'coach_widgets.dart';
 
 class ParlaysScreen extends StatefulWidget {
@@ -34,15 +36,15 @@ class _ParlaysScreenState extends State<ParlaysScreen> {
       filter: filter,
     );
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
       children: [
         const SectionLabel('PARLAYS'),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         const Text(
-          'Tickets built from this snapshot. Each one uses a single sportsbook and legs from different games. The chance multiplies the fee-free prices only under that "unrelated games" assumption.',
-          style: TextStyle(color: Colors.white70, height: 1.4),
+          'Tickets built from this snapshot. Each one uses a single sportsbook and legs from different games. The chance multiplies the fee-free prices only when the games are unrelated.',
+          style: EdgeType.body,
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         Align(
           alignment: Alignment.centerLeft,
           child: OutlinedButton.icon(
@@ -51,18 +53,18 @@ class _ParlaysScreenState extends State<ParlaysScreen> {
             label: const Text('How these tickets are built'),
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
         if (slate.parlays.isEmpty)
           const CoachCard(
             child: Text(
               'No ticket fits these filters. A ticket needs the same book to have priced at least two different games. Same-game legs are left off, because this app will not pretend those chances multiply.',
-              style: TextStyle(height: 1.4),
+              style: EdgeType.body,
             ),
           )
         else
           for (final parlay in slate.parlays) ...[
             _ParlayCard(parlay: parlay, now: widget.now),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
           ],
         const SizedBox(height: 8),
         const ToolNote(responsibleGamblingNote),
@@ -94,37 +96,44 @@ class _ParlayCard extends StatelessWidget {
     final price = parlay.price;
     final fair = price.fairProbability;
     final edge = price.expectedValuePerUnit;
+    final verdict = fair == null ? 'Unavailable' : percentLabel(fair);
     return CoachCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            parlay.demo ? '${parlay.book} · sample prices' : parlay.book,
-            style: const TextStyle(color: Colors.white60),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            fair == null
-                ? 'Real chance unavailable'
-                : 'Real chance if unrelated: ${percentLabel(fair)}',
-            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-          ),
-          Text(
-            'Ticket price ${americanLabel(price.offeredDecimal)}'
-            '${edge == null ? '' : ' · expected profit ${signedPercent(edge)} per dollar'}',
-          ),
-          const SizedBox(height: 8),
-          for (final leg in parlay.legs)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Text(
-                '${leg.label}\n${leg.matchup} · ${leg.quote.book} ${americanLabel(leg.quote.decimal)} · ${priceAge(leg.quote.sourceAt, now)}',
-                style: const TextStyle(height: 1.3),
-              ),
+      child: Reveal(
+        verdict: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              parlay.demo ? '${parlay.book} · sample prices' : parlay.book,
+              style: EdgeType.label,
             ),
-          const SizedBox(height: 4),
-          Text(parlay.plainEnglish, style: const TextStyle(color: Colors.white70, height: 1.4)),
-        ],
+            const SizedBox(height: 6),
+            Text(verdict, style: EdgeType.display),
+            Text(
+              fair == null ? 'Real chance unavailable' : 'Chance if the games are unrelated',
+              style: EdgeType.label,
+            ),
+          ],
+        ),
+        reasons: Text(parlay.plainEnglish, style: EdgeType.body),
+        math: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Ticket price ${americanLabel(price.offeredDecimal)}'
+              '${edge == null ? '' : ' · expected profit ${signedPercent(edge)} per dollar'}',
+              style: EdgeType.body,
+            ),
+            const SizedBox(height: 8),
+            for (final leg in parlay.legs)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  '${leg.label}\n${leg.matchup} · ${leg.quote.book} ${americanLabel(leg.quote.decimal)} · ${priceAge(leg.quote.sourceAt, now)}',
+                  style: EdgeType.body,
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

@@ -13,6 +13,8 @@ import '../domain/player_stats.dart';
 import '../domain/prop_history.dart';
 import '../domain/saved_play.dart';
 import '../explained_number.dart';
+import '../theme/edge_theme.dart';
+import '../theme/reveal.dart';
 import 'coach_widgets.dart';
 
 class PropsScreen extends StatefulWidget {
@@ -56,7 +58,7 @@ class _PropsScreenState extends State<PropsScreen> {
       filter,
     );
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
       children: [
         const SectionLabel('PLAYER PROPS'),
         const SizedBox(height: 6),
@@ -64,7 +66,7 @@ class _PropsScreenState extends State<PropsScreen> {
           widget.board.demo
               ? 'Sample prices. The hit rates under a matched name are real box scores, not part of the sample.'
               : 'Prices are a saved snapshot. The age is on each card.',
-          style: const TextStyle(color: Colors.white70, height: 1.4),
+          style: EdgeType.body.copyWith(color: EdgeColors.textSecondary),
         ),
         const SizedBox(height: 12),
         Align(
@@ -233,103 +235,110 @@ class _PropCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final quote = card.best;
     final event = card.event;
-    final when = event == null
-        ? 'Game time unavailable'
-        : event.startsAt.toLocal().toString().substring(0, 16);
     final gap = historyGap(
       clearRate: windows?.season?.clearRate,
       fairProbability: card.fairProbability,
     );
+    final last5 = windows?.last5;
+    final hitSentence = last5 == null
+        ? 'Hit rates stay blank until the box scores load.'
+        : last5.observed == 0
+        ? 'No recorded stat in the last 5 games.'
+        : 'Last 5: ${last5.hits} of ${last5.observed} cleared the line. That is a count, not a prediction.';
     return CoachCard(
       onDoubleTap: onSave,
       child: InkWell(
         onTap: onOpen,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ChanceBar(
-              fraction: card.fairProbability,
-              label: 'Books\' fee-free chance',
-            ),
-            const SizedBox(height: 10),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        card.player,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      Text(
-                        [
-                          if ((windows?.position ?? '').isNotEmpty)
-                            windows!.position,
-                          if ((windows?.team ?? '').isNotEmpty) windows!.team,
-                          if (event != null) '${event.away} at ${event.home}',
-                          when,
-                        ].join(' · '),
-                        style: const TextStyle(color: Colors.white60, height: 1.35),
-                      ),
-                    ],
+        child: Reveal(
+          verdict: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: Text(card.player, style: EdgeType.title)),
+                  IconButton(
+                    tooltip: 'Save play',
+                    onPressed: onSave,
+                    icon: const Icon(Icons.bookmark_add_outlined),
                   ),
-                ),
-                IconButton(
-                  tooltip: 'Save play',
-                  onPressed: onSave,
-                  icon: const Icon(Icons.bookmark_add_outlined),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '${card.marketLabel}  ${card.lineLabel}',
-              style: const TextStyle(
-                color: coachMint,
-                fontWeight: FontWeight.w800,
-                fontSize: 16,
+                ],
               ),
-            ),
-            const SizedBox(height: 10),
-            _blocks(quote, gap),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                HitChip(label: 'L5', rate: windows?.last5),
-                HitChip(label: 'L10', rate: windows?.last10),
-                HitChip(label: 'L20', rate: windows?.last20),
-                HitChip(label: 'H2H', rate: windows?.headToHead),
-                HitChip(
-                  label: windows?.seasonYear == null
-                      ? 'Season'
-                      : '${windows!.seasonYear}',
-                  rate: windows?.season,
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              windows?.note ??
-                  'Box scores are still loading. Hit rates stay blank until they load.',
-              style: const TextStyle(color: Colors.white54, fontSize: 12, height: 1.35),
-            ),
-            if (quote != null)
+              const SizedBox(height: 4),
               Text(
-                '${quote.demo ? 'Sample price' : 'Saved price'} · ${priceAge(quote.sourceAt, now)}',
-                style: const TextStyle(color: Colors.white54, fontSize: 12),
+                [
+                  if ((windows?.position ?? '').isNotEmpty) windows!.position,
+                  if ((windows?.team ?? '').isNotEmpty) windows!.team,
+                  if (event != null) '${event.away} at ${event.home}',
+                ].join(' · '),
+                style: EdgeType.label,
               ),
-            const Text(
-              'Snap share and injuries are not in the free box scores, so that context is left blank.',
-              style: TextStyle(color: Colors.white38, fontSize: 12, height: 1.35),
-            ),
-          ],
+              const SizedBox(height: 12),
+              Text(
+                '${card.marketLabel}  ${card.lineLabel}',
+                style: EdgeType.body.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                quote == null
+                    ? 'No open price'
+                    : '${quote.book} ${americanLabel(quote.decimal)}',
+                style: EdgeType.display.copyWith(fontSize: 28),
+              ),
+            ],
+          ),
+          reasons: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(hitSentence, style: EdgeType.body),
+              const SizedBox(height: 8),
+              Text(
+                windows?.note ??
+                    'Box scores are still loading. Hit rates stay blank until they load.',
+                style: EdgeType.body.copyWith(color: EdgeColors.textSecondary),
+              ),
+              if (quote != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '${quote.demo ? 'Sample price' : 'Saved price'} · ${priceAge(quote.sourceAt, now)}',
+                  style: EdgeType.label,
+                ),
+              ],
+              const SizedBox(height: 8),
+              const Text(
+                'Snap share and injuries are not in the free box scores, so that context is left blank.',
+                style: EdgeType.body,
+              ),
+            ],
+          ),
+          math: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ChanceBar(
+                fraction: card.fairProbability,
+                label: 'Books\' fee-free chance',
+              ),
+              const SizedBox(height: 12),
+              _blocks(quote, gap),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  HitChip(label: 'L5', rate: windows?.last5),
+                  HitChip(label: 'L10', rate: windows?.last10),
+                  HitChip(label: 'L20', rate: windows?.last20),
+                  HitChip(label: 'H2H', rate: windows?.headToHead),
+                  HitChip(
+                    label: windows?.seasonYear == null
+                        ? 'Season'
+                        : '${windows!.seasonYear}',
+                    rate: windows?.season,
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -342,7 +351,7 @@ class _PropCard extends StatelessWidget {
         value: quote == null ? '—' : '${quote.book} ${americanLabel(quote.decimal)}',
         title: 'Best price',
         body: bestPriceExplanation,
-        valueColor: coachMint,
+        valueColor: quote == null ? null : EdgeColors.accent,
       ),
       StatBlock(
         kicker: 'Price implies',
@@ -359,7 +368,7 @@ class _PropCard extends StatelessWidget {
         body: expectedProfitExplanation,
         valueColor: card.expectedProfit == null
             ? null
-            : (card.expectedProfit! > 0 ? coachMint : const Color(0xFFFF7B7B)),
+            : (card.expectedProfit! > 0 ? EdgeColors.good : EdgeColors.bad),
       ),
       StatBlock(
         kicker: 'History gap',
@@ -445,7 +454,10 @@ class _PropDetailState extends State<_PropDetail> {
           ),
           Text(
             '${card.marketLabel} ${card.lineLabel}',
-            style: const TextStyle(color: coachMint, fontWeight: FontWeight.w700),
+            style: EdgeType.body.copyWith(
+              color: EdgeColors.accent,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: 8),
           const ToolNote(
@@ -459,7 +471,7 @@ class _PropDetailState extends State<_PropDetail> {
           const SizedBox(height: 8),
           Text(
             feeFreeChanceExplanation,
-            style: const TextStyle(color: Colors.white60, height: 1.35, fontSize: 13),
+            style: EdgeType.body.copyWith(color: EdgeColors.textSecondary),
           ),
           const SizedBox(height: 16),
           const SectionLabel('ODDS OVER TIME'),
@@ -492,7 +504,7 @@ class _PropDetailState extends State<_PropDetail> {
           const SizedBox(height: 8),
           Text(
             'Each bar is a recorded game, oldest to newest. Green cleared ${card.line.toStringAsFixed(1)}, red missed, gray pushed. Bar height is the stat, not a forecast.',
-            style: const TextStyle(color: Colors.white54, fontSize: 12, height: 1.35),
+            style: EdgeType.label,
           ),
           const SizedBox(height: 16),
           const SectionLabel('BOOKS, BEST PRICE FIRST'),
