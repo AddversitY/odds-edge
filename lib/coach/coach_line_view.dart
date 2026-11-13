@@ -24,7 +24,6 @@ class CoachLineSummary extends StatelessWidget {
     final headline = line.marketFirst
         ? (line.booksSpread ?? 'No spread')
         : line.ourSpread;
-    final headlineLabel = line.marketFirst ? line.marketSource : 'Our number';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -41,7 +40,10 @@ class CoachLineSummary extends StatelessWidget {
           style: EdgeType.title.copyWith(color: EdgeColors.textSecondary),
         ),
         const SizedBox(height: 8),
-        Text(headlineLabel, style: EdgeType.label),
+        if (line.marketFirst)
+          Text(line.marketSource, style: EdgeType.label)
+        else
+          const Text('Our number', style: EdgeType.label),
         Text(
           headline,
           style: EdgeType.display.copyWith(fontSize: 32, height: 1.05),
@@ -54,8 +56,7 @@ class CoachLineSummary extends StatelessWidget {
         if (!line.marketFirst) ...[
           const SizedBox(height: 2),
           Text('Our number: ${line.ourSpread}', style: EdgeType.body),
-        ] else
-          Text(books, style: EdgeType.body),
+        ],
         const SizedBox(height: 8),
         if (line.flagged)
           const Text(
@@ -98,11 +99,6 @@ class CoachLineCard extends StatelessWidget {
               const SizedBox(height: 14),
               HowWeGotThis(line: line),
             ],
-            const SizedBox(height: 10),
-            Text(
-              'Comparison, not a pick.',
-              style: EdgeType.label.copyWith(color: EdgeColors.textSecondary),
-            ),
           ],
         ),
         reasons: Column(
@@ -171,6 +167,8 @@ class HowWeGotThis extends StatelessWidget {
       line.home.name,
       breakdown.finalMargin,
     );
+    final totalStart = breakdown.marketTotal?.toStringAsFixed(1);
+    final totalEnd = breakdown.finalTotal?.toStringAsFixed(1);
     return Column(
       key: const Key('how-we-got-this'),
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -190,26 +188,74 @@ class HowWeGotThis extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 8),
-        Text(breakdown.marketSource, style: EdgeType.label),
-        Text(start, style: EdgeType.title.copyWith(fontSize: 18)),
-        const SizedBox(height: 8),
-        for (final nudge in breakdown.spread) _NudgeBar(nudge: nudge),
-        const SizedBox(height: 6),
-        Text('Final line', style: EdgeType.label),
-        Text(end, style: EdgeType.title.copyWith(fontSize: 18)),
-        if (breakdown.marketTotal != null && breakdown.finalTotal != null) ...[
-          const SizedBox(height: 12),
-          Text(
-            'Total ${breakdown.marketTotal!.toStringAsFixed(1)}',
-            style: EdgeType.label,
-          ),
-          for (final nudge in breakdown.total) _NudgeBar(nudge: nudge),
-          Text(
-            'Final total ${breakdown.finalTotal!.toStringAsFixed(1)}',
-            style: EdgeType.title.copyWith(fontSize: 18),
+        _LineBlock(
+          title: 'Spread',
+          start: start,
+          end: end,
+          nudges: breakdown.spread,
+        ),
+        if (totalStart != null && totalEnd != null) ...[
+          const SizedBox(height: 8),
+          _LineBlock(
+            title: 'Total',
+            start: totalStart,
+            end: totalEnd,
+            nudges: breakdown.total,
           ),
         ],
       ],
+    );
+  }
+}
+
+class _LineBlock extends StatelessWidget {
+  const _LineBlock({
+    required this.title,
+    required this.start,
+    required this.end,
+    required this.nudges,
+  });
+
+  final String title;
+  final String start;
+  final String end;
+  final List<LineNudge> nudges;
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = nudges.where((nudge) => nudge.points.abs() >= 0.05).toList();
+    final hidden = nudges.length - shown.length;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: EdgeColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: EdgeColors.border),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: EdgeType.label.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Text('Market start  $start', style: EdgeType.body),
+            const SizedBox(height: 8),
+            for (final nudge in shown) _NudgeBar(nudge: nudge),
+            if (hidden > 0)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 6),
+                child: Text('No other changes', style: EdgeType.label),
+              ),
+            Text(
+              'Our line  $end',
+              style: EdgeType.body.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -221,34 +267,44 @@ class _NudgeBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final points = nudge.points;
-    final text = points.abs() < 0.05 ? '0.0' : signedNumber(points);
+    final text = signedNumber(nudge.points);
+    final note = nudge.label == 'Weather' ? nudge.detail : '';
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Expanded(child: Text(nudge.label, style: EdgeType.body)),
+              Text(
+                nudge.label,
+                maxLines: 1,
+                softWrap: false,
+                style: EdgeType.body.copyWith(fontSize: 15, height: 1.2),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: SizedBox(
+                  height: 12,
+                  child: CustomPaint(painter: _SignedBarPainter(nudge.points)),
+                ),
+              ),
+              const SizedBox(width: 8),
               Text(
                 text,
                 style: EdgeType.body.copyWith(fontWeight: FontWeight.w700),
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          SizedBox(
-            height: 8,
-            width: double.infinity,
-            child: CustomPaint(painter: _SignedBarPainter(points)),
-          ),
-          if (nudge.detail.isNotEmpty)
+          if (note.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 2),
               child: Text(
-                nudge.detail,
-                style: EdgeType.label.copyWith(color: EdgeColors.textSecondary),
+                note,
+                style: EdgeType.label.copyWith(
+                  color: EdgeColors.textTertiary,
+                  fontSize: 12,
+                ),
               ),
             ),
         ],
@@ -270,7 +326,7 @@ class _SignedBarPainter extends CustomPainter {
     canvas.drawLine(Offset(0, size.height / 2), Offset(size.width, size.height / 2), axis);
     canvas.drawLine(Offset(mid, 0), Offset(mid, size.height), axis);
     if (points.abs() < 0.05) return;
-    final reach = (points.abs() / 4).clamp(0.0, 1.0);
+    final reach = (points.abs() / 2.5).clamp(0.0, 1.0);
     final width = reach * (size.width / 2);
     final rect = points > 0
         ? Rect.fromLTWH(mid, 1, width, size.height - 2)

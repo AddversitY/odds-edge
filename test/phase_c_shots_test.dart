@@ -9,7 +9,6 @@ import 'package:odds_edge/coach/games_screen.dart';
 import 'package:odds_edge/coach/report_card_screen.dart';
 import 'package:odds_edge/domain/coach_model.dart';
 import 'package:odds_edge/domain/odds.dart';
-import 'package:odds_edge/domain/prop_report.dart';
 import 'package:odds_edge/theme/edge_theme.dart';
 
 Future<void> _loadType() async {
@@ -43,6 +42,7 @@ void main() {
       RepaintBoundary(
         key: const Key('shot'),
         child: MaterialApp(
+          debugShowCheckedModeBanner: false,
           theme: edgeTheme(),
           home: Scaffold(
             backgroundColor: EdgeColors.background,
@@ -67,9 +67,17 @@ void main() {
     await tester.tap(find.text('Houston Texans'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('how-we-got-this')), findsOneWidget);
+    expect(find.textContaining('Market start  Browns -3.0'), findsOneWidget);
+    expect(find.textContaining('Our line  Browns'), findsOneWidget);
+    expect(find.text('No other changes'), findsWidgets);
     expect(find.textContaining('Huntington Bank Field'), findsOneWidget);
-    expect(find.text('Comparison, not a pick.'), findsOneWidget);
+    expect(find.text('Pinnacle Browns -3.0'), findsNothing);
     await _save(tester, '/opt/cursor/artifacts/game_detail_weather_390.png');
+    await tester.scrollUntilVisible(
+      find.text('Comparison, not a pick.'),
+      400,
+    );
+    expect(find.text('Comparison, not a pick.'), findsOneWidget);
   });
 
   testWidgets('390px report card game version chart', (tester) async {
@@ -85,6 +93,7 @@ void main() {
       RepaintBoundary(
         key: const Key('shot'),
         child: MaterialApp(
+          debugShowCheckedModeBanner: false,
           theme: edgeTheme(),
           home: Scaffold(
             backgroundColor: EdgeColors.background,
@@ -94,34 +103,44 @@ void main() {
               lineHistory: const {},
               events: const [],
               examplePrices: true,
-              propReport: const PropReport(
-                method: 'Walk-forward.',
-                tested: 'Box scores against a fair 50% line.',
-                notTested: 'No historical sportsbook prop price was used.',
-                usedSportsbookPrices: false,
-                marketProxy: 0.5,
-                scored: 1200,
-                pushes: 40,
-                players: 80,
-                brier: 0.251,
-                logLoss: 0.694,
-                baselineBrier: 0.25,
-                baselineLogLoss: 0.693,
-                calibration: [],
-                scoredByMetric: {'passing_yards': 1200},
-                hasEdge: false,
-                plainEnglish: 'Tested 1200 player-games.',
-              ),
             ),
           ),
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
+    for (var step = 0; step < 40; step++) {
+      if (find.byKey(const Key('prop-v2')).evaluate().isNotEmpty) break;
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(seconds: 2)),
+      );
+      await tester.pump();
+    }
     expect(find.byKey(const Key('game-version-chart')), findsOneWidget);
+    expect(find.byKey(const Key('prop-v2')), findsOneWidget);
+    expect(find.text('0.241'), findsWidgets);
+    expect(find.textContaining('17,097 player-games'), findsOneWidget);
     expect(find.text('Game model: no edge yet'), findsOneWidget);
     await _save(tester, '/opt/cursor/artifacts/report_card_games_v1_v2_390.png');
-  });
+
+    tester.view.physicalSize = const Size(390, 1400);
+    await tester.pump();
+    final reportScroll = find.descendant(
+      of: find.byKey(const Key('report-card')),
+      matching: find.byType(Scrollable),
+    );
+    final chartTop = tester.getTopLeft(find.byKey(const Key('prop-v2'))).dy;
+    _jumpBy(tester, reportScroll, chartTop - 70);
+    await tester.pump();
+    expect(find.byKey(const Key('prop-calibration-chart')), findsOneWidget);
+    await _save(tester, '/opt/cursor/artifacts/report_card_props_v1_v2_390.png');
+  }, timeout: const Timeout(Duration(minutes: 3)));
+}
+
+void _jumpBy(WidgetTester tester, Finder scrollable, double dy) {
+  final state = tester.state<ScrollableState>(scrollable);
+  final position = state.position;
+  position.jumpTo((position.pixels + dy).clamp(0.0, position.maxScrollExtent));
 }
 
 OddsBoard _outdoorBoard(DateTime now, DateTime kick) {

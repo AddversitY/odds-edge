@@ -61,7 +61,9 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
   void initState() {
     super.initState();
     final ready = widget.propReport;
-    if (ready != null) {
+    // A record report on its own is not the version comparison. Loading
+    // still runs so the usage tiles cannot disappear behind a stub.
+    if (ready != null && widget.comparison != null) {
       report = ready;
       comparison = widget.comparison;
       clv = propClosingValue(widget.lineHistory);
@@ -180,11 +182,6 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
               loading: loading,
               error: error,
               clv: clv,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _propLine(prop),
-              style: EdgeType.label.copyWith(fontWeight: FontWeight.w500),
             ),
             const SizedBox(height: 22),
             Text(
@@ -321,41 +318,31 @@ class _GameVersionCompare extends StatelessWidget {
           label: 'Hit rate',
           first: v1.hitRate,
           second: v2.hitRate,
-          low: 0.45,
-          high: 0.56,
           format: percentLabel,
-          mark: v1.breakEvenHitRate,
+          foot: '${percentLabel(v1.breakEvenHitRate)} breaks even',
         ),
         _CompareRow(
           label: 'Return',
           first: v1.roi,
           second: v2.roi,
-          low: -0.08,
-          high: 0.02,
           format: signedPercent,
         ),
         _CompareRow(
           label: 'Closer than the close',
           first: v1.clvBeatRate,
           second: v2.clvBeatRate,
-          low: 0.30,
-          high: 0.60,
           format: percentLabel,
         ),
         _CompareRow(
           label: 'Brier · lower is closer',
           first: v1.brier,
           second: v2.brier,
-          low: 0.22,
-          high: 0.27,
           format: _three,
         ),
         _CompareRow(
           label: 'Log loss · lower is closer',
           first: v1.logLoss,
           second: v2.logLoss,
-          low: 0.66,
-          high: 0.72,
           format: _three,
         ),
         const SizedBox(height: 8),
@@ -370,121 +357,73 @@ class _CompareRow extends StatelessWidget {
     required this.label,
     required this.first,
     required this.second,
-    required this.low,
-    required this.high,
     required this.format,
-    this.mark,
+    this.foot,
   });
 
   final String label;
   final double? first;
   final double? second;
-  final double low;
-  final double high;
   final String Function(double value) format;
-  final double? mark;
+  final String? foot;
 
   @override
   Widget build(BuildContext context) {
     final left = first == null ? '—' : format(first!);
     final right = second == null ? '—' : format(second!);
-    final shared = left == right;
+    final once = left == right;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: EdgeType.label),
-          const SizedBox(height: 4),
-          _Bar(
-            value: first,
-            low: low,
-            high: high,
-            color: EdgeColors.textSecondary,
-            mark: mark,
-            number: shared ? null : left,
-          ),
-          const SizedBox(height: 3),
-          _Bar(
-            value: second,
-            low: low,
-            high: high,
-            color: EdgeColors.accent,
-            mark: mark,
-            number: shared ? left : right,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Bar extends StatelessWidget {
-  const _Bar({
-    required this.value,
-    required this.low,
-    required this.high,
-    required this.color,
-    required this.number,
-    this.mark,
-  });
-
-  final double? value;
-  final double low;
-  final double high;
-  final Color color;
-  final String? number;
-  final double? mark;
-
-  @override
-  Widget build(BuildContext context) {
-    final span = high - low;
-    final share = value == null || span <= 0
-        ? 0.0
-        : ((value! - low) / span).clamp(0.0, 1.0);
-    final markShare = mark == null || span <= 0
-        ? null
-        : ((mark! - low) / span).clamp(0.0, 1.0);
-    return SizedBox(
-      height: 18,
-      child: Row(
-        children: [
-          Expanded(
-            child: Stack(
-              children: [
-                Container(
-                  decoration: BoxDecoration(
-                    color: EdgeColors.surface,
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: EdgeColors.border),
-                  ),
-                ),
-                FractionallySizedBox(
-                  widthFactor: share,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: color,
-                      borderRadius: BorderRadius.circular(4),
+      padding: const EdgeInsets.only(bottom: 8),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: EdgeColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: EdgeColors.border),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: EdgeType.label),
+              const SizedBox(height: 4),
+              if (once)
+                Text(
+                  left,
+                  style: EdgeType.display.copyWith(fontSize: 26, height: 1.05),
+                )
+              else
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        left,
+                        style: EdgeType.display.copyWith(
+                          fontSize: 26,
+                          height: 1.05,
+                          color: EdgeColors.textSecondary,
+                        ),
+                      ),
                     ),
-                  ),
+                    Expanded(
+                      child: Text(
+                        right,
+                        style: EdgeType.display.copyWith(
+                          fontSize: 26,
+                          height: 1.05,
+                          color: EdgeColors.accent,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                if (markShare != null)
-                  Align(
-                    alignment: Alignment(markShare * 2 - 1, 0),
-                    child: Container(width: 1, color: EdgeColors.text),
-                  ),
+              if (foot != null) ...[
+                const SizedBox(height: 2),
+                Text(foot!, style: EdgeType.label),
               ],
-            ),
+            ],
           ),
-          SizedBox(
-            width: 58,
-            child: Text(
-              number ?? '',
-              textAlign: TextAlign.right,
-              style: EdgeType.label.copyWith(fontWeight: FontWeight.w700),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1160,15 +1099,6 @@ class _VersusPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _VersusPainter oldDelegate) =>
       oldDelegate.value != value || oldDelegate.mark != mark;
-}
-
-String _propLine(PropReport? prop) {
-  if (prop == null) return 'Scoring past box scores.';
-  if (prop.scored == 0) return 'No scored games in this file.';
-  if (!prop.usedSportsbookPrices) {
-    return 'Not yet tested against sportsbook prices.';
-  }
-  return 'Tested against sportsbook prices.';
 }
 
 String _closeLine(ClosingSummary closing) {

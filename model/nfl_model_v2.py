@@ -837,6 +837,7 @@ def assemble_v2(
     snap_hist: dict[tuple[str, str], list[float]] = {}
     snap_pos: dict[tuple[str, str], str] = {}
     snap_display: dict[tuple[str, str], str] = {}
+    snap_season: dict[tuple[str, str], int] = {}
     team_lon: dict[str, float] = {}
     built: list[V2Game] = []
 
@@ -927,6 +928,7 @@ def assemble_v2(
                 continue
             key = (key_name, row.team)
             snap_hist.setdefault(key, []).append(min(row.snap_share, 1.0))
+            snap_season[key] = season
             if row.position:
                 snap_pos[key] = row.position
             snap_display[key] = row.name
@@ -966,7 +968,12 @@ def assemble_v2(
             replacements=replacements,
         )
     players: list[LivePlayer] = []
+    latest_season = max(snap_season.values(), default=0)
     for (key_name, team), shares in snap_hist.items():
+        # Live injury weights only need people who played this season.
+        # Earlier seasons stay in the backtest and are not shipped.
+        if snap_season.get((key_name, team)) != latest_season:
+            continue
         recent = shares[-8:]
         share = sum(recent) / len(recent)
         position = snap_pos.get((key_name, team), "")

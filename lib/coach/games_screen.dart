@@ -390,6 +390,11 @@ class _GameDetail extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           const ToolNote(responsibleGamblingNote),
+          const SizedBox(height: 12),
+          Text(
+            'Comparison, not a pick.',
+            style: EdgeType.label.copyWith(color: EdgeColors.textSecondary),
+          ),
         ],
       ),
     );

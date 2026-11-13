@@ -144,6 +144,12 @@ void main() {
     expect(version.report.logLoss!, lessThan(model.backtest.logLoss!));
     expect(version.hasEdge, isFalse);
     expect(version.differsHelped, isFalse);
+    expect(version.players.length, greaterThan(200));
+    expect(
+      version.players.length,
+      lessThan(2500),
+      reason: 'The live file keeps this season, not every player who ever snapped.',
+    );
     expect(model.liveReport.hasEdge, isFalse);
     final chiefs = model.team('Kansas City Chiefs');
     final bills = model.team('BUF');
@@ -194,7 +200,8 @@ void main() {
     );
     expect(find.text("Coach's Line"), findsWidgets);
     expect(find.textContaining('Our number:'), findsWidgets);
-    expect(find.text('The books: Chiefs -3.5'), findsWidgets);
+    expect(find.text('Chiefs -3.5'), findsWidgets);
+    expect(find.textContaining('The books:'), findsNothing);
     expect(find.text('Differs from books'), findsWidgets);
     expect(find.text('Edge'), findsNothing);
     expect(
@@ -207,10 +214,13 @@ void main() {
     expect(find.textContaining('The comparison is not a pick.'), findsOneWidget);
     await tester.tap(find.text('Buffalo Bills').first);
     await tester.pumpAndSettle();
-    expect(find.text('Comparison, not a pick.'), findsOneWidget);
     await tester.tap(find.text('Why').first);
     await tester.pumpAndSettle();
     expect(find.textContaining('Chance the favorite covers'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Comparison, not a pick.'),
+      300,
+    );
     expect(find.text('Comparison, not a pick.'), findsOneWidget);
   });
 
