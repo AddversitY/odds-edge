@@ -307,14 +307,20 @@ class EdgeSegments extends StatelessWidget {
                     child: SizedBox(
                       height: 36,
                       child: Center(
-                        child: Text(
-                          labels[i],
-                          style: EdgeType.label.copyWith(
-                            color: i == index
-                                ? EdgeColors.onAccent
-                                : EdgeColors.textSecondary,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              labels[i],
+                              style: EdgeType.label.copyWith(
+                                color: i == index
+                                    ? EdgeColors.onAccent
+                                    : EdgeColors.textSecondary,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                              ),
+                            ),
                           ),
                         ),
                       ),

@@ -30,6 +30,8 @@ class TrackedBet {
     this.side = '',
     this.line,
     this.closingLine,
+    this.eventId = '',
+    this.closeSource = '',
   }) {
     if (id.trim().isEmpty) {
       throw ArgumentError('A bet needs an id.');
@@ -57,7 +59,7 @@ class TrackedBet {
     if (closingDecimal != null) impliedProbability(closingDecimal!);
   }
 
-  final String id, description, book, notes, market, side;
+  final String id, description, book, notes, market, side, eventId, closeSource;
   final DateTime placedAt;
   final double decimal, stake;
   final double? closingDecimal;
@@ -124,6 +126,8 @@ class TrackedBet {
     bool replaceClosingLine = false,
     String? market,
     String? side,
+    String? eventId,
+    String? closeSource,
   }) => TrackedBet(
     id: id,
     placedAt: placedAt,
@@ -142,6 +146,8 @@ class TrackedBet {
     closingLine: replaceClosingLine
         ? closingLine
         : (closingLine ?? this.closingLine),
+    eventId: eventId ?? this.eventId,
+    closeSource: closeSource ?? this.closeSource,
   );
 
   Map<String, dynamic> toJson() => {
@@ -158,6 +164,8 @@ class TrackedBet {
     'side': side,
     'line': line,
     'closingLine': closingLine,
+    'eventId': eventId,
+    'closeSource': closeSource,
   };
 
   factory TrackedBet.fromJson(Map<String, dynamic> json) {
@@ -190,6 +198,14 @@ class TrackedBet {
     if (side != null && side is! String) {
       throw const FormatException('Bet side must be text.');
     }
+    final eventId = json['eventId'];
+    final closeSource = json['closeSource'];
+    if (eventId != null && eventId is! String) {
+      throw const FormatException('Bet game id must be text.');
+    }
+    if (closeSource != null && closeSource is! String) {
+      throw const FormatException('Closing source must be text.');
+    }
     return TrackedBet(
       id: '${json['id'] ?? ''}',
       placedAt: DateTime.parse(placed),
@@ -204,6 +220,8 @@ class TrackedBet {
       side: side ?? '',
       line: (line as num?)?.toDouble(),
       closingLine: (closingLine as num?)?.toDouble(),
+      eventId: eventId ?? '',
+      closeSource: closeSource ?? '',
     );
   }
 }

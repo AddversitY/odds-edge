@@ -10,6 +10,8 @@ import 'coach/injuries_screen.dart';
 import 'coach/sharp_view.dart';
 import 'coach/model_screen.dart';
 import 'coach/my_bets_screen.dart';
+import 'coach/report_card_screen.dart';
+import 'coach/stale_board_screen.dart';
 import 'coach/parlays_screen.dart';
 import 'coach/props_screen.dart';
 import 'data/demo.dart';
@@ -119,6 +121,8 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       7 => 'More',
       8 => 'Injuries',
       9 => 'Public vs sharp',
+      10 => 'Report card',
+      11 => 'Stale prices',
       4 => 'Players',
       1 => 'Matchups',
       3 => 'Proof Lab',
@@ -708,6 +712,16 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
         openGameId = id;
         shell = 2;
       }),
+      onOpenReport: () => setState(() {
+        shell = 5;
+        page = 10;
+        researchContext = null;
+      }),
+      onOpenStale: () => setState(() {
+        shell = 5;
+        page = 11;
+        researchContext = null;
+      }),
     ),
     1 => PropsScreen(
       board: propSource,
@@ -752,6 +766,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       board: board,
       now: now,
       books: enabledBooks,
+      lineHistory: lineHistory,
     ),
     _ => const SizedBox(),
   };
@@ -765,7 +780,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       ),
       const SizedBox(height: 8),
       const Text(
-        'Injuries, odds, research, tools, and the model.',
+        'The report card, injuries, odds, research, tools, and the model.',
         style: EdgeType.label,
       ),
       const SizedBox(height: 16),
@@ -803,6 +818,24 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
         () => setState(() {
           shell = 5;
           page = 5;
+          researchContext = null;
+        }),
+      ),
+      _libraryRow(
+        'Report card',
+        'The past test, the calibration table, and whether the prop chance was checked.',
+        () => setState(() {
+          shell = 5;
+          page = 10;
+          researchContext = null;
+        }),
+      ),
+      _libraryRow(
+        'Stale prices',
+        'Books in this snapshot whose price lags the fee-free consensus.',
+        () => setState(() {
+          shell = 5;
+          page = 11;
           researchContext = null;
         }),
       ),
@@ -864,6 +897,23 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       );
 
   Widget legacyPage(bool wide) {
+    if (page == 10) {
+      return ReportCardScreen(
+        model: coachModel,
+        now: now,
+        lineHistory: lineHistory,
+        events: board.events,
+        examplePrices: board.demo,
+      );
+    }
+    if (page == 11) {
+      return StaleBoardScreen(
+        board: pricedBoard,
+        now: now,
+        stamp: stamp,
+        books: enabledBooks,
+      );
+    }
     if (page == 7) return libraryMenu();
     if (page == 8) {
       return InjuriesScreen(

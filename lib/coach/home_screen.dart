@@ -9,6 +9,9 @@ import '../domain/odds.dart';
 import '../domain/parlay_slip.dart';
 import '../domain/player_stats.dart';
 import '../domain/prop_history.dart';
+import '../domain/skip_list.dart';
+import '../ui/scan_card.dart';
+import '../domain/value_check.dart';
 import '../theme/edge_theme.dart';
 import '../ui/feed_card.dart';
 import '../ui/value_check.dart';
@@ -30,6 +33,8 @@ class HomeScreen extends StatefulWidget {
     this.onOpenGame,
     this.slip,
     this.onSave,
+    this.onOpenReport,
+    this.onOpenStale,
   });
 
   /// Prices for the prop feed. In sample mode this is the same board as the games.
@@ -46,6 +51,8 @@ class HomeScreen extends StatefulWidget {
   final ValueChanged<String>? onOpenGame;
   final ParlaySlipController? slip;
   final ValueChanged<PropCardModel>? onSave;
+  final VoidCallback? onOpenReport;
+  final VoidCallback? onOpenStale;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -121,7 +128,7 @@ class _HomeScreenState extends State<HomeScreen> {
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
           children: [
             EdgeSegments(
-              labels: const ['Value', 'Trending', 'Games'],
+              labels: const ['Value', 'Trending', 'Games', "Don't"],
               index: segment,
               onChanged: (index) => setState(() => segment = index),
             ),
@@ -131,7 +138,9 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    segment == 2
+                    segment == 3
+                        ? "Don't"
+                        : segment == 2
                         ? 'Games'
                         : segment == 1
                         ? 'Trending hit rates'
@@ -143,7 +152,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                Text(slateDate(kickoffs), style: EdgeType.label.copyWith(fontSize: 12)),
+                Text(
+                  slateDate(kickoffs),
+                  style: EdgeType.label.copyWith(fontSize: 12),
+                ),
                 IconButton(
                   tooltip: 'Search',
                   visualDensity: VisualDensity.compact,
@@ -164,8 +176,26 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
             Text(
               'Snapshot as of ${widget.stamp(widget.board.fetchedAt)}',
-              style: EdgeType.label.copyWith(fontSize: 12, fontWeight: FontWeight.w500),
+              style: EdgeType.label.copyWith(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
             ),
+            if (widget.onOpenReport != null)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  key: const Key('open-report-card'),
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(48, 36),
+                    alignment: Alignment.centerLeft,
+                    foregroundColor: EdgeColors.accent,
+                  ),
+                  onPressed: widget.onOpenReport,
+                  child: const Text('Report card'),
+                ),
+              ),
             if (searching) ...[
               const SizedBox(height: 8),
               TextField(
@@ -183,13 +213,17 @@ class _HomeScreenState extends State<HomeScreen> {
               Text(statsNote!, style: EdgeType.label),
               const SizedBox(height: 8),
             ],
-            if (segment == 2)
+            if (segment == 3)
+              ..._dont(shown)
+            else if (segment == 2)
               ..._games(shown)
             else
               ..._props(filtered, trending: segment == 1),
             const SizedBox(height: 8),
             Text(
-              widget.board.demo
+              segment == 3
+                  ? 'Comparison, not a pick.'
+                  : widget.board.demo
                   ? 'Example data · our chance versus the book\'s fee-free chance · not a pick'
                   : 'Our chance versus the book\'s fee-free chance · not a pick',
               textAlign: TextAlign.center,
@@ -269,10 +303,102 @@ class _HomeScreenState extends State<HomeScreen> {
           key: ValueKey(prop.card.id),
           shown: prop,
           onOpen: () => _open(prop),
-          onSave: widget.onSave == null ? null : () => widget.onSave!(prop.card),
+          onSave: widget.onSave == null
+              ? null
+              : () => widget.onSave!(prop.card),
         ),
         const SizedBox(height: 8),
       ],
+    ];
+  }
+
+  List<Widget> _dont(List<ShownProp> shown) {
+    final items = skipList(
+      board: widget.board,
+      now: widget.now,
+      prices: [
+        for (final prop in shown)
+          RatedPrice(
+            id: prop.card.id,
+            name: prop.card.player,
+            market: [
+              prop.card.lineLabel,
+              prop.card.marketLabel,
+            ].where((part) => part.isNotEmpty).join(' · '),
+            title: '${prop.card.player} ${prop.card.lineLabel}',
+            detail: [
+              prop.card.marketLabel,
+              if (prop.card.event != null)
+                '${prop.card.event!.away} at ${prop.card.event!.home}',
+              if (prop.card.best != null) prop.card.best!.book,
+              if (prop.card.best != null)
+                americanLabel(prop.card.best!.decimal),
+            ].join(' · '),
+            decimal: prop.card.best?.decimal,
+            fair: prop.card.fairProbability,
+            hits:
+                (prop.windows?.season ??
+                        prop.windows?.last10 ??
+                        prop.windows?.last20)
+                    ?.hits,
+            observed:
+                (prop.windows?.season ??
+                        prop.windows?.last10 ??
+                        prop.windows?.last20)
+                    ?.observed,
+          ),
+      ],
+      books: widget.enabledBooks,
+    );
+    final q = query.trim().toLowerCase();
+    final filtered = [
+      for (final item in items)
+        if (q.isEmpty ||
+            '${item.title} ${item.detail} ${item.reason}'
+                .toLowerCase()
+                .contains(q))
+          item,
+    ];
+    return [
+      if (widget.onOpenStale != null) ...[
+        const SizedBox(height: 4),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            key: const Key('open-stale-board'),
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(48, 36),
+              alignment: Alignment.centerLeft,
+              foregroundColor: EdgeColors.accent,
+            ),
+            onPressed: widget.onOpenStale,
+            child: const Text('Books behind the market'),
+          ),
+        ),
+      ],
+      const SizedBox(height: 8),
+      if (filtered.isEmpty)
+        const EmptyNote('Nothing here is short of the fee-free chance.')
+      else
+        for (final item in filtered) ...[
+          ScanCard(
+            title: item.name,
+            meta: item.market,
+            line: item.brief,
+            detail: item.reason,
+            rail: ValueCheck(
+              word: ValueWord.skip,
+              ourChance: item.fair,
+              bookChance: item.breakEven,
+              ourLabel: 'Fee-free',
+              bookLabel: 'Price needs',
+              overpriced: true,
+              compact: true,
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
     ];
   }
 
@@ -302,7 +428,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _open(ShownProp prop) {
-    final cards = propCards(widget.board, widget.now, books: widget.enabledBooks);
+    final cards = propCards(
+      widget.board,
+      widget.now,
+      books: widget.enabledBooks,
+    );
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => PropDetailScreen(

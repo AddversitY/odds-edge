@@ -50,7 +50,7 @@ checks, not historical sportsbook prices or forecasts. Opponent quality, injurie
 snaps, routes and weather are not inferred. Source box scores are retrospective
 and may contain corrections. Date filtering is not strict point-in-time replay.
 
-The source snapshot currently ends 2026-10-18. Player IDs persist across trades.
+The source snapshot ends on the cutoff stored in the player file. Player IDs persist across trades.
 Historical teams/opponents stay attached to each row. The new flow never fetches
 odds; starting price/line values are examples. User-entered prices/books/game
 dates are explicitly manual and unverified. A future adapter may attach a real,

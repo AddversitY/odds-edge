@@ -89,6 +89,14 @@ void main() {
     expect(find.text('Josh Allen'), findsWidgets);
     await tester.scrollUntilVisible(find.textContaining('not a pick'), 400);
     expect(find.textContaining('not a pick'), findsOneWidget);
+    final scrollable = tester.state<ScrollableState>(find.byType(Scrollable));
+    scrollable.position.jumpTo(0);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Don't"));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('pts too high'), findsWidgets);
+    expect(find.text('FEE-FREE'), findsWidgets);
+    expect(find.text('Comparison, not a pick.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

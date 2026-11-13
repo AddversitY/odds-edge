@@ -308,6 +308,7 @@ class BacktestReport {
     required this.totalsRoi,
     required this.hasEdge,
     required this.plainEnglish,
+    this.breakEvenHitRate = 0.52381,
   });
 
   final String method;
@@ -336,6 +337,9 @@ class BacktestReport {
   final double? totalsRoi;
   final bool hasEdge;
   final String plainEnglish;
+
+  /// Hit rate a -110 price needs. 1.10 staked to win 1.00.
+  final double breakEvenHitRate;
 
   String get seasonSpan => seasons.isEmpty
       ? 'no seasons'
@@ -569,6 +573,7 @@ class CoachModel {
         totalsRoi: _maybeDouble(totals['roi']),
         hasEdge: backtest['hasEdge'] == true,
         plainEnglish: '${backtest['plainEnglish'] ?? ''}',
+        breakEvenHitRate: _maybeDouble(backtest['breakEvenHitRate']) ?? 0.52381,
       ),
     );
   }
