@@ -168,16 +168,22 @@ class _MarketPull extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final raw = (projection.rawChance * 100).round();
+    final curve = (projection.rawChance * 100).round();
+    final adjusted = (projection.adjustedChance * 100).round();
+    final moved =
+        (projection.adjustedChance - projection.rawChance).abs() >= 0.005;
     final book = projection.market == null
         ? null
         : (projection.market! * 100).round();
     final pulled = projection.chance == null
         ? null
         : (projection.chance! * 100).round();
+    final open = moved
+        ? '$curve% from the curve. Earlier games move that to $adjusted%.'
+        : '$adjusted% from the projection.';
     final line = book == null || pulled == null
-        ? '$raw% from the projection. No book price to pull toward.'
-        : '$raw% from the projection. The book at $book% pulled it to $pulled%.';
+        ? '$open No book price to pull toward.'
+        : '$open The book at $book% pulled it to $pulled%.';
     final cap = projection.capped ? ' Gap held.' : '';
     final status = used
         ? ''
@@ -190,7 +196,7 @@ class _MarketPull extends StatelessWidget {
           width: double.infinity,
           child: CustomPaint(
             painter: _PullPainter(
-              raw: projection.rawChance,
+              raw: projection.adjustedChance,
               book: projection.market,
               pulled: projection.chance,
             ),

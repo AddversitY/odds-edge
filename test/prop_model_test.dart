@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:odds_edge/domain/coach_model.dart';
 import 'package:odds_edge/domain/history.dart';
 import 'package:odds_edge/domain/hit_rate.dart';
 import 'package:odds_edge/domain/matchup.dart';
@@ -378,6 +377,10 @@ void main() {
       scoredLater.usageChances.take(scored.usageChances.length),
       scored.usageChances,
     );
+    expect(
+      scoredLater.calibratedChances.take(scored.calibratedChances.length),
+      scored.calibratedChances,
+    );
     expect(scoredLater.usageChances.length, greaterThan(scored.usageChances.length));
     expect(scored.record.usedSportsbookPrices, isFalse);
     expect(scored.record.hasEdge, isFalse);
@@ -467,29 +470,50 @@ void main() {
       // ignore: avoid_print
       print(
         'paired ${comparison.paired} missing ${comparison.usageMissing} '
-        'adopted ${comparison.adopted} '
-        'record ${comparison.record.scored} brier ${comparison.record.brier} '
-        'log ${comparison.record.logLoss}',
+        'live ${comparison.live.name} adopted ${comparison.adopted} '
+        'record brier ${comparison.pairedRecord.brier} log ${comparison.pairedRecord.logLoss} '
+        'usage brier ${comparison.usage.brier} log ${comparison.usage.logLoss} '
+        'calibrated brier ${comparison.calibrated.brier} log ${comparison.calibrated.logLoss}',
       );
-      for (final bin in comparison.pairedRecord.calibration) {
-        CalibrationBin? match;
-        for (final row in comparison.usage.calibration) {
-          if (row.from == bin.from && row.to == bin.to) match = row;
+      void dump(String name, ChanceBoard board) {
+        for (final bin in board.calibration) {
+          // ignore: avoid_print
+          print(
+            '$name ${bin.from}-${bin.to} n ${bin.games} '
+            'pred ${bin.predicted.toStringAsFixed(3)} act ${bin.actual.toStringAsFixed(3)}',
+          );
         }
-        // ignore: avoid_print
-        print(
-          'bucket ${bin.from}-${bin.to} record ${bin.games} pred ${bin.predicted.toStringAsFixed(3)} act ${bin.actual.toStringAsFixed(3)} '
-          'usage ${match?.games} pred ${match?.predicted.toStringAsFixed(3)} act ${match?.actual.toStringAsFixed(3)}',
-        );
       }
+
+      dump('record', comparison.pairedRecord);
+      dump('usage', comparison.usage);
+      dump('calibrated', comparison.calibrated);
       expect(comparison.record.usedSportsbookPrices, isFalse);
       expect(comparison.record.hasEdge, isFalse);
       expect(comparison.sentence, contains('not a pick'));
       expect(comparison.sentence, contains('No sportsbook prop price'));
       expect(comparison.sentence, contains('closing spread was not used'));
+      expect(comparison.sentence, contains('earlier weeks'));
       expect(comparison.paired, greaterThan(0));
+      expect(comparison.calibrated.scored, comparison.usage.scored);
+      expect(propLiveChance, comparison.live);
       expect(propV2Adopted, comparison.adopted);
-      if (comparison.adopted) {
+      if (comparison.live == PropLiveChance.calibrated) {
+        expect(comparison.paired, greaterThanOrEqualTo(1000));
+        expect(
+          comparison.calibrated.brier!,
+          lessThan(comparison.pairedRecord.brier!),
+        );
+        expect(
+          comparison.calibrated.logLoss!,
+          lessThan(comparison.pairedRecord.logLoss!),
+        );
+        expect(comparison.calibrated.brier!, lessThan(comparison.usage.brier!));
+        expect(
+          comparison.calibrated.logLoss!,
+          lessThan(comparison.usage.logLoss!),
+        );
+      } else if (comparison.live == PropLiveChance.usage) {
         expect(comparison.paired, greaterThanOrEqualTo(1000));
         expect(comparison.usage.brier!, lessThan(comparison.pairedRecord.brier!));
         expect(

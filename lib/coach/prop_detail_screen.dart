@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../domain/coach_board.dart';
 import '../domain/edge_gap.dart';
+import '../domain/history.dart';
 import '../domain/hit_rate.dart';
 import '../domain/injury_report.dart';
 import '../domain/matchup.dart';
@@ -29,6 +30,7 @@ class PropDetailScreen extends StatefulWidget {
     this.context,
     this.injuries,
     this.history,
+    this.scores = const [],
     this.slip,
   });
 
@@ -40,6 +42,7 @@ class PropDetailScreen extends StatefulWidget {
   final MatchupContext? context;
   final InjuryReport? injuries;
   final Future<List<OddsQuote>> Function(Selection selection)? history;
+  final List<HistoricalGame> scores;
   final ParlaySlipController? slip;
 
   @override
@@ -84,6 +87,7 @@ class _PropDetailScreenState extends State<PropDetailScreen> {
     board: widget.board,
     now: widget.now,
     injuries: widget.injuries,
+    scores: widget.scores,
   );
 
   @override

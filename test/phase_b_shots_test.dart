@@ -61,15 +61,28 @@ void main() {
       players.where((name) => name.split(' ').length >= 2).length,
       greaterThan(3),
     );
+    expect(find.textContaining('Over '), findsWidgets);
+    expect(find.textContaining('Under '), findsWidgets);
     await _save(tester, '/opt/cursor/artifacts/props_list_markets_390.png');
+
+    final henry = find.text('Derrick Henry');
+    expect(henry, findsWidgets);
+    final henryTop = tester.getTopLeft(henry.first).dy;
+    await _nudge(tester, find.byKey(const Key('props-list')), henryTop, 180);
+    expect(_nearbyLine(tester, henry.first), startsWith('Under '));
+    await _save(tester, '/opt/cursor/artifacts/prop_under_card_390.png');
 
     final detailName = find.text('Jahmyr Gibbs').evaluate().isNotEmpty
         ? 'Jahmyr Gibbs'
         : find.text('James Cook').evaluate().isNotEmpty
         ? 'James Cook'
         : "Ja'Marr Chase";
-    await tester.scrollUntilVisible(find.text(detailName).first, 400);
-    await tester.pumpAndSettle(const Duration(milliseconds: 50));
+    await _nudge(
+      tester,
+      find.byKey(const Key('props-list')),
+      tester.getTopLeft(find.text(detailName).first).dy,
+      220,
+    );
     final opened = find.text(detailName).first;
     final cardLine = _nearbyLine(tester, opened);
     await tester.tap(opened);
@@ -84,25 +97,40 @@ void main() {
     }
     await tester.pumpAndSettle(const Duration(milliseconds: 50));
     await _save(tester, '/opt/cursor/artifacts/prop_detail_breakdown_390.png');
-    await tester.scrollUntilVisible(
-      find.text('Comparison, not a pick.'),
-      400,
-    );
+    _jump(tester, find.byType(Scrollable).last, 1);
+    await tester.pump();
     expect(find.text('Comparison, not a pick.'), findsOneWidget);
-    await tester.pageBack();
-    await tester.pumpAndSettle(const Duration(milliseconds: 50));
+    Navigator.of(tester.element(find.byKey(const Key('prop-detail')))).pop();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
     await tester.tap(find.widgetWithText(NavigationDestination, 'Home'));
-    await tester.pumpAndSettle(const Duration(milliseconds: 50));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.byKey(const Key('open-report-card')));
     await tester.pump();
-    await _until(tester, find.text('Usage Brier'));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(seconds: 20)),
+    );
+    await tester.pump();
+    final reportScroll = find.descendant(
+      of: find.byKey(const Key('report-card')),
+      matching: find.byType(Scrollable),
+    );
+    for (var step = 0; step < 8; step++) {
+      if (find.text('Usage Brier').evaluate().isNotEmpty) break;
+      _jumpBy(tester, reportScroll, 400);
+      await tester.pump();
+    }
+    expect(find.text('Usage Brier'), findsWidgets);
     expect(find.byKey(const Key('prop-v2')), findsOneWidget);
     expect(find.text('Usage Brier'), findsOneWidget);
     expect(find.text('Record Brier'), findsOneWidget);
-    await tester.scrollUntilVisible(find.byKey(const Key('prop-v2')), 400);
-    await tester.pumpAndSettle(const Duration(milliseconds: 50));
+    expect(find.byKey(const Key('prop-calibration-chart')), findsOneWidget);
+    final chartTop = tester.getTopLeft(find.byKey(const Key('prop-v2'))).dy;
+    _jumpBy(tester, reportScroll, chartTop - 90);
+    await tester.pump();
     await _save(tester, '/opt/cursor/artifacts/report_card_v1_v2_390.png');
-  }, timeout: const Timeout(Duration(minutes: 4)));
+  }, timeout: const Timeout(Duration(minutes: 6)));
 }
 
 String? _nearbyLine(WidgetTester tester, Finder name) {
@@ -150,15 +178,41 @@ Future<void> _frameBoth(WidgetTester tester, Finder left, Finder right) async {
   }
 }
 
+Future<void> _nudge(
+  WidgetTester tester,
+  Finder view,
+  double top,
+  double target,
+) async {
+  if ((top - target).abs() < 40) return;
+  await tester.drag(view, Offset(0, target - top));
+  await tester.pump(const Duration(milliseconds: 50));
+}
+
+void _jump(WidgetTester tester, Finder view, double fraction) {
+  final scroll = tester.state<ScrollableState>(view);
+  final span = scroll.position.maxScrollExtent;
+  scroll.position.jumpTo((span * fraction).clamp(0, span));
+}
+
+void _jumpBy(WidgetTester tester, Finder view, double delta) {
+  final scroll = tester.state<ScrollableState>(view);
+  final next = scroll.position.pixels + delta;
+  scroll.position.jumpTo(next.clamp(0, scroll.position.maxScrollExtent));
+}
+
 Future<void> _save(WidgetTester tester, String path) async {
+  final boundary = tester.renderObject<RenderRepaintBoundary>(
+    find.byKey(const Key('shot')),
+  );
+  final image = await tester.runAsync(() => boundary.toImage(pixelRatio: 1));
+  final bytes = await tester.runAsync(
+    () => image!.toByteData(format: ui.ImageByteFormat.png),
+  );
+  final file = File(path);
   await tester.runAsync(() async {
-    final boundary = tester.renderObject<RenderRepaintBoundary>(
-      find.byKey(const Key('shot')),
-    );
-    final image = await boundary.toImage(pixelRatio: 1);
-    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-    final file = File(path);
     await file.parent.create(recursive: true);
     await file.writeAsBytes(bytes!.buffer.asUint8List());
   });
+  image!.dispose();
 }

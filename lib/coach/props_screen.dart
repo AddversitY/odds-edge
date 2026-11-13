@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/nfl_assets.dart';
 import '../data/research_store.dart';
 import '../domain/coach_board.dart';
+import '../domain/history.dart';
 import '../domain/injury_report.dart';
 import '../domain/matchup.dart';
 import '../domain/odds.dart';
@@ -53,6 +54,8 @@ class PropsScreen extends StatefulWidget {
 class _PropsScreenState extends State<PropsScreen> {
   late Future<PlayerDirectory> directory;
   late Future<MatchupContext?> matchup;
+  late Future<_PropFacts> facts;
+  List<HistoricalGame> scores = const [];
   PropFilter filter = const PropFilter();
 
   @override
@@ -62,6 +65,8 @@ class _PropsScreenState extends State<PropsScreen> {
       PlayerDirectory.new,
     );
     matchup = _loadMatchup();
+    facts = _loadFacts();
+    _loadScores();
     final market = widget.focusMarket;
     if (market != null) filter = PropFilter(market: market);
   }
@@ -83,10 +88,20 @@ class _PropsScreenState extends State<PropsScreen> {
     }
   }
 
-  Future<_PropFacts> _facts() async {
+  Future<void> _loadScores() async {
+    try {
+      final games = await loadBundledHistoryGames();
+      if (!mounted) return;
+      setState(() => scores = games);
+    } catch (_) {
+      // Earlier scores only move the curve. The list still prices without them.
+    }
+  }
+
+  Future<_PropFacts> _loadFacts() async {
     final players = await directory;
     final report = await matchup;
-    return _PropFacts(players, report);
+    return _PropFacts(players, report, scores);
   }
 
   @override
@@ -130,7 +145,7 @@ class _PropsScreenState extends State<PropsScreen> {
           )
         else
           FutureBuilder<_PropFacts>(
-            future: _facts(),
+            future: facts,
             builder: (context, snapshot) {
               if (snapshot.hasError) {
                 return const Text(
@@ -138,21 +153,26 @@ class _PropsScreenState extends State<PropsScreen> {
                 );
               }
               final facts = snapshot.data;
+              final shown = preferredPropSides([
+                for (final card in cards)
+                  showProp(
+                    card: card,
+                    cards: cards,
+                    directory: facts?.players,
+                    context: facts?.matchup,
+                    board: widget.board,
+                    now: widget.now,
+                    injuries: widget.injuries,
+                    scores: scores,
+                  ),
+              ]);
               return Column(
                 children: [
-                  for (final card in cards) ...[
+                  for (final face in shown) ...[
                     FeedPropCard(
-                      shown: showProp(
-                        card: card,
-                        cards: cards,
-                        directory: facts?.players,
-                        context: facts?.matchup,
-                        board: widget.board,
-                        now: widget.now,
-                        injuries: widget.injuries,
-                      ),
-                      onOpen: () => _open(card, facts, cards),
-                      onSave: () => _save(card),
+                      shown: face,
+                      onOpen: () => _open(face.card, facts, cards),
+                      onSave: () => _save(face.card),
                     ),
                     const SizedBox(height: 8),
                   ],
@@ -204,6 +224,7 @@ class _PropsScreenState extends State<PropsScreen> {
           context: facts?.matchup,
           injuries: widget.injuries,
           history: widget.history,
+          scores: scores,
           slip: widget.slip,
         ),
       ),
@@ -230,9 +251,10 @@ class _PropsScreenState extends State<PropsScreen> {
 }
 
 class _PropFacts {
-  const _PropFacts(this.players, this.matchup);
+  const _PropFacts(this.players, this.matchup, this.scores);
   final PlayerDirectory players;
   final MatchupContext? matchup;
+  final List<HistoricalGame> scores;
 }
 
 class _FilterSheet extends StatefulWidget {

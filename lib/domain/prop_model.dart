@@ -5,18 +5,24 @@ import 'history.dart';
 import 'hit_rate.dart';
 import 'matchup.dart';
 import 'player_stats.dart';
+import 'prop_calibration.dart';
 import 'prop_chance.dart';
 import 'prop_projection.dart';
 import 'prop_report.dart';
 
-/// Whether the card's chance is the usage projection.
+/// Which chance the card shows.
 ///
-/// Set from the bundled walk-forward. Version 2 is used only when it has
-/// a lower Brier score and a lower log loss than the record, on the same
-/// player-games, with at least 1,000 of them. The test checks this flag
-/// against a fresh run. A better forecast on a made-up line is still not
-/// a betting edge.
-const propV2Adopted = true;
+/// Set from the bundled walk-forward. A candidate is live only when it
+/// has a lower Brier score and a lower log loss than each chance it
+/// replaces, on the same player-games, with at least 1,000 of them.
+/// Recalibration replaces the raw usage chance only when it beats that
+/// chance and the record. The test checks this against a fresh run.
+enum PropLiveChance { record, usage, calibrated }
+
+const propLiveChance = PropLiveChance.usage;
+
+/// True when the card uses a usage chance rather than the record.
+const propV2Adopted = propLiveChance != PropLiveChance.record;
 
 class ChanceBoard {
   const ChanceBoard({
@@ -36,17 +42,21 @@ class ChanceBoard {
   final List<CalibrationBin> calibration;
 }
 
-/// Version 1 and version 2 on the same player-games.
+/// The record, the raw usage chance, and the recalibrated usage chance
+/// on the same player-games.
 class PropModelComparison {
   const PropModelComparison({
     required this.record,
     required this.pairedRecord,
     required this.usage,
-    required this.adopted,
+    required this.calibrated,
+    required this.live,
+    required this.calibrator,
     required this.paired,
     required this.usageMissing,
     required this.sentence,
     this.usageChances = const [],
+    this.calibratedChances = const [],
   });
 
   /// The published hit-rate test, including games version 2 could not score.
@@ -55,20 +65,68 @@ class PropModelComparison {
   /// Version 1 on the games version 2 also scored.
   final ChanceBoard pairedRecord;
 
-  /// Version 2 on those same games.
+  /// Version 2, before the walk-forward curve, on those same games.
   final ChanceBoard usage;
-  final bool adopted;
+
+  /// Version 2 after the curve was fit on earlier weeks only.
+  final ChanceBoard calibrated;
+
+  final PropLiveChance live;
+
+  /// The curve fit on every scored week. Upcoming games are not in it.
+  final PropCalibrator calibrator;
+
+  bool get adopted => live != PropLiveChance.record;
   final int paired;
 
   /// Games the hit-rate test scored and the projection could not.
   final int usageMissing;
   final String sentence;
   final List<double> usageChances;
+  final List<double> calibratedChances;
 }
 
-/// Walk-forward of both chances. To score a week, only earlier weeks
-/// are used. The line is the previous season's median, frozen before
-/// week 1. The market anchor is a fair 50%. No closing spread is read.
+PropModelComparison? _cachedComparison;
+String? _cachedComparisonKey;
+
+String _comparisonKey(
+  List<PlayerGame> rows,
+  List<HistoricalGame> scores,
+  MatchupContext? matchup,
+) {
+  final row = rows.isEmpty
+      ? '0'
+      : '${rows.length}:${rows.first.playerId}:${rows.first.season}:${rows.first.week}:${rows.last.playerId}:${rows.last.season}:${rows.last.week}';
+  final score = scores.isEmpty
+      ? '0'
+      : '${scores.length}:${scores.first.season}:${scores.first.week}:${scores.last.season}:${scores.last.week}';
+  final snaps = matchup == null
+      ? 'none'
+      : '${matchup.season}:${matchup.snaps.length}:${matchup.injuries.length}';
+  return '$row|$score|$snaps';
+}
+
+/// The bundled comparison, reused when the same files are scored again.
+PropModelComparison cachedPropComparison(
+  List<PlayerGame> rows, {
+  List<HistoricalGame> scores = const [],
+  MatchupContext? matchup,
+}) {
+  final key = _comparisonKey(rows, scores, matchup);
+  final hit = _cachedComparison;
+  if (hit != null && _cachedComparisonKey == key) return hit;
+  final built = comparePropModels(rows, scores: scores, matchup: matchup);
+  _cachedComparison = built;
+  _cachedComparisonKey = key;
+  return built;
+}
+
+/// Walk-forward of the record, the raw usage chance, and the
+/// recalibrated usage chance. To score a week, only earlier weeks are
+/// used. The curve for that week is fit on earlier weeks only, then
+/// applied, then the market shrink. The line is the previous season's
+/// median, frozen before week 1. The market anchor is a fair 50%.
+/// No closing spread is read.
 PropModelComparison comparePropModels(
   List<PlayerGame> rows, {
   List<HistoricalGame> scores = const [],
@@ -77,8 +135,7 @@ PropModelComparison comparePropModels(
 }) {
   final usageIndex = UsageIndex.build(rows, scores: scores, matchup: matchup);
   final record = walkForwardPropChance(rows);
-  final v1 = <_Call>[];
-  final v2 = <_Call>[];
+  final events = <_Event>[];
   var missing = 0;
   for (final metric in propReportMetrics) {
     final games = <String, List<PlayerGame>>{};
@@ -135,38 +192,116 @@ PropModelComparison comparePropModels(
               market: propReportMarketProxy,
             );
             final v2Chance = projection?.chance;
-            if (v2Chance == null) {
+            final raw = projection?.rawChance;
+            if (v2Chance == null || raw == null) {
               missing++;
               continue;
             }
-            final hit = value > line;
-            v1.add(_Call(v1Chance, hit));
-            v2.add(_Call(v2Chance, hit));
+            events.add(
+              _Event(
+                season: season,
+                week: week,
+                games: projection!.games,
+                raw: raw,
+                record: v1Chance,
+                usage: v2Chance,
+                hit: value > line,
+              ),
+            );
           }
           history.addAll(weeks[week]!);
         }
       }
     }
   }
+  final calibrator = _calibrate(events);
+  final v1 = [for (final event in events) _Call(event.record, event.hit)];
+  final v2 = [for (final event in events) _Call(event.usage, event.hit)];
+  final v3 = [for (final event in events) _Call(event.calibrated, event.hit)];
   final pairedRecord = _board(v1);
   final usage = _board(v2);
-  final adopted = _beats(pairedRecord, usage);
+  final calibrated = _board(v3);
+  final live = _live(pairedRecord, usage, calibrated);
   return PropModelComparison(
     record: record,
     pairedRecord: pairedRecord,
     usage: usage,
-    adopted: adopted,
-    paired: v2.length,
+    calibrated: calibrated,
+    live: live,
+    calibrator: calibrator,
+    paired: events.length,
     usageMissing: missing,
-    usageChances: keepForecasts ? [for (final row in v2) row.chance] : const [],
+    usageChances: keepForecasts
+        ? [for (final event in events) event.usage]
+        : const [],
+    calibratedChances: keepForecasts
+        ? [for (final event in events) event.calibrated]
+        : const [],
     sentence: _sentence(
-      paired: v2.length,
+      paired: events.length,
       missing: missing,
       record: pairedRecord,
       usage: usage,
-      adopted: adopted,
+      calibrated: calibrated,
+      live: live,
     ),
   );
+}
+
+/// Fit the curve on earlier weeks, apply it, then shrink. A week does
+/// not train itself, and a later week does not train an earlier one.
+PropCalibrator _calibrate(List<_Event> events) {
+  final sorted = [...events]..sort((a, b) {
+    final season = a.season.compareTo(b.season);
+    if (season != 0) return season;
+    return a.week.compareTo(b.week);
+  });
+  final prior = <({double raw, bool hit})>[];
+  var index = 0;
+  while (index < sorted.length) {
+    final season = sorted[index].season;
+    final week = sorted[index].week;
+    var end = index;
+    while (end < sorted.length &&
+        sorted[end].season == season &&
+        sorted[end].week == week) {
+      end++;
+    }
+    final fit = fitPropCalibrator(prior);
+    for (var i = index; i < end; i++) {
+      final event = sorted[i];
+      final adjusted = fit.apply(event.raw);
+      event.calibrated =
+          shrinkProjectedChance(
+            projected: adjusted,
+            observed: event.games,
+            market: propReportMarketProxy,
+          ) ??
+          adjusted;
+    }
+    for (var i = index; i < end; i++) {
+      prior.add((raw: sorted[i].raw, hit: sorted[i].hit));
+    }
+    index = end;
+  }
+  return fitPropCalibrator(prior);
+}
+
+class _Event {
+  _Event({
+    required this.season,
+    required this.week,
+    required this.games,
+    required this.raw,
+    required this.record,
+    required this.usage,
+    required this.hit,
+  });
+
+  final int season, week, games;
+  final double raw, record, usage;
+  final bool hit;
+  late double calibrated;
 }
 
 class _Call {
@@ -178,6 +313,18 @@ class _Call {
 class _Hits {
   const _Hits(this.hits, this.observed);
   final int hits, observed;
+}
+
+PropLiveChance _live(
+  ChanceBoard record,
+  ChanceBoard usage,
+  ChanceBoard calibrated,
+) {
+  if (_beats(record, calibrated) && _beats(usage, calibrated)) {
+    return PropLiveChance.calibrated;
+  }
+  if (_beats(record, usage)) return PropLiveChance.usage;
+  return PropLiveChance.record;
 }
 
 bool _beats(ChanceBoard record, ChanceBoard usage) {
@@ -271,18 +418,28 @@ String _sentence({
   required int missing,
   required ChanceBoard record,
   required ChanceBoard usage,
-  required bool adopted,
+  required ChanceBoard calibrated,
+  required PropLiveChance live,
 }) {
-  if (paired == 0 || record.brier == null || usage.brier == null) {
+  if (paired == 0 ||
+      record.brier == null ||
+      usage.brier == null ||
+      calibrated.brier == null) {
     return 'The usage projection could not be scored. No sportsbook prop price was used. It is not a pick.';
   }
-  final which = adopted
-      ? 'Version 2 beat the record on both scores, so it is the chance on the card.'
-      : 'Version 2 did not beat the record, so the card still uses the record.';
+  final which = switch (live) {
+    PropLiveChance.calibrated =>
+      'Recalibration beat both, so it is the chance on the card.',
+    PropLiveChance.usage =>
+      'Recalibration did not beat both, so the card uses the raw usage chance.',
+    PropLiveChance.record =>
+      'Neither usage chance beat the record, so the card still uses the record.',
+  };
   return 'On the same $paired player-games, the record scored Brier ${record.brier!.toStringAsFixed(3)} and log loss ${record.logLoss!.toStringAsFixed(3)}. '
       'The usage projection scored Brier ${usage.brier!.toStringAsFixed(3)} and log loss ${usage.logLoss!.toStringAsFixed(3)}. '
+      'After a walk-forward recalibration it scored Brier ${calibrated.brier!.toStringAsFixed(3)} and log loss ${calibrated.logLoss!.toStringAsFixed(3)}. '
       '$missing other games had a record and no projection. '
-      'The line was the previous-season median. The anchor was a fair 50%. The closing spread was not used. '
+      'The line was the previous-season median. The anchor was a fair 50%. The closing spread was not used. The curve was fit only on earlier weeks. '
       '$which No sportsbook prop price was used, so this is not a profit test and not a pick.';
 }
 

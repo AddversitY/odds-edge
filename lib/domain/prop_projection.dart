@@ -4,6 +4,7 @@ import 'history.dart';
 import 'hit_rate.dart';
 import 'matchup.dart';
 import 'player_stats.dart';
+import 'prop_calibration.dart';
 import 'prop_chance.dart';
 
 /// Neutral pass attempts. Rush attempts sit beside them, so the pass
@@ -38,6 +39,7 @@ class PropProjection {
     required this.sd,
     required this.distribution,
     required this.rawChance,
+    required this.adjustedChance,
     required this.chance,
     required this.market,
     required this.capped,
@@ -53,8 +55,11 @@ class PropProjection {
   /// `normal` for yards. `negative binomial` for receptions.
   final String distribution;
 
-  /// Chance for [side] before the market is mixed in.
+  /// Chance for [side] from the curve, before recalibration.
   final double rawChance;
+
+  /// Chance for [side] after the walk-forward curve, before the market.
+  final double adjustedChance;
 
   /// Chance after the shrink and the cap.
   final double? chance;
@@ -311,6 +316,7 @@ PropProjection? projectProp({
   double? market,
   DateTime? beforeDate,
   List<({String name, String position})> teammateOuts = const [],
+  PropCalibrator? calibrator,
 }) {
   final cut = _Cut(season: beforeSeason, week: beforeWeek, date: beforeDate);
   final games = index.byPlayer[playerId];
@@ -432,8 +438,9 @@ PropProjection? projectProp({
     line: line,
     side: side,
   );
+  final adjusted = _recalibrate(raw, side, calibrator);
   final shrunk = shrinkProjectedChance(
-    projected: raw,
+    projected: adjusted,
     observed: prior.length,
     market: market,
   );
@@ -445,7 +452,7 @@ PropProjection? projectProp({
       anchor > 0 &&
       anchor < 1) {
     final blended =
-        (prior.length * raw + propPriorGames * anchor) /
+        (prior.length * adjusted + propPriorGames * anchor) /
         (prior.length + propPriorGames);
     capped = (blended - shrunk).abs() > 1e-9;
   }
@@ -460,6 +467,7 @@ PropProjection? projectProp({
     sd: sd,
     distribution: metric == 'receptions' ? 'negative binomial' : 'normal',
     rawChance: raw,
+    adjustedChance: adjusted,
     chance: shrunk,
     market: market,
     capped: capped,
@@ -829,6 +837,18 @@ double _statMean({
 /// a negative binomial, which stays at zero or above. A half-point line
 /// has no push, so the two sides add to 1. An integer line leaves the
 /// tie out of both sides.
+/// The curve is fit on overs. An under is one minus the recalibrated over,
+/// so the two sides of a half-point line stay mirrors.
+double _recalibrate(double raw, LineSide side, PropCalibrator? calibrator) {
+  if (calibrator == null || calibrator.isIdentity) return raw;
+  final overRaw = side == LineSide.over
+      ? raw
+      : (1 - raw).clamp(1e-4, 1 - 1e-4).toDouble();
+  final overAdjusted = calibrator.apply(overRaw);
+  if (side == LineSide.over) return overAdjusted;
+  return (1 - overAdjusted).clamp(1e-4, 1 - 1e-4).toDouble();
+}
+
 double sideChance({
   required String metric,
   required double mean,

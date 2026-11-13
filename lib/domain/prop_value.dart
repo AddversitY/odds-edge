@@ -4,6 +4,7 @@ import 'matchup.dart';
 import 'player_stats.dart';
 import 'prop_history.dart';
 import 'prop_chance.dart';
+import 'prop_model.dart';
 import 'value_check.dart';
 
 class PropValue {
@@ -150,8 +151,12 @@ List<ValueInput> _alts(
   double? Function(PropCardModel card, HitRate? rate, double? market)?
   projectedChance,
 ) {
+  final preferred = preferredPropCards(
+    cards,
+    (item) => _ourChance(item, cards, rateFor, projectedChance),
+  );
   return [
-    for (final item in cards)
+    for (final item in preferred)
       if (item.player == card.player &&
           item.market == card.market &&
           item.id != card.id &&
@@ -168,13 +173,75 @@ List<ValueInput> _otherLegs(
   projectedChance,
 ) {
   final event = card.event?.id;
+  final preferred = preferredPropCards(
+    cards,
+    (item) => _ourChance(item, cards, rateFor, projectedChance),
+  );
   return [
-    for (final item in cards)
+    for (final item in preferred)
       if (item.id != card.id &&
           item.event?.id == event &&
           (item.player != card.player || item.market != card.market))
         _inputFor(item, cards, rateFor, projectedChance),
   ];
+}
+
+double? _ourChance(
+  PropCardModel item,
+  List<PropCardModel> cards,
+  HitRate? Function(PropCardModel card) rateFor,
+  double? Function(PropCardModel card, HitRate? rate, double? market)?
+  projectedChance,
+) {
+  final rate = rateFor(item);
+  final anchor = _marketAnchor(item, cards);
+  return projectedChance?.call(item, rate, anchor) ?? _chanceFor(rate, anchor);
+}
+
+/// One card per player, market, and line: the side whose chance beats
+/// the book's no-vig by more. A tie, or two missing chances, keeps the over.
+List<PropCardModel> preferredPropCards(
+  List<PropCardModel> cards,
+  double? Function(PropCardModel card) ourChance,
+) {
+  double? edge(PropCardModel card) {
+    final ours = ourChance(card);
+    final book = _marketAnchor(card, cards);
+    if (ours == null || book == null) return null;
+    if (ours <= 0 || ours >= 1 || book <= 0 || book >= 1) return null;
+    return (ours - book) * 100;
+  }
+
+  PropCardModel better(PropCardModel a, PropCardModel b) {
+    final left = edge(a);
+    final right = edge(b);
+    if (left == null && right == null) return _overCard(a, b);
+    if (left == null) return b;
+    if (right == null) return a;
+    if ((left - right).abs() < 1e-6) return _overCard(a, b);
+    return left > right ? a : b;
+  }
+
+  final best = <String, PropCardModel>{};
+  final order = <String>[];
+  for (final card in cards) {
+    final event = card.event?.id ?? card.side.eventId;
+    final key = '$event|${card.player}|${card.market}|${card.line}';
+    final current = best[key];
+    if (current == null) {
+      best[key] = card;
+      order.add(key);
+    } else {
+      best[key] = better(current, card);
+    }
+  }
+  return [for (final key in order) best[key]!];
+}
+
+PropCardModel _overCard(PropCardModel a, PropCardModel b) {
+  if (a.lineSide == LineSide.over) return a;
+  if (b.lineSide == LineSide.over) return b;
+  return a;
 }
 
 ValueInput _inputFor(
@@ -223,7 +290,9 @@ ValueInput _input({
     hits: rate?.hits,
     observed: rate?.observed,
     chanceNote: usingProjection
-        ? 'Projected from recent usage, the matchup, and the team total, then pulled toward the book\'s no-vig chance and capped.'
+        ? propLiveChance == PropLiveChance.calibrated
+              ? 'Projected from recent usage, shifted by earlier games, then pulled toward the book\'s no-vig chance and capped.'
+              : 'Projected from recent usage, the matchup, and the team total, then pulled toward the book\'s no-vig chance and capped.'
         : _chanceNote(rate, anchor),
   );
 }

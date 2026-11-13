@@ -2,6 +2,7 @@ import '../domain/coach_board.dart';
 import '../domain/eastern.dart';
 import '../domain/coach_model.dart';
 import '../domain/edge_gap.dart';
+import '../domain/history.dart';
 import '../domain/hit_rate.dart';
 import '../domain/matchup.dart';
 import '../domain/nfl_teams.dart';
@@ -76,6 +77,7 @@ ShownProp showProp({
   required OddsBoard board,
   required DateTime now,
   InjuryReport? injuries,
+  List<HistoricalGame> scores = const [],
 }) {
   final windows = directory == null ? null : propWindows(directory, card, now);
   final opponent = opponentFor(card, windows);
@@ -87,9 +89,13 @@ ShownProp showProp({
   final paired = quote == null
       ? null
       : otherDecimalAtBook(card, cards, quote.bookId);
-  final index = directory == null
+  final rows = directory?.data.rows;
+  final index = rows == null
       ? null
-      : usageIndexFor(directory.data.rows, matchup: context);
+      : usageIndexFor(rows, matchup: context);
+  final calibrator = propLiveChance == PropLiveChance.calibrated && rows != null
+      ? cachedPropComparison(rows, scores: scores, matchup: context).calibrator
+      : null;
   final outs = _teammateOuts(injuries, windows?.team, card.player);
   PropProjection? project(PropCardModel item, double? market) {
     final metric = propStatMetrics[item.market];
@@ -121,6 +127,7 @@ ShownProp showProp({
       teammateOuts: item.id == card.id
           ? outs
           : _teammateOuts(injuries, looked?.team, item.player),
+      calibrator: calibrator,
     );
   }
 
@@ -198,6 +205,7 @@ List<ShownProp> showProps({
   required OddsBoard board,
   required DateTime now,
   InjuryReport? injuries,
+  List<HistoricalGame> scores = const [],
 }) {
   return [
     for (final card in cards)
@@ -209,8 +217,50 @@ List<ShownProp> showProps({
         board: board,
         now: now,
         injuries: injuries,
+        scores: scores,
       ),
   ];
+}
+
+/// One card per player, market, and line. The side with the larger gap
+/// between our chance and the book's no-vig is the one on the card.
+/// A tie, or two missing chances, keeps the over. The other side stays
+/// on [ShownProp.cards] so the detail can switch to it.
+List<ShownProp> preferredPropSides(List<ShownProp> shown) {
+  final best = <String, ShownProp>{};
+  final order = <String>[];
+  for (final prop in shown) {
+    final key = _sideGroup(prop.card);
+    final current = best[key];
+    if (current == null) {
+      best[key] = prop;
+      order.add(key);
+    } else {
+      best[key] = _betterSide(current, prop);
+    }
+  }
+  return [for (final key in order) best[key]!];
+}
+
+String _sideGroup(PropCardModel card) {
+  final event = card.event?.id ?? card.side.eventId;
+  return '$event|${card.player}|${card.market}|${card.line}';
+}
+
+ShownProp _betterSide(ShownProp a, ShownProp b) {
+  final left = a.edge;
+  final right = b.edge;
+  if (left == null && right == null) return _overOrFirst(a, b);
+  if (left == null) return b;
+  if (right == null) return a;
+  if ((left - right).abs() < 1e-6) return _overOrFirst(a, b);
+  return left > right ? a : b;
+}
+
+ShownProp _overOrFirst(ShownProp a, ShownProp b) {
+  if (a.card.lineSide == LineSide.over) return a;
+  if (b.card.lineSide == LineSide.over) return b;
+  return a;
 }
 
 /// A slip leg judged with the same chance the prop card used.

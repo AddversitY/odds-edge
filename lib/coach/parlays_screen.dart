@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/nfl_assets.dart';
 import '../data/research_store.dart';
 import '../domain/coach_board.dart';
+import '../domain/history.dart';
 import '../domain/coach_model.dart';
 import '../domain/injury_report.dart';
 import '../domain/market_math.dart';
@@ -61,6 +62,7 @@ class _ParlaysScreenState extends State<ParlaysScreen> {
   ParlayFilter filter = const ParlayFilter();
   PlayerDirectory? directory;
   MatchupContext? matchup;
+  List<HistoricalGame> scores = const [];
 
   @override
   void initState() {
@@ -78,6 +80,11 @@ class _ParlaysScreenState extends State<ParlaysScreen> {
       final context = await (widget.loadMatchup ?? loadBundledMatchup)();
       if (!mounted) return;
       setState(() => matchup = context);
+    } catch (_) {}
+    try {
+      final games = await loadBundledHistoryGames();
+      if (!mounted) return;
+      setState(() => scores = games);
     } catch (_) {}
   }
 
@@ -102,6 +109,7 @@ class _ParlaysScreenState extends State<ParlaysScreen> {
             directory: directory,
             context: matchup,
             injuries: widget.injuries,
+            scores: scores,
             enabledBooks: widget.enabledBooks,
             store: widget.store,
             onAddLeg: widget.onAddLeg,

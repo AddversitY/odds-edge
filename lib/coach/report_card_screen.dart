@@ -76,11 +76,14 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
       final data = await (widget.loadPlayers ?? loadBundledNflPlayers)();
       final scores = await loadBundledHistoryGames();
       final matchup = await loadBundledMatchup();
-      final next = comparePropModels(
+      final next = cachedPropComparison(
         data.rows,
         scores: scores,
         matchup: matchup,
       );
+      final liveCalibrator = propLiveChance == PropLiveChance.calibrated
+          ? next.calibrator
+          : null;
       final index = usageIndexFor(
         data.rows,
         scores: scores,
@@ -102,6 +105,7 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
             beforeWeek: 1,
             beforeDate: at,
             market: earlier,
+            calibrator: liveCalibrator,
           )?.chance;
         },
       );
@@ -160,21 +164,6 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
             _Calibration(game: game),
             const SizedBox(height: 22),
             Text(
-              'Prop chance',
-              style: EdgeType.title.copyWith(
-                fontFamily: EdgeFont.display,
-                fontSize: 22,
-              ),
-            ),
-            const SizedBox(height: 8),
-            _PropTiles(prop: prop, loading: loading, error: error),
-            const SizedBox(height: 8),
-            Text(
-              _propLine(prop),
-              style: EdgeType.label.copyWith(fontWeight: FontWeight.w500),
-            ),
-            const SizedBox(height: 22),
-            Text(
               'Record vs usage',
               style: EdgeType.title.copyWith(
                 fontFamily: EdgeFont.display,
@@ -185,7 +174,13 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
             _VersionCompare(
               comparison: comparison,
               loading: loading,
+              error: error,
               clv: clv,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _propLine(prop),
+              style: EdgeType.label.copyWith(fontWeight: FontWeight.w500),
             ),
             const SizedBox(height: 22),
             Text(
@@ -452,69 +447,26 @@ class _CalibrationPainter extends CustomPainter {
       oldDelegate.bins != bins;
 }
 
-class _PropTiles extends StatelessWidget {
-  const _PropTiles({
-    required this.prop,
-    required this.loading,
-    required this.error,
-  });
-
-  final PropReport? prop;
-  final bool loading;
-  final String? error;
-
-  @override
-  Widget build(BuildContext context) {
-    if (loading) {
-      return const Text('Scoring past box scores.', style: EdgeType.body);
-    }
-    if (prop == null) {
-      return Text(error ?? 'Prop test is blank.', style: EdgeType.body);
-    }
-    final brier = prop!.brier;
-    return _TileGrid(
-      tiles: [
-        _Tile(
-          label: 'Brier',
-          value: brier == null ? '—' : brier.toStringAsFixed(3),
-          foot: brier == null
-              ? null
-              : _VersusBar(
-                  value: brier,
-                  mark: prop!.baselineBrier,
-                  lowerIsBetter: true,
-                  markLabel:
-                      'Coin flip ${prop!.baselineBrier.toStringAsFixed(3)}',
-                ),
-        ),
-        _Tile(label: 'Player-games', value: _count(prop!.scored)),
-        _Tile(
-          label: 'Log loss',
-          value: prop!.logLoss == null
-              ? '—'
-              : prop!.logLoss!.toStringAsFixed(3),
-        ),
-        _Tile(label: 'Players', value: _count(prop!.players)),
-      ],
-    );
-  }
-}
-
 class _VersionCompare extends StatelessWidget {
   const _VersionCompare({
     required this.comparison,
     required this.loading,
+    required this.error,
     required this.clv,
   });
 
   final PropModelComparison? comparison;
   final bool loading;
+  final String? error;
   final PropClv clv;
 
   @override
   Widget build(BuildContext context) {
     if (loading) {
       return const Text('Scoring the usage projection.', style: EdgeType.body);
+    }
+    if (error != null && comparison == null) {
+      return Text(error!, style: EdgeType.body);
     }
     final face = comparison;
     if (face == null) {
@@ -523,10 +475,25 @@ class _VersionCompare extends StatelessWidget {
         style: EdgeType.body,
       );
     }
-    final adopted = face.adopted;
+    final live = face.live;
+    final adopted = live != PropLiveChance.record;
     final color = adopted ? EdgeColors.accent : EdgeColors.textTertiary;
     final record = face.pairedRecord;
     final usage = face.usage;
+    final calibrated = face.calibrated;
+    final title = switch (live) {
+      PropLiveChance.calibrated => 'Calibrated usage is the chance',
+      PropLiveChance.usage => 'Usage is the chance',
+      PropLiveChance.record => 'The record is the chance',
+    };
+    final note = switch (live) {
+      PropLiveChance.calibrated =>
+        'Recalibration beat both on the fair line. Not a sportsbook test.',
+      PropLiveChance.usage =>
+        'Usage beat the record. Recalibration did not beat both. Not a sportsbook test.',
+      PropLiveChance.record =>
+        'Neither usage chance beat the record on the fair line.',
+    };
     return Column(
       key: const Key('prop-v2'),
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -534,10 +501,7 @@ class _VersionCompare extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: Text(
-                adopted ? 'Version 2 is the chance' : 'Version 2 was not adopted',
-                style: EdgeType.title.copyWith(fontSize: 18),
-              ),
+              child: Text(title, style: EdgeType.title.copyWith(fontSize: 18)),
             ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -557,111 +521,217 @@ class _VersionCompare extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 8),
+        Text(
+          '${_count(face.paired)} player-games, same for each version.',
+          style: EdgeType.label.copyWith(fontWeight: FontWeight.w500),
+        ),
+        const SizedBox(height: 8),
         _TileGrid(
           tiles: [
-            _Tile(
-              label: 'Record Brier',
-              value: record.brier == null ? '—' : record.brier!.toStringAsFixed(3),
-            ),
-            _Tile(
-              label: 'Usage Brier',
-              value: usage.brier == null ? '—' : usage.brier!.toStringAsFixed(3),
-            ),
-            _Tile(
-              label: 'Record log loss',
-              value: record.logLoss == null
-                  ? '—'
-                  : record.logLoss!.toStringAsFixed(3),
-            ),
-            _Tile(
-              label: 'Usage log loss',
-              value: usage.logLoss == null
-                  ? '—'
-                  : usage.logLoss!.toStringAsFixed(3),
-            ),
+            _scoreTile('Record Brier', record.brier),
+            _scoreTile('Record log loss', record.logLoss),
+            _scoreTile('Usage Brier', usage.brier),
+            _scoreTile('Usage log loss', usage.logLoss),
+            _scoreTile('Calibrated Brier', calibrated.brier),
+            _scoreTile('Calibrated log loss', calibrated.logLoss),
           ],
         ),
         const SizedBox(height: 8),
-        Text(
-          adopted
-              ? 'Lower Brier and log loss on the fair line. Not a sportsbook test.'
-              : 'Did not beat the record on the fair line.',
-          style: EdgeType.label.copyWith(fontWeight: FontWeight.w500),
-        ),
+        Text(note, style: EdgeType.label.copyWith(fontWeight: FontWeight.w500)),
         const SizedBox(height: 10),
-        for (final row in _bucketRows(record, usage)) ...[
-          Text(
-            row.label,
-            style: EdgeType.label.copyWith(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Record ${row.record}',
-                  style: EdgeType.label.copyWith(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: EdgeColors.textTertiary,
-                  ),
-                ),
-              ),
-              Expanded(
-                child: Text(
-                  'Usage ${row.usage}',
-                  textAlign: TextAlign.right,
-                  style: EdgeType.label.copyWith(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: EdgeColors.textTertiary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-        ],
+        _PropCalibrationChart(
+          record: record.calibration,
+          usage: usage.calibration,
+          calibrated: calibrated.calibration,
+        ),
         const SizedBox(height: 6),
         Text(
           clv.sentence,
-          style: EdgeType.label.copyWith(fontWeight: FontWeight.w500, height: 1.35),
+          style: EdgeType.label.copyWith(
+            fontWeight: FontWeight.w500,
+            height: 1.35,
+          ),
         ),
       ],
     );
   }
 }
 
-String _bucket(CalibrationBin bin) {
-  final from = (bin.from * 100).round();
-  if (bin.to >= 1) return '$from%+';
-  return '$from–${(bin.to * 100).round()}%';
+_Tile _scoreTile(String label, double? value) {
+  return _Tile(
+    label: label,
+    value: value == null ? '—' : value.toStringAsFixed(3),
+  );
 }
 
-String _bucketHit(CalibrationBin? bin) {
-  if (bin == null || bin.games == 0) return '—';
-  return '${(bin.actual * 100).round()}% of ${bin.games}';
-}
+class _PropCalibrationChart extends StatelessWidget {
+  const _PropCalibrationChart({
+    required this.record,
+    required this.usage,
+    required this.calibrated,
+  });
 
-class _BucketRow {
-  const _BucketRow(this.label, this.record, this.usage);
-  final String label, record, usage;
-}
+  final List<CalibrationBin> record, usage, calibrated;
 
-List<_BucketRow> _bucketRows(ChanceBoard record, ChanceBoard usage) {
-  final rows = <_BucketRow>[];
-  for (final bin in record.calibration) {
-    CalibrationBin? match;
-    for (final row in usage.calibration) {
-      if (row.from == bin.from && row.to == bin.to) match = row;
-    }
-    if (bin.games == 0 && (match == null || match.games == 0)) continue;
-    rows.add(_BucketRow(_bucket(bin), _bucketHit(bin), _bucketHit(match)));
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          key: const Key('prop-calibration-chart'),
+          height: 168,
+          width: double.infinity,
+          child: CustomPaint(
+            painter: _PropCalibrationPainter(
+              record: record,
+              usage: usage,
+              calibrated: calibrated,
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Wrap(
+          spacing: 12,
+          runSpacing: 4,
+          children: [
+            _Swatch(color: EdgeColors.textTertiary, label: 'Record'),
+            _Swatch(color: EdgeColors.warn, label: 'Usage'),
+            _Swatch(color: EdgeColors.accent, label: 'Calibrated'),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Said across, happened up. Bigger dot, more games.',
+          style: EdgeType.label.copyWith(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
   }
-  return rows;
+}
+
+class _Swatch extends StatelessWidget {
+  const _Swatch({required this.color, required this.label});
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: EdgeType.label.copyWith(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PropCalibrationPainter extends CustomPainter {
+  _PropCalibrationPainter({
+    required this.record,
+    required this.usage,
+    required this.calibrated,
+  });
+
+  final List<CalibrationBin> record, usage, calibrated;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const left = 28.0;
+    const bottom = 22.0;
+    final plot = Rect.fromLTWH(
+      left,
+      8,
+      size.width - left - 8,
+      size.height - bottom - 8,
+    );
+    final grid = Paint()
+      ..color = EdgeColors.border
+      ..strokeWidth = 1;
+    final diagonal = Paint()
+      ..color = EdgeColors.textTertiary
+      ..strokeWidth = 1.5;
+    for (final mark in [0.0, 0.5, 1.0]) {
+      final y = plot.bottom - mark * plot.height;
+      final x = plot.left + mark * plot.width;
+      canvas.drawLine(Offset(plot.left, y), Offset(plot.right, y), grid);
+      canvas.drawLine(Offset(x, plot.top), Offset(x, plot.bottom), grid);
+    }
+    canvas.drawLine(
+      Offset(plot.left, plot.bottom),
+      Offset(plot.right, plot.top),
+      diagonal,
+    );
+    final games = [
+      for (final bin in [...record, ...usage, ...calibrated]) bin.games,
+    ];
+    final maxGames = games.isEmpty ? 0 : games.reduce(math.max);
+    _dots(canvas, plot, record, EdgeColors.textTertiary, -5, maxGames);
+    _dots(canvas, plot, usage, EdgeColors.warn, 0, maxGames);
+    _dots(canvas, plot, calibrated, EdgeColors.accent, 5, maxGames);
+    _axis(canvas, '0', Offset(plot.left, size.height - 2));
+    _axis(canvas, '50', Offset(plot.center.dx, size.height - 2), center: true);
+    _axis(canvas, '100', Offset(plot.right, size.height - 2), center: true);
+  }
+
+  void _dots(
+    Canvas canvas,
+    Rect plot,
+    List<CalibrationBin> bins,
+    Color color,
+    double nudge,
+    int maxGames,
+  ) {
+    for (final bin in bins) {
+      if (bin.games == 0) continue;
+      final dx = plot.left + bin.predicted.clamp(0, 1) * plot.width + nudge;
+      final dy = plot.bottom - bin.actual.clamp(0, 1) * plot.height;
+      final share = maxGames == 0 ? 0.5 : bin.games / maxGames;
+      canvas.drawCircle(
+        Offset(dx, dy),
+        4 + 6 * math.sqrt(share),
+        Paint()..color = color.withValues(alpha: .9),
+      );
+    }
+  }
+
+  void _axis(Canvas canvas, String text, Offset at, {bool center = false}) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: const TextStyle(
+          color: EdgeColors.textTertiary,
+          fontSize: 10,
+          fontFamily: EdgeFont.sans,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final dx = center ? at.dx - painter.width / 2 : at.dx;
+    painter.paint(canvas, Offset(dx, at.dy - painter.height));
+  }
+
+  @override
+  bool shouldRepaint(covariant _PropCalibrationPainter oldDelegate) =>
+      oldDelegate.record != record ||
+      oldDelegate.usage != usage ||
+      oldDelegate.calibrated != calibrated;
 }
 
 class _HowWeTested extends StatefulWidget {
@@ -789,17 +859,15 @@ class _VersusBar extends StatelessWidget {
     required this.value,
     required this.mark,
     required this.markLabel,
-    this.lowerIsBetter = false,
   });
 
   final double value;
   final double mark;
   final String markLabel;
-  final bool lowerIsBetter;
 
   @override
   Widget build(BuildContext context) {
-    final behind = lowerIsBetter ? value > mark : value < mark;
+    final behind = value < mark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
