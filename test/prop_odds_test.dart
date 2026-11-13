@@ -28,8 +28,15 @@ void main() {
     event('next', 'DET', 'GB', packers),
   ];
 
-  test('prop markets stay inside the two-market free plan', () {
+  test('prop markets stay inside the four-credit free plan', () {
     expect(resolvePropMarkets(null), defaultPropMarkets);
+    expect(defaultPropMarkets, [
+      'player_pass_yds',
+      'player_receptions',
+      'player_rush_yds',
+      'player_reception_yds',
+    ]);
+    expect(defaultPropMaxEvents, 1);
     expect(
       resolvePropMarkets(['player_rush_yds', 'player_receptions']),
       ['player_rush_yds', 'player_receptions'],
@@ -39,13 +46,16 @@ void main() {
         'player_pass_yds',
         'player_receptions',
         'player_rush_yds',
+        'player_reception_yds',
+        'player_pass_tds',
       ]),
       throwsFormatException,
     );
     expect(() => resolvePropMarkets(['player_assists']), throwsFormatException);
     expect(
-      oddsRequestCost(markets: defaultPropMarkets.length, bookmakers: true),
-      2,
+      oddsRequestCost(markets: defaultPropMarkets.length, bookmakers: true) *
+          defaultPropMaxEvents,
+      4,
     );
   });
 
@@ -123,7 +133,7 @@ void main() {
     );
     expect(allowed.allowed, isTrue);
     expect(allowed.credits, 4);
-    expect(allowed.events.map((item) => item.id), ['soon', 'next']);
+    expect(allowed.events.map((item) => item.id), ['soon']);
   });
 
   test('event ids and prop rows that cannot be read are dropped', () {

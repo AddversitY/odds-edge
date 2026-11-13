@@ -145,8 +145,9 @@ kickoff, still do not earn a live best-price badge.
 
 Player props are a second, smaller budget. `GET /v1/props` returns the saved
 prop snapshot and does not spend a credit. `GET /v1/props?refresh=1` may
-request passing yards and receptions for the next two upcoming games. That is
-2 markets × 2 games = 4 credits, and only when the saved snapshot is older
+request passing yards, receptions, rushing yards, and receiving yards for
+the next upcoming game. That is 4 markets × 1 game = 4 credits, the same
+spend as the earlier two markets on two games, and only when the saved snapshot is older
 than 18 hours, today's prop spend is still under 4, the month is still under
 60, and the call would not eat the credits held back for the regular
 moneyline, spread, and total schedule (`ODDS_CREDIT_RESERVE`, default 50).

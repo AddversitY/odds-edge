@@ -124,7 +124,7 @@ class _PropsScreenState extends State<PropsScreen> {
         if (cards.isEmpty)
           const CoachCard(
             child: Text(
-              'No player-prop prices in this snapshot. The free plan asks for passing yards and receptions on two upcoming games, at most once a day. Until those prices are saved, this list stays empty. Hit rates are not invented to fill it.',
+              'No player-prop prices in this snapshot. The free plan asks for passing yards, receptions, rushing yards, and receiving yards on the next game, at most once a day. Until those prices are saved, this list stays empty. Hit rates are not invented to fill it.',
               style: TextStyle(height: 1.4),
             ),
           )

@@ -25,6 +25,9 @@ const propChanceSource =
 
 const propEvenSource = 'the recorded games, pulled slightly toward even';
 
+const propProjectionSource =
+    "a usage projection, pulled toward the book's no-vig chance";
+
 /// Our chance for one prop side.
 ///
 /// Fewer than four recorded games stays null. With a no-vig [market],
@@ -65,8 +68,23 @@ double propEdgeCapFor({
   required int observed,
   required double market,
 }) {
+  if (observed <= 0) return propEdgeCap;
+  return propEdgeCapForRate(
+    raw: hits / observed,
+    observed: observed,
+    market: market,
+  );
+}
+
+/// Same cap as [propEdgeCapFor], when the raw chance is a projection
+/// rather than a hit count. [raw] is that chance, between 0 and 1.
+double propEdgeCapForRate({
+  required double raw,
+  required int observed,
+  required double market,
+}) {
   if (observed < propStrongSample) return propEdgeCap;
-  final raw = hits / observed;
+  if (!raw.isFinite || raw <= 0 || raw >= 1) return propEdgeCap;
   final variance = raw * (1 - raw) / observed;
   final error = variance <= 0 ? 0.0 : math.sqrt(variance);
   if (error > propStrongError) return propEdgeCap;
@@ -76,6 +94,41 @@ double propEdgeCapFor({
   if (evidence <= propEdgeCap) return propEdgeCap;
   if (evidence >= propEdgeCapCeiling) return propEdgeCapCeiling;
   return evidence;
+}
+
+/// Pull a projected clear-chance toward the no-vig, then cap it.
+///
+/// The weight on the projection is the number of games behind it. The
+/// weight on the market is [propPriorGames], the same prior as the
+/// hit-rate chance. Fewer than four games stays null. A missing market
+/// uses the even shrink, two wins and two losses.
+double? shrinkProjectedChance({
+  required double projected,
+  required int observed,
+  required double? market,
+}) {
+  if (observed < 4) return null;
+  if (!projected.isFinite || projected <= 0 || projected >= 1) return null;
+  final anchor = market;
+  final open =
+      anchor != null && anchor.isFinite && anchor > 0 && anchor < 1;
+  if (!open) {
+    final blended = (observed * projected + 2) / (observed + 4);
+    if (!blended.isFinite || blended <= 0 || blended >= 1) return null;
+    return blended;
+  }
+  final blended =
+      (observed * projected + propPriorGames * anchor) /
+      (observed + propPriorGames);
+  final cap = propEdgeCapForRate(
+    raw: projected,
+    observed: observed,
+    market: anchor,
+  );
+  final gap = (blended - anchor).clamp(-cap, cap).toDouble();
+  final chance = anchor + gap;
+  if (!chance.isFinite || chance <= 0 || chance >= 1) return null;
+  return chance;
 }
 
 String propChanceNote({

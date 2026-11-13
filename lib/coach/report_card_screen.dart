@@ -6,8 +6,13 @@ import '../data/nfl_assets.dart';
 import '../domain/closing_value.dart';
 import '../domain/coach_board.dart';
 import '../domain/coach_model.dart';
+import '../domain/hit_rate.dart';
 import '../domain/odds.dart';
 import '../domain/player_stats.dart';
+import '../domain/prop_clv.dart';
+import '../domain/prop_history.dart';
+import '../domain/prop_model.dart';
+import '../domain/prop_projection.dart';
 import '../domain/prop_report.dart';
 import '../domain/public_sharp.dart';
 import '../explained_number.dart';
@@ -25,6 +30,7 @@ class ReportCardScreen extends StatefulWidget {
     this.examplePrices = false,
     this.loadPlayers,
     this.propReport,
+    this.comparison,
   });
 
   final CoachModel? model;
@@ -37,12 +43,17 @@ class ReportCardScreen extends StatefulWidget {
   /// When set, the screen does not recompute the prop test.
   final PropReport? propReport;
 
+  /// When set with [propReport], the usage comparison is not recomputed.
+  final PropModelComparison? comparison;
+
   @override
   State<ReportCardScreen> createState() => _ReportCardScreenState();
 }
 
 class _ReportCardScreenState extends State<ReportCardScreen> {
   PropReport? report;
+  PropModelComparison? comparison;
+  PropClv clv = PropClv.empty;
   String? error;
   bool loading = true;
 
@@ -52,6 +63,8 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
     final ready = widget.propReport;
     if (ready != null) {
       report = ready;
+      comparison = widget.comparison;
+      clv = propClosingValue(widget.lineHistory);
       loading = false;
     } else {
       _load();
@@ -61,10 +74,42 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
   Future<void> _load() async {
     try {
       final data = await (widget.loadPlayers ?? loadBundledNflPlayers)();
-      final next = walkForwardPropChance(data.rows);
+      final scores = await loadBundledHistoryGames();
+      final matchup = await loadBundledMatchup();
+      final next = comparePropModels(
+        data.rows,
+        scores: scores,
+        matchup: matchup,
+      );
+      final index = usageIndexFor(
+        data.rows,
+        scores: scores,
+        matchup: matchup,
+      );
+      final closing = propClosingValue(
+        widget.lineHistory,
+        overChance: (player, market, line, at, earlier) {
+          final metric = propStatMetrics[market];
+          final id = index.onlyId(player);
+          if (metric == null || id == null) return null;
+          return projectProp(
+            index: index,
+            playerId: id,
+            metric: metric,
+            line: line,
+            side: LineSide.over,
+            beforeSeason: at.toUtc().year,
+            beforeWeek: 1,
+            beforeDate: at,
+            market: earlier,
+          )?.chance;
+        },
+      );
       if (!mounted) return;
       setState(() {
-        report = next;
+        report = next.record;
+        comparison = next;
+        clv = closing;
         loading = false;
       });
     } catch (_) {
@@ -130,6 +175,20 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
             ),
             const SizedBox(height: 22),
             Text(
+              'Record vs usage',
+              style: EdgeType.title.copyWith(
+                fontFamily: EdgeFont.display,
+                fontSize: 22,
+              ),
+            ),
+            const SizedBox(height: 8),
+            _VersionCompare(
+              comparison: comparison,
+              loading: loading,
+              clv: clv,
+            ),
+            const SizedBox(height: 22),
+            Text(
               'Closes',
               style: EdgeType.title.copyWith(
                 fontFamily: EdgeFont.display,
@@ -139,7 +198,12 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
             const SizedBox(height: 8),
             Text(_closeLine(closing), style: EdgeType.body),
             const SizedBox(height: 8),
-            _HowWeTested(game: game, prop: prop, closing: closing),
+            _HowWeTested(
+              game: game,
+              prop: prop,
+              closing: closing,
+              comparison: comparison,
+            ),
             const SizedBox(height: 20),
             Text(
               'Comparison, not a pick.',
@@ -436,16 +500,182 @@ class _PropTiles extends StatelessWidget {
   }
 }
 
+class _VersionCompare extends StatelessWidget {
+  const _VersionCompare({
+    required this.comparison,
+    required this.loading,
+    required this.clv,
+  });
+
+  final PropModelComparison? comparison;
+  final bool loading;
+  final PropClv clv;
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) {
+      return const Text('Scoring the usage projection.', style: EdgeType.body);
+    }
+    final face = comparison;
+    if (face == null) {
+      return const Text(
+        'Usage model was not scored in this view.',
+        style: EdgeType.body,
+      );
+    }
+    final adopted = face.adopted;
+    final color = adopted ? EdgeColors.accent : EdgeColors.textTertiary;
+    final record = face.pairedRecord;
+    final usage = face.usage;
+    return Column(
+      key: const Key('prop-v2'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                adopted ? 'Version 2 is the chance' : 'Version 2 was not adopted',
+                style: EdgeType.title.copyWith(fontSize: 18),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: .16),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                adopted ? 'In use' : 'Not used',
+                style: EdgeType.label.copyWith(
+                  color: adopted ? EdgeColors.accent : EdgeColors.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        _TileGrid(
+          tiles: [
+            _Tile(
+              label: 'Record Brier',
+              value: record.brier == null ? '—' : record.brier!.toStringAsFixed(3),
+            ),
+            _Tile(
+              label: 'Usage Brier',
+              value: usage.brier == null ? '—' : usage.brier!.toStringAsFixed(3),
+            ),
+            _Tile(
+              label: 'Record log loss',
+              value: record.logLoss == null
+                  ? '—'
+                  : record.logLoss!.toStringAsFixed(3),
+            ),
+            _Tile(
+              label: 'Usage log loss',
+              value: usage.logLoss == null
+                  ? '—'
+                  : usage.logLoss!.toStringAsFixed(3),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          adopted
+              ? 'Lower Brier and log loss on the fair line. Not a sportsbook test.'
+              : 'Did not beat the record on the fair line.',
+          style: EdgeType.label.copyWith(fontWeight: FontWeight.w500),
+        ),
+        const SizedBox(height: 10),
+        for (final row in _bucketRows(record, usage)) ...[
+          Text(
+            row.label,
+            style: EdgeType.label.copyWith(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Record ${row.record}',
+                  style: EdgeType.label.copyWith(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: EdgeColors.textTertiary,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  'Usage ${row.usage}',
+                  textAlign: TextAlign.right,
+                  style: EdgeType.label.copyWith(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: EdgeColors.textTertiary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+        ],
+        const SizedBox(height: 6),
+        Text(
+          clv.sentence,
+          style: EdgeType.label.copyWith(fontWeight: FontWeight.w500, height: 1.35),
+        ),
+      ],
+    );
+  }
+}
+
+String _bucket(CalibrationBin bin) {
+  final from = (bin.from * 100).round();
+  if (bin.to >= 1) return '$from%+';
+  return '$from–${(bin.to * 100).round()}%';
+}
+
+String _bucketHit(CalibrationBin? bin) {
+  if (bin == null || bin.games == 0) return '—';
+  return '${(bin.actual * 100).round()}% of ${bin.games}';
+}
+
+class _BucketRow {
+  const _BucketRow(this.label, this.record, this.usage);
+  final String label, record, usage;
+}
+
+List<_BucketRow> _bucketRows(ChanceBoard record, ChanceBoard usage) {
+  final rows = <_BucketRow>[];
+  for (final bin in record.calibration) {
+    CalibrationBin? match;
+    for (final row in usage.calibration) {
+      if (row.from == bin.from && row.to == bin.to) match = row;
+    }
+    if (bin.games == 0 && (match == null || match.games == 0)) continue;
+    rows.add(_BucketRow(_bucket(bin), _bucketHit(bin), _bucketHit(match)));
+  }
+  return rows;
+}
+
 class _HowWeTested extends StatefulWidget {
   const _HowWeTested({
     required this.game,
     required this.prop,
     required this.closing,
+    required this.comparison,
   });
 
   final BacktestReport? game;
   final PropReport? prop;
   final ClosingSummary closing;
+  final PropModelComparison? comparison;
 
   @override
   State<_HowWeTested> createState() => _HowWeTestedState();
@@ -479,6 +709,10 @@ class _HowWeTestedState extends State<_HowWeTested> {
             Text(prop.plainEnglish, style: EdgeType.label),
             const SizedBox(height: 8),
             Text(prop.notTested, style: EdgeType.label),
+          ],
+          if (widget.comparison != null) ...[
+            const SizedBox(height: 10),
+            Text(widget.comparison!.sentence, style: EdgeType.label),
           ],
           const SizedBox(height: 10),
           Text(widget.closing.plainEnglish, style: EdgeType.label),

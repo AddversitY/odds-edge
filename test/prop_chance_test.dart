@@ -76,10 +76,14 @@ void main() {
     for (final prop in shown) {
       final edge = prop.edge;
       if (edge == null) continue;
-      final observed = preferredRate(prop.windows)?.observed ?? 0;
+      final observed = prop.usingProjection
+          ? (prop.projection?.games ?? 0)
+          : (preferredRate(prop.windows)?.observed ?? 0);
       expect(
         edge.abs(),
         lessThanOrEqualTo(observed < propStrongSample ? 10.05 : 15.05),
+        reason:
+            '${prop.card.player} ${prop.card.market} ${edge.toStringAsFixed(1)} on $observed games',
       );
     }
   });

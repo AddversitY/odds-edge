@@ -3,13 +3,15 @@ import '../domain/eastern.dart';
 import '../domain/coach_model.dart';
 import '../domain/edge_gap.dart';
 import '../domain/hit_rate.dart';
-import '../domain/injury_report.dart';
 import '../domain/matchup.dart';
 import '../domain/nfl_teams.dart';
 import '../domain/odds.dart';
 import '../domain/parlay_value.dart';
+import '../domain/injury_report.dart';
 import '../domain/prop_chance.dart';
 import '../domain/prop_history.dart';
+import '../domain/prop_model.dart';
+import '../domain/prop_projection.dart';
 import '../domain/prop_value.dart';
 import '../domain/value_check.dart';
 
@@ -35,6 +37,8 @@ class ShownProp {
     required this.badge,
     required this.note,
     required this.pairedBook,
+    this.projection,
+    this.usingProjection = false,
   });
 
   final PropCardModel card;
@@ -50,6 +54,12 @@ class ShownProp {
   /// True when the no-vig chance came from this book's other side,
   /// rather than the average of every book.
   final bool pairedBook;
+
+  /// The usage projection, even when the card still uses the record.
+  final PropProjection? projection;
+
+  /// True when [projection] is the chance in [verdict].
+  final bool usingProjection;
 
   ValueVerdict get verdict => value.verdict;
 
@@ -77,6 +87,44 @@ ShownProp showProp({
   final paired = quote == null
       ? null
       : otherDecimalAtBook(card, cards, quote.bookId);
+  final index = directory == null
+      ? null
+      : usageIndexFor(directory.data.rows, matchup: context);
+  final outs = _teammateOuts(injuries, windows?.team, card.player);
+  PropProjection? project(PropCardModel item, double? market) {
+    final metric = propStatMetrics[item.market];
+    final players = directory;
+    final usage = index;
+    if (metric == null || players == null || usage == null) return null;
+    final looked = item.id == card.id
+        ? windows
+        : propWindows(players, item, now);
+    final id = looked?.playerId;
+    if (id == null) return null;
+    return projectProp(
+      index: usage,
+      playerId: id,
+      metric: metric,
+      line: item.line,
+      side: item.lineSide,
+      beforeSeason: 10000,
+      beforeWeek: 1,
+      team: looked?.team,
+      opponent: item.id == card.id ? opponent : opponentFor(item, looked),
+      teamSpread: item.id == card.id
+          ? spread
+          : teamSpreadFor(item, looked, board),
+      total: item.event == null
+          ? null
+          : readMarketLine(item.event!, board.quotes).total,
+      market: market,
+      teammateOuts: item.id == card.id
+          ? outs
+          : _teammateOuts(injuries, looked?.team, item.player),
+    );
+  }
+
+  final shownProjection = project(card, propMarketAnchor(card, cards));
   final value = priceProp(
     card: card,
     cards: cards,
@@ -95,6 +143,9 @@ ShownProp showProp({
     total: total,
     seasonYear: windows?.seasonYear,
     recent: windows?.last5,
+    projectedChance: propV2Adopted
+        ? (item, rate, market) => project(item, market)?.chance
+        : null,
   );
   return ShownProp(
     card: card,
@@ -117,7 +168,27 @@ ShownProp showProp({
       side: card.lineSide,
     ),
     pairedBook: paired != null && value.verdict.fairChance != null,
+    projection: shownProjection,
+    usingProjection:
+        propV2Adopted && shownProjection?.chance != null,
   );
+}
+
+List<({String name, String position})> _teammateOuts(
+  InjuryReport? injuries,
+  String? team,
+  String player,
+) {
+  if (injuries == null || team == null || team.isEmpty) return const [];
+  final club = boxScoreTeam(team);
+  final self = normalizePropName(player);
+  return [
+    for (final entry in injuries.entries)
+      if (entry.outLike &&
+          boxScoreTeam(entry.team) == club &&
+          normalizePropName(entry.player) != self)
+        (name: entry.player, position: entry.position),
+  ];
 }
 
 List<ShownProp> showProps({
@@ -162,7 +233,9 @@ TicketLegInput ticketLegFor(ShownProp shown) {
     ourChance: shown.verdict.ourChance,
     otherDecimal: otherDecimalAtBook(card, shown.cards, quote.bookId),
     consensusFair: card.fairProbability,
-    source: rate == null
+    source: shown.usingProjection
+        ? propProjectionSource
+        : rate == null
         ? 'the recorded games'
         : shown.verdict.fairChance == null
         ? propEvenSource

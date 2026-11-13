@@ -32,7 +32,7 @@ The Odds API free plan includes 500 credits a month. A main-line snapshot of mon
 
 Each of those responses, and each prop response, is also appended to `backend/data/line-history.jsonl` with the time it was fetched. `GET /v1/lines?event=<event id>` reads one game back. That read does not spend a credit. The file drops snapshots older than about 45 days and compacts so it stays small. There is no line chart in the app yet.
 
-Player props are priced per event. The server requests only `player_pass_yds` and `player_receptions` (both can be counted from the box scores), for the next 2 games that have not started. With a bookmaker list, that is 2 markets × 2 games = **4 credits per refresh**.
+Player props are priced per event. The server requests `player_pass_yds`, `player_receptions`, `player_rush_yds`, and `player_reception_yds` (all four can be counted from the box scores), for the next game that has not started. With a bookmaker list, that is 4 markets × 1 game = **4 credits per refresh**, the same spend as the earlier 2 markets × 2 games. The daily cap stays 4 and the monthly cap stays 60. More markets means fewer games, not more credits.
 
 Guards, all in `backend/prop_odds.dart`:
 
@@ -43,7 +43,7 @@ Guards, all in `backend/prop_odds.dart`:
 - The events list that chooses the two games does not bill a credit.
 - The one-minute maintenance timer does not refresh props.
 - The charge added to the counters is the `x-requests-last` header, not a guess.
-- At most two markets from the box-score list can be configured. Three markets cannot be turned on by an environment variable.
+- At most four markets from the box-score list can be configured, and the default asks for one game so the refresh still costs 4 credits. A fifth market cannot be turned on by an environment variable.
 
 60 prop credits plus about 240 main-line credits is about 300 of 500. The rest is unused cushion. If the cache file is deleted, the monthly cap and the remaining-credit check are what stop a second spend.
 

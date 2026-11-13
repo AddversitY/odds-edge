@@ -28,30 +28,31 @@ PropValue priceProp({
   double? total,
   int? seasonYear,
   HitRate? recent,
+  double? Function(PropCardModel card, HitRate? rate, double? market)?
+  projectedChance,
 }) {
   final rate = rateFor(card);
   final anchor = _marketAnchor(card, cards);
-  final chance = _chanceFor(rate, anchor);
+  final projected = projectedChance?.call(card, rate, anchor);
+  final chance = projected ?? _chanceFor(rate, anchor);
+  final usingProjection = projected != null;
   final quote = card.best;
-  final input = ValueInput(
-    label: '${card.player} ${card.lineLabel}',
-    ourChance: chance,
+  final input = _input(
+    card: card,
+    cards: cards,
+    rate: rate,
+    anchor: anchor,
+    chance: chance,
+    usingProjection: usingProjection,
     decimal: quote?.decimal,
-    otherDecimal: quote == null
-        ? null
-        : _otherAtBook(card, cards, quote.bookId),
-    consensusFair: card.fairProbability,
-    source: _chanceSource(rate, anchor),
-    hits: rate?.hits,
-    observed: rate?.observed,
-    chanceNote: _chanceNote(rate, anchor),
+    label: '${card.player} ${card.lineLabel}',
   );
   final verdict = judgeValue(input);
   final alternative = suggestAlternative(
     current: verdict,
-    sameLine: _sameLine(card, cards, rateFor),
-    altLines: _alts(card, cards, rateFor),
-    otherLegs: _otherLegs(card, cards, rateFor),
+    sameLine: _sameLine(card, cards, rateFor, projectedChance),
+    altLines: _alts(card, cards, rateFor, projectedChance),
+    otherLegs: _otherLegs(card, cards, rateFor, projectedChance),
   );
   final withAlt = alternative == null
       ? verdict
@@ -118,24 +119,26 @@ List<ValueInput> _sameLine(
   PropCardModel card,
   List<PropCardModel> cards,
   HitRate? Function(PropCardModel card) rateFor,
+  double? Function(PropCardModel card, HitRate? rate, double? market)?
+  projectedChance,
 ) {
   final rate = rateFor(card);
   final anchor = _marketAnchor(card, cards);
-  final chance = _chanceFor(rate, anchor);
+  final projected = projectedChance?.call(card, rate, anchor);
   final best = card.best?.bookId;
   return [
     for (final row in card.bookRows)
       if (row.quote.bookId != best)
-        ValueInput(
-          label: '${row.quote.book} ${card.lineLabel}',
-          ourChance: chance,
+        _input(
+          card: card,
+          cards: cards,
+          rate: rate,
+          anchor: anchor,
+          chance: projected ?? _chanceFor(rate, anchor),
+          usingProjection: projected != null,
           decimal: row.quote.decimal,
-          otherDecimal: _otherAtBook(card, cards, row.quote.bookId),
-          consensusFair: card.fairProbability,
-          source: _chanceSource(rate, anchor),
-          hits: rate?.hits,
-          observed: rate?.observed,
-          chanceNote: _chanceNote(rate, anchor),
+          label: '${row.quote.book} ${card.lineLabel}',
+          bookId: row.quote.bookId,
         ),
   ];
 }
@@ -144,6 +147,8 @@ List<ValueInput> _alts(
   PropCardModel card,
   List<PropCardModel> cards,
   HitRate? Function(PropCardModel card) rateFor,
+  double? Function(PropCardModel card, HitRate? rate, double? market)?
+  projectedChance,
 ) {
   return [
     for (final item in cards)
@@ -151,7 +156,7 @@ List<ValueInput> _alts(
           item.market == card.market &&
           item.id != card.id &&
           (item.line != card.line || item.lineSide != card.lineSide))
-        _inputFor(item, cards, rateFor),
+        _inputFor(item, cards, rateFor, projectedChance),
   ];
 }
 
@@ -159,6 +164,8 @@ List<ValueInput> _otherLegs(
   PropCardModel card,
   List<PropCardModel> cards,
   HitRate? Function(PropCardModel card) rateFor,
+  double? Function(PropCardModel card, HitRate? rate, double? market)?
+  projectedChance,
 ) {
   final event = card.event?.id;
   return [
@@ -166,7 +173,7 @@ List<ValueInput> _otherLegs(
       if (item.id != card.id &&
           item.event?.id == event &&
           (item.player != card.player || item.market != card.market))
-        _inputFor(item, cards, rateFor),
+        _inputFor(item, cards, rateFor, projectedChance),
   ];
 }
 
@@ -174,26 +181,55 @@ ValueInput _inputFor(
   PropCardModel item,
   List<PropCardModel> cards,
   HitRate? Function(PropCardModel card) rateFor,
+  double? Function(PropCardModel card, HitRate? rate, double? market)?
+  projectedChance,
 ) {
   final rate = rateFor(item);
   final anchor = _marketAnchor(item, cards);
-  final chance = _chanceFor(rate, anchor);
+  final projected = projectedChance?.call(item, rate, anchor);
   final quote = item.best;
-  return ValueInput(
+  return _input(
+    card: item,
+    cards: cards,
+    rate: rate,
+    anchor: anchor,
+    chance: projected ?? _chanceFor(rate, anchor),
+    usingProjection: projected != null,
+    decimal: quote?.decimal,
     label:
         '${item.player} ${item.marketLabel} ${item.lineLabel}${quote == null ? '' : ' at ${quote.book}'}',
-    ourChance: chance,
-    decimal: quote?.decimal,
-    otherDecimal: quote == null
-        ? null
-        : _otherAtBook(item, cards, quote.bookId),
-    consensusFair: item.fairProbability,
-    source: _chanceSource(rate, anchor),
-    hits: rate?.hits,
-    observed: rate?.observed,
-    chanceNote: _chanceNote(rate, anchor),
   );
 }
+
+ValueInput _input({
+  required PropCardModel card,
+  required List<PropCardModel> cards,
+  required HitRate? rate,
+  required double? anchor,
+  required double? chance,
+  required bool usingProjection,
+  required double? decimal,
+  required String label,
+  String? bookId,
+}) {
+  final book = bookId ?? card.best?.bookId;
+  return ValueInput(
+    label: label,
+    ourChance: chance,
+    decimal: decimal,
+    otherDecimal: book == null ? null : _otherAtBook(card, cards, book),
+    consensusFair: card.fairProbability,
+    source: usingProjection ? propProjectionSource : _chanceSource(rate, anchor),
+    hits: rate?.hits,
+    observed: rate?.observed,
+    chanceNote: usingProjection
+        ? 'Projected from recent usage, the matchup, and the team total, then pulled toward the book\'s no-vig chance and capped.'
+        : _chanceNote(rate, anchor),
+  );
+}
+
+double? propMarketAnchor(PropCardModel card, List<PropCardModel> cards) =>
+    _marketAnchor(card, cards);
 
 double? _marketAnchor(PropCardModel card, List<PropCardModel> cards) {
   final quote = card.best;

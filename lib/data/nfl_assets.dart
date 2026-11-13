@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../domain/history.dart';
 import '../domain/matchup.dart';
 import '../domain/player_stats.dart';
 
@@ -33,3 +34,21 @@ Future<MatchupContext> loadBundledMatchup() async {
 MatchupContext _decodeMatchup(String json) => MatchupContext.fromJson(
   Map<String, dynamic>.from(jsonDecode(json.replaceFirst('\uFEFF', ''))),
 );
+
+Future<List<HistoricalGame>> loadBundledHistoryGames() async {
+  final json = await rootBundle.loadString('assets/nfl-history.json');
+  if (_decodeInline) return _decodeHistory(json);
+  return compute(_decodeHistory, json);
+}
+
+List<HistoricalGame> _decodeHistory(String json) {
+  final decoded = jsonDecode(json.replaceFirst('\uFEFF', ''));
+  if (decoded is! Map) return const [];
+  final games = decoded['games'];
+  if (games is! List) return const [];
+  return [
+    for (final row in games)
+      if (row is Map)
+        HistoricalGame.fromJson(Map<String, dynamic>.from(row)),
+  ];
+}
