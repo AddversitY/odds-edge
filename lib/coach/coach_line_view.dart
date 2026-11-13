@@ -41,6 +41,13 @@ class CoachLineSummary extends StatelessWidget {
           style: EdgeType.body,
         ),
         const SizedBox(height: 8),
+        if (line.flagged) ...[
+          const Text(
+            'The past test of this number lost money. A wider gap is still only a comparison.',
+            style: EdgeType.label,
+          ),
+          const SizedBox(height: 4),
+        ],
         Text(
           'Shown for comparison, not a pick.',
           style: EdgeType.label.copyWith(color: EdgeColors.textSecondary),

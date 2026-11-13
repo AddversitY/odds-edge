@@ -8,6 +8,7 @@ import '../domain/matchup.dart';
 import '../domain/nfl_teams.dart';
 import '../domain/odds.dart';
 import '../domain/parlay_value.dart';
+import '../domain/prop_chance.dart';
 import '../domain/prop_history.dart';
 import '../domain/prop_value.dart';
 import '../domain/value_check.dart';
@@ -163,7 +164,9 @@ TicketLegInput ticketLegFor(ShownProp shown) {
     consensusFair: card.fairProbability,
     source: rate == null
         ? 'the recorded games'
-        : 'the recorded games, pulled slightly toward even',
+        : shown.verdict.fairChance == null
+        ? propEvenSource
+        : propChanceSource,
     hits: rate?.hits,
     observed: rate?.observed,
   );
@@ -255,25 +258,47 @@ MatchupNote? matchupNote({
   final pos = (position == null || position.trim().isEmpty)
       ? defense.statLabel
       : position.trim();
-  final toughCut = (defense.teams / 3).ceil();
-  final soft = defense.rank > (defense.teams * 2 / 3);
-  final tough = defense.rank <= toughCut;
-  final favorable = side == LineSide.over ? soft : tough;
-  final hard = side == LineSide.over ? tough : soft;
-  final tone = favorable
-      ? MatchupTone.favorable
-      : hard
-      ? MatchupTone.tough
-      : MatchupTone.even;
-  final phrase = switch (tone) {
-    MatchupTone.favorable => 'favorable matchup',
-    MatchupTone.tough => 'a thin edge against a strong front',
-    MatchupTone.even => 'an even matchup',
-  };
+  final band = defenseBand(defense.rank, defense.teams);
+  final tone = matchupTone(band, side);
+  final phrase = matchupPhrase(band, side);
   return MatchupNote(
     '${clubNickname(defense.team)} ${ordinal(defense.rank)} vs $pos · $phrase',
     tone,
   );
+}
+
+/// Rank 1 allows the least. On a 32-team board, 1–10 is a tough front,
+/// 11–22 is even, and 23–32 is a soft front.
+enum DefenseBand { tough, even, soft }
+
+DefenseBand defenseBand(int rank, int teams) {
+  final size = teams < 2 ? 2 : teams;
+  final toughMax = (size * 10 / 32).round().clamp(1, size);
+  final softMin = (size * 23 / 32).round().clamp(1, size);
+  if (rank <= toughMax) return DefenseBand.tough;
+  if (rank >= softMin) return DefenseBand.soft;
+  return DefenseBand.even;
+}
+
+/// The rank describes the defense. The side of the bet flips it:
+/// an under against a soft front is a hard matchup for that bet.
+MatchupTone matchupTone(DefenseBand band, LineSide side) {
+  if (band == DefenseBand.even) return MatchupTone.even;
+  final helpsOver = band == DefenseBand.soft;
+  final helpsSide = side == LineSide.over ? helpsOver : !helpsOver;
+  return helpsSide ? MatchupTone.favorable : MatchupTone.tough;
+}
+
+String matchupPhrase(DefenseBand band, LineSide side) {
+  return switch ((band, side)) {
+    (DefenseBand.even, _) => 'an even matchup',
+    (DefenseBand.tough, LineSide.over) => 'a tough front for the over',
+    (DefenseBand.tough, LineSide.under) =>
+      'a tough front, which helps the under',
+    (DefenseBand.soft, LineSide.over) => 'a soft front for the over',
+    (DefenseBand.soft, LineSide.under) =>
+      'a soft front, which works against the under',
+  };
 }
 
 String ordinal(int number) {

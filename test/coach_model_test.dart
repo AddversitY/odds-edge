@@ -187,6 +187,12 @@ void main() {
     expect(find.text('The books: Chiefs -3.5'), findsWidgets);
     expect(find.text('Differs from books'), findsWidgets);
     expect(find.text('Edge'), findsNothing);
+    expect(
+      find.textContaining('The past test of this number lost money.'),
+      findsWidgets,
+    );
+    expect(find.textContaining('only a comparison'), findsWidgets);
+    expect(find.textContaining('Bet the'), findsNothing);
     expect(find.text('Shown for comparison, not a pick.'), findsWidgets);
     await tester.tap(find.text('Buffalo Bills').first);
     await tester.pumpAndSettle();

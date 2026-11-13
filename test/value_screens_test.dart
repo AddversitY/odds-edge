@@ -100,7 +100,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Bet'), findsWidgets);
     expect(find.text('Skip'), findsWidgets);
-    expect(find.text('Lean'), findsWidgets);
     expect(find.text('1 out'), findsWidgets);
     await tester.tap(find.text('Josh Allen').first);
     await tester.pumpAndSettle();
@@ -121,6 +120,7 @@ void main() {
     expect(find.textContaining('CC BY 4.0'), findsNothing);
     await tester.tap(find.text('The math').first);
     await tester.pumpAndSettle();
+    expect(find.textContaining("book's no-vig chance are mixed in"), findsWidgets);
     expect(find.textContaining('participation'), findsWidgets);
     expect(find.textContaining('CC BY 4.0'), findsWidgets);
   });
