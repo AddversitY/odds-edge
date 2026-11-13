@@ -3,9 +3,11 @@ import 'package:flutter/services.dart';
 
 import '../data/research_store.dart';
 import '../domain/bets.dart';
+import '../domain/closing_value.dart';
 import '../domain/coach_board.dart';
 import '../domain/coach_model.dart';
 import '../domain/odds.dart';
+import '../domain/public_sharp.dart';
 import '../domain/saved_play.dart';
 import '../explained_number.dart';
 import '../theme/edge_theme.dart';
@@ -19,11 +21,13 @@ class MyBetsScreen extends StatefulWidget {
     this.board,
     this.now,
     this.books,
+    this.lineHistory = const {},
   });
   final ResearchStore store;
   final OddsBoard? board;
   final DateTime? now;
   final Set<String>? books;
+  final Map<String, List<LineSnapshot>> lineHistory;
 
   @override
   State<MyBetsScreen> createState() => _MyBetsScreenState();
@@ -33,10 +37,25 @@ class _MyBetsScreenState extends State<MyBetsScreen> {
   late Future<_Log> future = _load();
   int tab = 0;
 
-  Future<_Log> _load() async => _Log(
-    plays: await widget.store.loadSavedPlays(),
-    bets: await widget.store.loadBets(),
-  );
+  Future<_Log> _load() async {
+    final plays = await widget.store.loadSavedPlays();
+    final saved = await widget.store.loadBets();
+    final now = widget.now ?? DateTime.now().toUtc();
+    final events = widget.board?.events ?? const <SportEvent>[];
+    final bets = <TrackedBet>[];
+    for (final bet in saved) {
+      final next = autoCloseBet(bet, widget.lineHistory, events, now);
+      if (next.closingLine != bet.closingLine ||
+          next.closingDecimal != bet.closingDecimal ||
+          next.closeSource != bet.closeSource) {
+        await widget.store.saveBet(next);
+        bets.add(next);
+      } else {
+        bets.add(bet);
+      }
+    }
+    return _Log(plays: plays, bets: bets);
+  }
 
   @override
   Widget build(BuildContext context) => FutureBuilder<_Log>(
@@ -172,7 +191,7 @@ class _MyBetsScreenState extends State<MyBetsScreen> {
           style: EdgeType.body.copyWith(color: EdgeColors.textSecondary),
         ),
         const SizedBox(height: 8),
-        Text(_closingSummary(ledger), style: EdgeType.body),
+        Text(_closingSummary(ledger, bets), style: EdgeType.body),
         const SizedBox(height: 12),
         _MonthGrid(month: DateTime(month.year, month.month), days: monthDays),
         const SizedBox(height: 16),
@@ -243,6 +262,7 @@ class _MyBetsScreenState extends State<MyBetsScreen> {
                           bet.copyWith(
                             closingLine: closing,
                             replaceClosingLine: true,
+                            closeSource: 'typed',
                           ),
                         );
                         setState(() => future = _load());
@@ -259,10 +279,18 @@ class _MyBetsScreenState extends State<MyBetsScreen> {
   }
 }
 
-String _closingSummary(BetLedger ledger) {
+String _closingSummary(BetLedger ledger, List<TrackedBet> bets) {
   final values = ledger.lineClvPoints;
+  final filled = bets.where((bet) => bet.closeSource == 'line-history').length;
+  final filledText = filled == 0
+      ? ''
+      : ' $filled ${filled == 1 ? 'close was' : 'closes were'} filled from the last saved price before kickoff.';
+  final price = ledger.averageClosingLineValue;
+  final priceText = price == null
+      ? ''
+      : ' Average price gap ${signedPercent(price)} across ${ledger.closingLineValues.length} ${ledger.closingLineValues.length == 1 ? 'bet' : 'bets'} with a closing price. Positive means the close was a shorter price.';
   if (values.isEmpty) {
-    return 'Closing number: none yet. Log the number on your ticket, then add the number the game closed at. Beating the close means you got the better number, not that the bet won.';
+    return 'Closing number: none yet. After kickoff, a saved game is filled from line history when that price is already stored. You can still type a close.$filledText$priceText';
   }
   final average = ledger.averageLineClv!;
   final direction = average > 0.05
@@ -270,7 +298,7 @@ String _closingSummary(BetLedger ledger) {
       : average < -0.05
       ? 'behind the close'
       : 'about even with the close';
-  return 'Closing number: you beat the close on ${ledger.beatClosingNumber} of ${values.length} bets with a closing number. Average ${signedNumber(average)} points, $direction.';
+  return 'Closing number: you beat the close on ${ledger.beatClosingNumber} of ${values.length} bets with a closing number. Average ${signedNumber(average)} points, $direction.$filledText$priceText';
 }
 
 String _clvSentence(TrackedBet bet) {
@@ -280,7 +308,21 @@ String _clvSentence(TrackedBet bet) {
   }
   final logged = 'Number when you logged it: ${signedNumber(bet.line!)}.';
   if (points == null) {
-    return '$logged Add the closing number when the game closes.';
+    if (bet.closeSource == 'line-history') {
+      return '$logged The closing price was filled from line history. The closing number was not in that snapshot.';
+    }
+    if (bet.eventId.isEmpty) {
+      return '$logged No game was saved with this bet, so the close cannot be filled from line history.';
+    }
+    return '$logged The close is filled after kickoff when line history has this game. You can type it instead.';
+  }
+  if (bet.closeSource == 'line-history') {
+    final direction = points > 0
+        ? 'You beat the closing number by ${points.toStringAsFixed(1)} points.'
+        : points.abs() < 0.05
+        ? 'Same number as the close.'
+        : 'The closing number beat you by ${(-points).toStringAsFixed(1)} points.';
+    return '$logged $direction Filled from the last saved price before kickoff, not typed.';
   }
   if (points.abs() < 0.05) {
     return '$logged Same number as the close.';
@@ -757,6 +799,7 @@ class _AddBetState extends State<_AddBet> {
                   market: kind,
                   side: side,
                   line: number,
+                  eventId: eventId ?? '',
                 ),
               );
               description.clear();

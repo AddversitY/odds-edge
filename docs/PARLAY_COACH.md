@@ -20,7 +20,7 @@ Every chance, edge, and hit rate on these screens is computed from a snapshot or
 
 ## Hit rates: nflverse only
 
-NFL hit rates use the bundled file `assets/nfl-player-stats.json`. It comes from the nflverse player summary stats joined to schedules. nflverse publishes that data under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The license copy in this repo is `assets/NFLVERSE-LICENSE.md`. Odds Edge is not affiliated with nflverse. The import and the cutoff (2026-10-18) are described in `docs/PLAYER_STATS.md`. The file is a snapshot shipped with the app. It is not a live stats feed, and it has no snap share, usage rate, injuries, or headshots. Those lines stay blank.
+NFL hit rates use the bundled file `assets/nfl-player-stats.json`. It comes from the nflverse player summary stats joined to schedules. nflverse publishes that data under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The license copy in this repo is `assets/NFLVERSE-LICENSE.md`. Odds Edge is not affiliated with nflverse. The import and the cutoff recorded in the file are described in `docs/PLAYER_STATS.md`. The file is a snapshot shipped with the app. It is not a live stats feed, and it has no snap share, usage rate, injuries, or headshots. Those lines stay blank.
 
 A name is used only when exactly one player id is stored under that name. Josh Allen is one id in this file. Two players with the same name leave the hit rate blank. Last 5, 10, and 20 can cross seasons. Season is the current season in the file only. Head-to-head needs the player's latest recorded team to match one side of the game. That latest team is not a confirmation they are starting.
 

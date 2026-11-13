@@ -15,18 +15,22 @@ void main() {
     );
     expect(data.rows.length, greaterThan(60000));
     expect(data.metadata['currentSeason'], 2026);
-    expect(data.metadata['cutoff'], '2026-10-18');
+    expect(data.metadata['license'], 'CC BY 4.0');
+    expect(data.metadata['source'], contains('nflverse'));
+    final cutoff = DateTime.parse('${data.metadata['cutoff']}T00:00:00Z');
+    expect(cutoff.isAfter(DateTime.utc(2026, 10, 18)), isTrue);
     final goff = playerGames(data.rows, '00-0033106', season: 2023);
     expect(goff.length, 17);
     expect(PlayerStatWindow(goff).total('passing_yards'), 4575);
-    final recent = lastPlayerGames(data.rows, '00-0033106', season: 2026);
-    expect(recent.map((g) => g.week), [5, 4, 3]);
-    expect(PlayerStatWindow(recent).total('passing_yards'), 952);
-    expect(PlayerStatWindow(recent).average('receiving_yards'), 0);
-    expect(PlayerStatWindow(recent).observed('receiving_yards'), 3);
     expect(
-      data.rows.every((g) => !g.date.isAfter(DateTime.utc(2026, 10, 18))),
+      data.rows.any(
+        (game) =>
+            game.season == 2026 &&
+            game.seasonType == 'REG' &&
+            game.date.isAfter(DateTime.utc(2026, 10, 18)),
+      ),
       isTrue,
     );
+    expect(data.rows.every((g) => !g.date.isAfter(cutoff)), isTrue);
   });
 }

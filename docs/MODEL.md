@@ -37,7 +37,7 @@ Walk-forward by week. To score week 10, the fit uses only weeks before week 10. 
 
 For every scored game the test bets the side the model likes, at the closing number, at the usual -110 price (stake 1.10 to win 1.00). Pushes return the stake. Hit rate ignores pushes. Profit is divided by the amount staked.
 
-"Closer than the close" is how often our number was nearer the final margin than the closing number was. The historical file only has the closing number, not the number from earlier in the week, so this is not a bettor's closing-line value. My Bets records the number on the ticket when you log the bet, and you add the closing number later. That comparison is the bettor's version.
+"Closer than the close" is how often our number was nearer the final margin than the closing number was. The historical file only has the closing number, not the number from earlier in the week, so this is not a bettor's closing-line value. My Bets records the number on the ticket when you log the bet. After kickoff, the closing number is filled from line history when that game was already saved. You can still type a close. That comparison is the bettor's version. The report card, opened from Home or More, shows this past test, the calibration table, the prop-chance test, and whatever closing-line value the saved prices can support.
 
 A separate line in the report counts only games where our number and the close differed by 2.5 points or more. That slice is easier to overread. The headline is the test that bets every game.
 

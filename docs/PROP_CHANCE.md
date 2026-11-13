@@ -31,3 +31,9 @@ Bet, Lean, and Skip use this capped chance against the price. The edge chip is t
 ## Where it is computed
 
 `propSideChance` in `lib/domain/prop_chance.dart` is the only prop chance. The card, the other prices on that card, and each parlay leg all use it. The hit-rate chart still shows the recorded games. The chart is the record. The chance is the estimate.
+
+## The past test
+
+The report card runs this same function forward through the bundled box scores. To score a week, only earlier weeks are used. The line for a season is that player's previous-season median, frozen before week 1. The market anchor is a fair 50%, because this repo does not have historical sportsbook prop prices and does not buy or scrape them.
+
+That test reports a Brier score and a log loss against the 50% anchor, plus a calibration table. It does not report profit, and it does not report closing-line value. A result on a made-up line is not a betting edge. The card says so. Passing yards and receptions are the markets on the card. Rushing yards and receiving yards are scored with the same function because the box scores already count them.
