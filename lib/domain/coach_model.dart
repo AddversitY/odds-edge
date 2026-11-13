@@ -796,12 +796,12 @@ String _reason({
   final byPrice = profit != null && profit > 0;
   final gapText = pointGap.abs().toStringAsFixed(1);
   if (byPoints && byPrice) {
-    return '$name differs from the books by $gapText points, and the best price in this snapshot is ahead of our chance. Comparison, not a pick.';
+    return '$name differs from the books by $gapText points, and the best price in this snapshot is longer than our chance. The past test of this number lost money. Comparison, not a pick.';
   }
   if (byPoints) {
-    return '$name differs from the books by $gapText points. Comparison, not a pick.';
+    return '$name differs from the books by $gapText points. The past test of this number lost money. Comparison, not a pick.';
   }
-  return 'The best price on $name is ahead of our chance. Comparison, not a pick.';
+  return 'The best price on $name is longer than our chance. The past test of this number lost money. Comparison, not a pick.';
 }
 
 /// Days from the last game to kickoff, using the UTC date. Null when the last

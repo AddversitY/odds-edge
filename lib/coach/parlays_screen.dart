@@ -1,15 +1,23 @@
 import 'package:flutter/material.dart';
 
+import '../data/nfl_assets.dart';
+import '../data/research_store.dart';
 import '../domain/coach_board.dart';
 import '../domain/coach_model.dart';
+import '../domain/injury_report.dart';
 import '../domain/market_math.dart';
+import '../domain/matchup.dart';
 import '../domain/odds.dart';
+import '../domain/parlay_slip.dart';
 import '../domain/parlay_value.dart';
+import '../domain/player_stats.dart';
+import '../domain/prop_history.dart';
 import '../domain/value_check.dart';
 import '../domain/why_brief.dart';
 import '../explained_number.dart';
 import '../theme/edge_theme.dart';
 import 'coach_widgets.dart';
+import 'parlay_slip_view.dart';
 import 'value_view.dart';
 import 'why_view.dart';
 
@@ -25,6 +33,12 @@ class ParlaysScreen extends StatefulWidget {
       totalPoints: 2.5,
       minExpectedValue: 0.02,
     ),
+    this.slip,
+    this.store,
+    this.injuries,
+    this.onAddLeg,
+    this.loadPlayers,
+    this.loadMatchup,
   });
 
   final OddsBoard board;
@@ -32,6 +46,12 @@ class ParlaysScreen extends StatefulWidget {
   final Set<String>? enabledBooks;
   final CoachModel? model;
   final EdgeSettings settings;
+  final ParlaySlipController? slip;
+  final ResearchStore? store;
+  final InjuryReport? injuries;
+  final VoidCallback? onAddLeg;
+  final Future<PlayerStatsDataset> Function()? loadPlayers;
+  final Future<MatchupContext> Function()? loadMatchup;
 
   @override
   State<ParlaysScreen> createState() => _ParlaysScreenState();
@@ -39,6 +59,27 @@ class ParlaysScreen extends StatefulWidget {
 
 class _ParlaysScreenState extends State<ParlaysScreen> {
   ParlayFilter filter = const ParlayFilter();
+  PlayerDirectory? directory;
+  MatchupContext? matchup;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFacts();
+  }
+
+  Future<void> _loadFacts() async {
+    try {
+      final players = await (widget.loadPlayers ?? loadBundledNflPlayers)();
+      if (!mounted) return;
+      setState(() => directory = PlayerDirectory(players));
+    } catch (_) {}
+    try {
+      final context = await (widget.loadMatchup ?? loadBundledMatchup)();
+      if (!mounted) return;
+      setState(() => matchup = context);
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +94,20 @@ class _ParlaysScreenState extends State<ParlaysScreen> {
       children: [
         const SectionLabel('PARLAYS'),
         const SizedBox(height: 8),
+        if (widget.slip != null) ...[
+          ParlaySlipView(
+            slip: widget.slip!,
+            board: widget.board,
+            now: widget.now,
+            directory: directory,
+            context: matchup,
+            injuries: widget.injuries,
+            enabledBooks: widget.enabledBooks,
+            store: widget.store,
+            onAddLeg: widget.onAddLeg,
+          ),
+          const SizedBox(height: 16),
+        ],
         const Text(
           'Each leg is judged on its own, then the ticket is judged together. Legs in different games have their chances multiplied. Legs in the same game move together, so those chances are not just multiplied. A same-game payout says estimated unless you paste the payout from a slip.',
           style: EdgeType.body,

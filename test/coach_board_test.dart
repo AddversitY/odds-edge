@@ -112,6 +112,10 @@ void main() {
     );
     expect(
       applyPropFilter(cards, const PropFilter(market: 'player_rush_yds')),
+      isNotEmpty,
+    );
+    expect(
+      applyPropFilter(cards, const PropFilter(market: 'player_kicking_points')),
       isEmpty,
     );
   });

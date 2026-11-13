@@ -46,6 +46,7 @@ class ValueInput {
     this.modelUnproven = false,
     this.hits,
     this.observed,
+    this.chanceNote,
   });
 
   final String label;
@@ -70,6 +71,10 @@ class ValueInput {
   final bool modelUnproven;
   final int? hits;
   final int? observed;
+
+  /// How the recorded games became [ourChance]. When null, the math
+  /// uses the even-shrink description.
+  final String? chanceNote;
 
   double? get breakEven {
     final price = decimal;
@@ -258,7 +263,8 @@ String _math(
 ) {
   final parts = <String>[
     if (input.hits != null && input.observed != null)
-      'Recorded ${input.hits} of ${input.observed}. Two wins and two losses are mixed in before that becomes our chance, so a short run cannot look certain.',
+      input.chanceNote ??
+          'Recorded ${input.hits} of ${input.observed}. Two wins and two losses are mixed in before that becomes our chance, so a short run cannot look certain.',
     'Our chance: ${chance == null ? 'blank' : _pct(chance)}.',
     'Fee-free chance: ${fair == null ? 'blank' : _pct(fair)}.',
     'Price break-even: ${breakEven == null ? 'blank' : _pct(breakEven)}.',

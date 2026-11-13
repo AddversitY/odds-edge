@@ -1,7 +1,7 @@
 import '../domain/odds.dart';
 import '../domain/public_sharp.dart';
 
-/// Sample open-to-now prices for the three demonstration games.
+/// Sample open-to-now prices for the demonstration games.
 ///
 /// The numbers are invented so the sharp screen can be tried with no feed
 /// connected. They are labeled as a sample wherever they are shown.
@@ -12,7 +12,7 @@ Map<String, List<LineSnapshot>> demoLineHistory(OddsBoard board) {
     final shots = switch (event.id) {
       'demo-buf-kc' => _chiefs(event, at),
       'demo-det-gb' => _quiet(event, at),
-      'demo-bal-pit' => _slow(event, at),
+      'demo-bal-cin' => _slow(event, at),
       _ => const <LineSnapshot>[],
     };
     if (shots.isNotEmpty) history[event.id] = shots;

@@ -21,10 +21,14 @@ class ValueView extends StatelessWidget {
     this.whyBody,
     this.extraWhy,
     this.extraMath,
+    this.headline = true,
   });
 
   final ValueVerdict verdict;
   final Widget? caption;
+
+  /// The prop screen already shows the word in the value check.
+  final bool headline;
 
   /// When set, this replaces the long paragraph. The math is unchanged.
   final Widget? whyBody;
@@ -34,16 +38,21 @@ class ValueView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Reveal(
-      verdict: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            verdict.wordLabel,
-            style: EdgeType.display.copyWith(color: valueWordColor(verdict)),
-          ),
-          ?caption,
-        ],
-      ),
+      verdict: headline || caption != null
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (headline)
+                  Text(
+                    verdict.wordLabel,
+                    style: EdgeType.display.copyWith(
+                      color: valueWordColor(verdict),
+                    ),
+                  ),
+                ?caption,
+              ],
+            )
+          : const SizedBox.shrink(),
       reasons: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -107,16 +116,8 @@ class LineChart extends StatelessWidget {
                     constraints.maxHeight *
                     (1 - ((line - floor) / span).clamp(0, 1));
                 return Stack(
+                  fit: StackFit.expand,
                   children: [
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      top: lineY,
-                      child: Container(
-                        height: 2,
-                        color: EdgeColors.textSecondary,
-                      ),
-                    ),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
@@ -124,18 +125,20 @@ class LineChart extends StatelessWidget {
                           Expanded(
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 2,
+                                horizontal: 3,
                               ),
                               child: Tooltip(
                                 message:
                                     '${sample.game.date.toIso8601String().substring(0, 10)} vs ${sample.game.opponent}: ${sample.value}',
                                 child: Align(
                                   alignment: Alignment.bottomCenter,
-                                  child: FractionallySizedBox(
-                                    heightFactor:
+                                  child: SizedBox(
+                                    height:
+                                        constraints.maxHeight *
                                         ((sample.value!.toDouble() - floor) /
                                                 span)
                                             .clamp(0.04, 1),
+                                    width: double.infinity,
                                     child: DecoratedBox(
                                       decoration: BoxDecoration(
                                         color: sample.outcome == 'hit'
@@ -143,7 +146,10 @@ class LineChart extends StatelessWidget {
                                             : sample.outcome == 'miss'
                                             ? EdgeColors.bad
                                             : EdgeColors.textTertiary,
-                                        borderRadius: BorderRadius.circular(4),
+                                        borderRadius:
+                                            const BorderRadius.vertical(
+                                              top: Radius.circular(4),
+                                            ),
                                       ),
                                     ),
                                   ),
@@ -153,16 +159,23 @@ class LineChart extends StatelessWidget {
                           ),
                       ],
                     ),
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      top: lineY.clamp(0, constraints.maxHeight - 2),
+                      child: IgnorePointer(
+                        child: Container(
+                          height: 2,
+                          color: EdgeColors.text.withValues(alpha: .85),
+                        ),
+                      ),
+                    ),
                   ],
                 );
               },
             ),
           ),
           const SizedBox(height: 6),
-          Text(
-            'Each bar is a recorded game, oldest to newest. The line across them is ${line.toStringAsFixed(1)}. Green cleared it, red missed.',
-            style: EdgeType.label,
-          ),
         ],
       ),
     );

@@ -3,6 +3,7 @@ import 'hit_rate.dart';
 import 'matchup.dart';
 import 'player_stats.dart';
 import 'prop_history.dart';
+import 'prop_chance.dart';
 import 'value_check.dart';
 
 class PropValue {
@@ -29,9 +30,8 @@ PropValue priceProp({
   HitRate? recent,
 }) {
   final rate = rateFor(card);
-  final chance = rate == null
-      ? null
-      : shrunkClearRate(hits: rate.hits, observed: rate.observed);
+  final anchor = _marketAnchor(card, cards);
+  final chance = _chanceFor(rate, anchor);
   final quote = card.best;
   final input = ValueInput(
     label: '${card.player} ${card.lineLabel}',
@@ -41,11 +41,10 @@ PropValue priceProp({
         ? null
         : _otherAtBook(card, cards, quote.bookId),
     consensusFair: card.fairProbability,
-    source: rate == null
-        ? 'the recorded games'
-        : 'the recorded games, pulled slightly toward even',
+    source: _chanceSource(rate, anchor),
     hits: rate?.hits,
     observed: rate?.observed,
+    chanceNote: _chanceNote(rate, anchor),
   );
   final verdict = judgeValue(input);
   final alternative = suggestAlternative(
@@ -121,9 +120,8 @@ List<ValueInput> _sameLine(
   HitRate? Function(PropCardModel card) rateFor,
 ) {
   final rate = rateFor(card);
-  final chance = rate == null
-      ? null
-      : shrunkClearRate(hits: rate.hits, observed: rate.observed);
+  final anchor = _marketAnchor(card, cards);
+  final chance = _chanceFor(rate, anchor);
   final best = card.best?.bookId;
   return [
     for (final row in card.bookRows)
@@ -134,9 +132,10 @@ List<ValueInput> _sameLine(
           decimal: row.quote.decimal,
           otherDecimal: _otherAtBook(card, cards, row.quote.bookId),
           consensusFair: card.fairProbability,
-          source: 'the recorded games',
+          source: _chanceSource(rate, anchor),
           hits: rate?.hits,
           observed: rate?.observed,
+          chanceNote: _chanceNote(rate, anchor),
         ),
   ];
 }
@@ -177,9 +176,8 @@ ValueInput _inputFor(
   HitRate? Function(PropCardModel card) rateFor,
 ) {
   final rate = rateFor(item);
-  final chance = rate == null
-      ? null
-      : shrunkClearRate(hits: rate.hits, observed: rate.observed);
+  final anchor = _marketAnchor(item, cards);
+  final chance = _chanceFor(rate, anchor);
   final quote = item.best;
   return ValueInput(
     label:
@@ -190,8 +188,44 @@ ValueInput _inputFor(
         ? null
         : _otherAtBook(item, cards, quote.bookId),
     consensusFair: item.fairProbability,
-    source: 'the recorded games',
+    source: _chanceSource(rate, anchor),
     hits: rate?.hits,
     observed: rate?.observed,
+    chanceNote: _chanceNote(rate, anchor),
+  );
+}
+
+double? _marketAnchor(PropCardModel card, List<PropCardModel> cards) {
+  final quote = card.best;
+  final consensus = card.fairProbability;
+  final usableConsensus =
+      consensus != null && consensus.isFinite && consensus > 0 && consensus < 1
+      ? consensus
+      : null;
+  if (quote == null) return usableConsensus;
+  return noVigChance(quote.decimal, _otherAtBook(card, cards, quote.bookId)) ??
+      usableConsensus;
+}
+
+double? _chanceFor(HitRate? rate, double? market) {
+  if (rate == null) return null;
+  return propSideChance(
+    hits: rate.hits,
+    observed: rate.observed,
+    market: market,
+  );
+}
+
+String _chanceSource(HitRate? rate, double? market) {
+  if (rate == null) return 'the recorded games';
+  return market == null ? propEvenSource : propChanceSource;
+}
+
+String? _chanceNote(HitRate? rate, double? market) {
+  if (rate == null) return null;
+  return propChanceNote(
+    hits: rate.hits,
+    observed: rate.observed,
+    usedMarket: market != null,
   );
 }

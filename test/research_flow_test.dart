@@ -201,6 +201,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('more-menu')));
       await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ListTile, 'More'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Odds comparison'));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Investigate in Proof Lab'));
@@ -219,6 +221,8 @@ void main() {
       await tester.tap(find.widgetWithText(ListTile, 'Home'));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('more-menu')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ListTile, 'More'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Research'));
       await tester.pumpAndSettle();
