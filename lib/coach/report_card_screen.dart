@@ -153,7 +153,7 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
             _Headline(game: game),
             const SizedBox(height: 16),
             if (version != null && widget.model != null)
-              _VersionCompare(v1: widget.model!.backtest, version: version)
+              _GameVersionCompare(v1: widget.model!.backtest, version: version)
             else
               _GameTiles(game: game),
             const SizedBox(height: 22),
@@ -286,8 +286,8 @@ class _Headline extends StatelessWidget {
   }
 }
 
-class _VersionCompare extends StatelessWidget {
-  const _VersionCompare({required this.v1, required this.version});
+class _GameVersionCompare extends StatelessWidget {
+  const _GameVersionCompare({required this.v1, required this.version});
 
   final BacktestReport v1;
   final LineVersion version;
@@ -360,27 +360,6 @@ class _VersionCompare extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(note, style: EdgeType.body),
-      ],
-    );
-  }
-}
-
-class _Swatch extends StatelessWidget {
-  const _Swatch({required this.color, required this.label});
-  final Color color;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2)),
-        ),
-        const SizedBox(width: 6),
-        Text(label, style: EdgeType.label),
       ],
     );
   }
