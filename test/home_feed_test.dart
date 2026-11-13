@@ -94,8 +94,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text("Don't"));
     await tester.pumpAndSettle();
-    expect(find.textContaining('fee-free consensus'), findsWidgets);
-    expect(find.textContaining('not a pick'), findsWidgets);
+    expect(find.textContaining('pts too high'), findsWidgets);
+    expect(find.text('FEE-FREE'), findsWidgets);
+    expect(find.text('Comparison, not a pick.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

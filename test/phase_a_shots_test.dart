@@ -60,7 +60,7 @@ void main() {
     await tester.pumpAndSettle(const Duration(milliseconds: 50));
     expect(find.textContaining('no edge'), findsWidgets);
     await _save(tester, '/opt/cursor/artifacts/report_card_390.png');
-    await tester.scrollUntilVisible(find.text('When the model was sure'), 500);
+    await tester.scrollUntilVisible(find.text('We said vs it happened'), 500);
     await tester.pumpAndSettle(const Duration(milliseconds: 50));
     await _save(
       tester,
@@ -79,7 +79,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('open-stale-board')));
     await tester.pumpAndSettle(const Duration(milliseconds: 100));
-    expect(find.textContaining('not a live board'), findsWidgets);
+    expect(find.textContaining('Not a live board'), findsWidgets);
     await _save(tester, '/opt/cursor/artifacts/stale_board_390.png');
   });
 
@@ -168,7 +168,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Bet log'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('1.0 points'), findsWidgets);
+    expect(find.textContaining('1.0 pts'), findsWidgets);
     await _save(tester, '/opt/cursor/artifacts/my_bets_close_390.png');
   });
 

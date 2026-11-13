@@ -34,6 +34,8 @@ void main() {
         eventId: event.id,
       ),
     );
+    await tester.binding.setSurfaceSize(const Size(390, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
         theme: edgeTheme(),
@@ -87,11 +89,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Bet log'));
     await tester.pumpAndSettle();
-    expect(
-      find.textContaining('filled from the last saved price'),
-      findsWidgets,
-    );
-    expect(find.textContaining('1.0 points'), findsWidgets);
+    expect(find.textContaining('1.0 pts'), findsWidgets);
+    expect(find.text('Beat the close on 1 of 1 · +1.0 pts.'), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, 'The close').last);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('last saved price'), findsWidgets);
     expect(store.bets.single.closingLine, -3.5);
     expect(store.bets.single.closeSource, 'line-history');
     expect(tester.takeException(), isNull);

@@ -10,12 +10,12 @@ import '../domain/parlay_slip.dart';
 import '../domain/player_stats.dart';
 import '../domain/prop_history.dart';
 import '../domain/skip_list.dart';
+import '../ui/scan_card.dart';
 import '../domain/value_check.dart';
 import '../theme/edge_theme.dart';
 import '../ui/feed_card.dart';
 import '../ui/value_check.dart';
 import '../ui/wordmark.dart';
-import 'coach_widgets.dart';
 import 'prop_detail_screen.dart';
 import 'prop_pricing.dart';
 
@@ -222,9 +222,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 8),
             Text(
               segment == 3
-                  ? widget.board.demo
-                        ? 'Example data · the price versus the fee-free consensus · not a pick'
-                        : 'The price versus the fee-free consensus · not a pick'
+                  ? 'Comparison, not a pick.'
                   : widget.board.demo
                   ? 'Example data · our chance versus the book\'s fee-free chance · not a pick'
                   : 'Our chance versus the book\'s fee-free chance · not a pick',
@@ -322,6 +320,11 @@ class _HomeScreenState extends State<HomeScreen> {
         for (final prop in shown)
           RatedPrice(
             id: prop.card.id,
+            name: prop.card.player,
+            market: [
+              prop.card.lineLabel,
+              prop.card.marketLabel,
+            ].where((part) => part.isNotEmpty).join(' · '),
             title: '${prop.card.player} ${prop.card.lineLabel}',
             detail: [
               prop.card.marketLabel,
@@ -357,10 +360,6 @@ class _HomeScreenState extends State<HomeScreen> {
           item,
     ];
     return [
-      Text(
-        'Short or likely prices that are worse than the fee-free consensus. This is a comparison, not a pick.',
-        style: EdgeType.body.copyWith(color: EdgeColors.textSecondary),
-      ),
       if (widget.onOpenStale != null) ...[
         const SizedBox(height: 4),
         Align(
@@ -380,40 +379,22 @@ class _HomeScreenState extends State<HomeScreen> {
       ],
       const SizedBox(height: 8),
       if (filtered.isEmpty)
-        const EmptyNote(
-          'Nothing in this snapshot is a short or likely price that the fee-free consensus says is overpriced. A normal fee is not listed.',
-        )
+        const EmptyNote('Nothing here is short of the fee-free chance.')
       else
         for (final item in filtered) ...[
-          CoachCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Skip',
-                  style: EdgeType.label.copyWith(color: EdgeColors.bad),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  item.title,
-                  style: EdgeType.title.copyWith(
-                    fontFamily: EdgeFont.display,
-                    fontSize: 20,
-                  ),
-                ),
-                Text(item.detail, style: EdgeType.label),
-                const SizedBox(height: 10),
-                ValueCheck(
-                  word: ValueWord.skip,
-                  ourChance: item.fair,
-                  bookChance: item.breakEven,
-                  ourLabel: 'Fee-free',
-                  bookLabel: 'Price needs',
-                  overpriced: true,
-                  compact: true,
-                  note: item.reason,
-                ),
-              ],
+          ScanCard(
+            title: item.name,
+            meta: item.market,
+            line: item.brief,
+            detail: item.reason,
+            rail: ValueCheck(
+              word: ValueWord.skip,
+              ourChance: item.fair,
+              bookChance: item.breakEven,
+              ourLabel: 'Fee-free',
+              bookLabel: 'Price needs',
+              overpriced: true,
+              compact: true,
             ),
           ),
           const SizedBox(height: 8),

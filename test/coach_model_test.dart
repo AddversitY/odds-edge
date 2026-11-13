@@ -221,6 +221,8 @@ void main() {
         closingLine: 2.5,
       ),
     );
+    await tester.binding.setSurfaceSize(const Size(800, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(body: MyBetsScreen(store: store)),
@@ -229,11 +231,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Bet log'));
     await tester.pumpAndSettle();
-    expect(
-      find.textContaining('beat the closing number by 1.0'),
-      findsOneWidget,
-    );
-    expect(find.textContaining('you beat the close on 1 of 1'), findsOneWidget);
+    expect(find.text('Beat the close on 1 of 1 · +1.0 pts.'), findsOneWidget);
+    expect(find.text('Beat the close by 1.0 pts.'), findsOneWidget);
   });
 
   testWidgets('the model page explains the past test in plain language', (

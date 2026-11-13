@@ -16,6 +16,7 @@ class StalePrice {
     required this.bestBreakEven,
     required this.gap,
     required this.reason,
+    required this.brief,
   });
 
   final String book;
@@ -30,6 +31,9 @@ class StalePrice {
   /// Break-even minus the fee-free consensus.
   final double gap;
   final String reason;
+
+  /// One line for the card. The long [reason] stays behind a tap.
+  final String brief;
 }
 
 /// A book must be at least this far above the fee-free consensus.
@@ -142,6 +146,7 @@ List<StalePrice> _lags(List<OddsQuote> quotes, Map<String, SportEvent> events) {
           fair: consensus,
           bestBreakEven: best,
           gap: gap,
+          brief: '$points pts above the other books.',
           reason:
               '${quote.book} on $label needs ${(breakEven * 100).toStringAsFixed(1)}% to break even. The fee-free consensus at this number is ${(consensus * 100).toStringAsFixed(1)}%. That is $points points short of the other books, after the fee. The best price in this snapshot needs ${(best * 100).toStringAsFixed(1)}%. This is the saved snapshot, not a live price, and it is not a pick.',
         ),

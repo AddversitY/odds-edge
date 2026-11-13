@@ -13,7 +13,7 @@ void main() {
   testWidgets(
     'the report card leads with the result and names what was not tested',
     (tester) async {
-      await tester.binding.setSurfaceSize(const Size(390, 4200));
+      await tester.binding.setSurfaceSize(const Size(390, 1600));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       final now = DateTime.utc(2026, 11, 12);
       final model = await loadBundledCoachModel();
@@ -58,15 +58,27 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.textContaining('no edge'), findsWidgets);
-      expect(find.textContaining('not a pick'), findsWidgets);
-      expect(find.textContaining('No historical sportsbook'), findsWidgets);
-      expect(find.textContaining('60.0% or higher'), findsWidgets);
+      expect(find.text('Game model: no edge yet'), findsOneWidget);
+      expect(find.text('No edge'), findsOneWidget);
+      expect(find.text('50.8%'), findsOneWidget);
+      expect(find.text('-2.9%'), findsOneWidget);
+      expect(find.text('2,885'), findsOneWidget);
+      expect(find.byKey(const Key('calibration-chart')), findsOneWidget);
+      expect(find.textContaining('covered'), findsOneWidget);
+      expect(
+        find.text('Not yet tested against sportsbook prices.'),
+        findsOneWidget,
+      );
+      expect(find.text('No closes saved yet.'), findsOneWidget);
+      expect(find.text('Comparison, not a pick.'), findsOneWidget);
       expect(find.textContaining('EXAMPLE'), findsOneWidget);
       await tester.scrollUntilVisible(
-        find.textContaining('No line history'),
-        500,
+        find.byKey(const Key('how-we-tested')),
+        400,
       );
+      await tester.tap(find.byKey(const Key('how-we-tested')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('No historical sportsbook'), findsOneWidget);
       expect(find.textContaining('No line history'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
@@ -92,9 +104,10 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.textContaining('ET'), findsOneWidget);
-    expect(find.textContaining('not a live board'), findsOneWidget);
-    expect(find.textContaining('not a pick'), findsWidgets);
+    expect(find.textContaining('Not a live board'), findsOneWidget);
     expect(find.textContaining('EXAMPLE'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Comparison, not a pick.'), 400);
+    expect(find.text('Comparison, not a pick.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

@@ -187,11 +187,11 @@ class _MyBetsScreenState extends State<MyBetsScreen> {
         ),
         const SizedBox(height: 12),
         Text(
-          'Record ${ledger.wins}-${ledger.losses}-${ledger.pushes}. A day with no bet is left plain.',
-          style: EdgeType.body.copyWith(color: EdgeColors.textSecondary),
+          'Record ${ledger.wins}-${ledger.losses}-${ledger.pushes}.',
+          style: EdgeType.label.copyWith(fontWeight: FontWeight.w500),
         ),
-        const SizedBox(height: 8),
-        Text(_closingSummary(ledger, bets), style: EdgeType.body),
+        const SizedBox(height: 4),
+        Text(_closeSummary(ledger), style: EdgeType.body),
         const SizedBox(height: 12),
         _MonthGrid(month: DateTime(month.year, month.month), days: monthDays),
         const SizedBox(height: 16),
@@ -217,56 +217,82 @@ class _MyBetsScreenState extends State<MyBetsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      bet.result.name,
-                      style: EdgeType.label.copyWith(
-                        color: switch (bet.result.name) {
-                          'won' => EdgeColors.good,
-                          'lost' => EdgeColors.bad,
-                          'push' => EdgeColors.warn,
-                          _ => EdgeColors.textSecondary,
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(bet.description, style: EdgeType.title),
-                    const SizedBox(height: 4),
-                    Text(
-                      bet.profit == null ? 'Not settled' : money(bet.profit!),
-                      style: EdgeType.title.copyWith(
-                        color: bet.profit == null
-                            ? EdgeColors.text
-                            : valueColor(bet.profit),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${bet.book} · ${americanLabel(bet.decimal)} · stake ${money(bet.stake)}',
-                      style: EdgeType.label,
-                    ),
-                    const SizedBox(height: 8),
-                    Reveal(
-                      verdict: Text(_clvSentence(bet), style: EdgeType.body),
-                      math: bet.closingLineValue == null
-                          ? null
-                          : Text(
-                              'Closing price versus the price you took: ${signedPercent(bet.closingLineValue!)}. Positive means the close was a shorter price.',
-                              style: EdgeType.body,
-                            ),
-                    ),
-                    _ClosingNumber(
-                      key: ValueKey(bet.id),
-                      bet: bet,
-                      onSave: (closing) async {
-                        await widget.store.saveBet(
-                          bet.copyWith(
-                            closingLine: closing,
-                            replaceClosingLine: true,
-                            closeSource: 'typed',
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                bet.result.name,
+                                style: EdgeType.label.copyWith(
+                                  fontSize: 12,
+                                  color: switch (bet.result.name) {
+                                    'won' => EdgeColors.good,
+                                    'lost' => EdgeColors.bad,
+                                    'push' => EdgeColors.warn,
+                                    _ => EdgeColors.textTertiary,
+                                  },
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                bet.description,
+                                style: EdgeType.title.copyWith(
+                                  fontFamily: EdgeFont.display,
+                                  fontSize: 20,
+                                ),
+                              ),
+                            ],
                           ),
-                        );
-                        setState(() => future = _load());
-                      },
+                        ),
+                        _CloseChip(points: bet.lineClvPoints),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${bet.book} · ${americanLabel(bet.decimal)} · ${money(bet.stake)}',
+                      style: EdgeType.label.copyWith(fontSize: 12),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _closeLine(bet),
+                      style: EdgeType.label.copyWith(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    Reveal(
+                      reasonsLabel: 'The close',
+                      verdict: const SizedBox.shrink(),
+                      reasons: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(_clvSentence(bet), style: EdgeType.label),
+                          if (bet.closingLineValue != null) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              'Price gap ${signedPercent(bet.closingLineValue!)}. Positive means the close was shorter.',
+                              style: EdgeType.label,
+                            ),
+                          ],
+                          _ClosingNumber(
+                            key: ValueKey(bet.id),
+                            bet: bet,
+                            onSave: (closing) async {
+                              await widget.store.saveBet(
+                                bet.copyWith(
+                                  closingLine: closing,
+                                  replaceClosingLine: true,
+                                  closeSource: 'typed',
+                                ),
+                              );
+                              setState(() => future = _load());
+                            },
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -279,26 +305,54 @@ class _MyBetsScreenState extends State<MyBetsScreen> {
   }
 }
 
-String _closingSummary(BetLedger ledger, List<TrackedBet> bets) {
+String _closeSummary(BetLedger ledger) {
   final values = ledger.lineClvPoints;
-  final filled = bets.where((bet) => bet.closeSource == 'line-history').length;
-  final filledText = filled == 0
-      ? ''
-      : ' $filled ${filled == 1 ? 'close was' : 'closes were'} filled from the last saved price before kickoff.';
-  final price = ledger.averageClosingLineValue;
-  final priceText = price == null
-      ? ''
-      : ' Average price gap ${signedPercent(price)} across ${ledger.closingLineValues.length} ${ledger.closingLineValues.length == 1 ? 'bet' : 'bets'} with a closing price. Positive means the close was a shorter price.';
-  if (values.isEmpty) {
-    return 'Closing number: none yet. After kickoff, a saved game is filled from line history when that price is already stored. You can still type a close.$filledText$priceText';
-  }
+  if (values.isEmpty) return 'No closing numbers yet.';
   final average = ledger.averageLineClv!;
-  final direction = average > 0.05
-      ? 'ahead of the close'
-      : average < -0.05
-      ? 'behind the close'
-      : 'about even with the close';
-  return 'Closing number: you beat the close on ${ledger.beatClosingNumber} of ${values.length} bets with a closing number. Average ${signedNumber(average)} points, $direction.$filledText$priceText';
+  return 'Beat the close on ${ledger.beatClosingNumber} of ${values.length} · ${signedNumber(average)} pts.';
+}
+
+class _CloseChip extends StatelessWidget {
+  const _CloseChip({required this.points});
+  final double? points;
+
+  @override
+  Widget build(BuildContext context) {
+    if (points == null) return const SizedBox.shrink();
+    final color = points! > 0.05
+        ? EdgeColors.good
+        : points! < -0.05
+        ? EdgeColors.bad
+        : EdgeColors.textSecondary;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .14),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        '${signedNumber(points!)} pts',
+        style: EdgeType.label.copyWith(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+String _closeLine(TrackedBet bet) {
+  final points = bet.lineClvPoints;
+  if (points == null) {
+    if (bet.eventId.isEmpty) return 'No game saved with this bet.';
+    return 'Close fills after kickoff.';
+  }
+  if (points.abs() < 0.05) return 'Same number as the close.';
+  if (points > 0) {
+    return 'Beat the close by ${points.toStringAsFixed(1)} pts.';
+  }
+  return 'Close beat you by ${(-points).toStringAsFixed(1)} pts.';
 }
 
 String _clvSentence(TrackedBet bet) {

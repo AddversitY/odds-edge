@@ -63,6 +63,8 @@ void main() {
     );
     expect(skips.first.reason, contains('not a pick'));
     expect(skips.first.reason, contains('fee-free consensus'));
+    expect(skips.first.brief, contains('pts too high'));
+    expect(skips.any((item) => item.brief.contains('Hit 8 of 8')), isTrue);
     expect(skips.any((item) => item.title.contains('149.5')), isTrue);
   });
 
@@ -155,6 +157,10 @@ void main() {
       final short = rows.where((row) => row.bookId == 'draftkings');
       expect(short, isNotEmpty);
       expect(short.every((row) => row.gap >= staleConsensusGap), isTrue);
+      expect(
+        short.every((row) => row.brief.contains('pts above the other books')),
+        isTrue,
+      );
     },
   );
 }

@@ -12,6 +12,9 @@ class SkipItem {
     required this.title,
     required this.detail,
     required this.reason,
+    required this.brief,
+    required this.name,
+    required this.market,
     required this.breakEven,
     required this.fair,
     required this.gap,
@@ -22,6 +25,11 @@ class SkipItem {
   final String title;
   final String detail;
   final String reason;
+
+  /// One line for the card. The long [reason] stays behind a tap.
+  final String brief;
+  final String name;
+  final String market;
   final double breakEven;
   final double fair;
 
@@ -52,11 +60,15 @@ class RatedPrice {
     required this.fair,
     this.hits,
     this.observed,
+    this.name = '',
+    this.market = '',
   });
 
   final String id;
   final String title;
   final String detail;
+  final String name;
+  final String market;
   final double? decimal;
   final double? fair;
   final int? hits;
@@ -119,6 +131,13 @@ SkipItem? _fromPrice(RatedPrice price) {
       hits: hot ? hits : null,
       observed: hot ? observed : null,
     ),
+    brief: _brief(
+      gap: gap,
+      hits: hot ? hits : null,
+      observed: hot ? observed : null,
+    ),
+    name: price.name.isEmpty ? price.title : price.name,
+    market: price.market,
     breakEven: breakEven,
     fair: fair,
     gap: gap,
@@ -145,11 +164,22 @@ SkipItem? _fromSide(PricedMarket market, PricedSide side) {
       fair: fair,
       short: true,
     ),
+    brief: _brief(gap: gap),
+    name: title,
+    market: market.matchup,
     breakEven: breakEven,
     fair: fair,
     gap: gap,
     likely: true,
   );
+}
+
+String _brief({required double gap, int? hits, int? observed}) {
+  final points = (gap * 100).toStringAsFixed(1);
+  if (hits != null && observed != null) {
+    return 'Hit $hits of $observed, but the price is $points pts too high.';
+  }
+  return 'The price is $points pts too high.';
 }
 
 String _reason({
