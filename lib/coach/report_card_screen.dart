@@ -127,7 +127,8 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final game = widget.model?.backtest;
+    final game = widget.model?.liveReport;
+    final version = widget.model?.lineVersion;
     final prop = report;
     final closing = summarizeLineHistory(
       history: widget.lineHistory,
@@ -151,7 +152,10 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
             ],
             _Headline(game: game),
             const SizedBox(height: 16),
-            _GameTiles(game: game),
+            if (version != null && widget.model != null)
+              _VersionCompare(v1: widget.model!.backtest, version: version)
+            else
+              _GameTiles(game: game),
             const SizedBox(height: 22),
             Text(
               'We said vs it happened',
@@ -282,6 +286,233 @@ class _Headline extends StatelessWidget {
   }
 }
 
+class _VersionCompare extends StatelessWidget {
+  const _VersionCompare({required this.v1, required this.version});
+
+  final BacktestReport v1;
+  final LineVersion version;
+
+  @override
+  Widget build(BuildContext context) {
+    final v2 = version.report;
+    final games = v1.games == v2.games
+        ? '${_count(v1.games)} games'
+        : 'Version 1 ${_count(v1.games)} games · Version 2 ${_count(v2.games)} games';
+    final note = !version.adopted
+        ? 'Version 2 was not adopted. The games still use version 1, and that test has no edge.'
+        : version.hasEdge
+        ? 'Version 2 is the number on the games. The past test beat a -110 price. It can still lose.'
+        : 'Version 2 is the number on the games. It still has no edge against the market.';
+    return Column(
+      key: const Key('game-version-chart'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(games, style: EdgeType.label),
+        const SizedBox(height: 8),
+        const Row(
+          children: [
+            _Swatch(color: EdgeColors.textSecondary, label: 'Version 1'),
+            SizedBox(width: 14),
+            _Swatch(color: EdgeColors.accent, label: 'Version 2'),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _CompareRow(
+          label: 'Hit rate',
+          first: v1.hitRate,
+          second: v2.hitRate,
+          low: 0.45,
+          high: 0.56,
+          format: percentLabel,
+          mark: v1.breakEvenHitRate,
+        ),
+        _CompareRow(
+          label: 'Return',
+          first: v1.roi,
+          second: v2.roi,
+          low: -0.08,
+          high: 0.02,
+          format: signedPercent,
+        ),
+        _CompareRow(
+          label: 'Closer than the close',
+          first: v1.clvBeatRate,
+          second: v2.clvBeatRate,
+          low: 0.30,
+          high: 0.60,
+          format: percentLabel,
+        ),
+        _CompareRow(
+          label: 'Brier · lower is closer',
+          first: v1.brier,
+          second: v2.brier,
+          low: 0.22,
+          high: 0.27,
+          format: _three,
+        ),
+        _CompareRow(
+          label: 'Log loss · lower is closer',
+          first: v1.logLoss,
+          second: v2.logLoss,
+          low: 0.66,
+          high: 0.72,
+          format: _three,
+        ),
+        const SizedBox(height: 8),
+        Text(note, style: EdgeType.body),
+      ],
+    );
+  }
+}
+
+class _Swatch extends StatelessWidget {
+  const _Swatch({required this.color, required this.label});
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2)),
+        ),
+        const SizedBox(width: 6),
+        Text(label, style: EdgeType.label),
+      ],
+    );
+  }
+}
+
+class _CompareRow extends StatelessWidget {
+  const _CompareRow({
+    required this.label,
+    required this.first,
+    required this.second,
+    required this.low,
+    required this.high,
+    required this.format,
+    this.mark,
+  });
+
+  final String label;
+  final double? first;
+  final double? second;
+  final double low;
+  final double high;
+  final String Function(double value) format;
+  final double? mark;
+
+  @override
+  Widget build(BuildContext context) {
+    final left = first == null ? '—' : format(first!);
+    final right = second == null ? '—' : format(second!);
+    final shared = left == right;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: EdgeType.label),
+          const SizedBox(height: 4),
+          _Bar(
+            value: first,
+            low: low,
+            high: high,
+            color: EdgeColors.textSecondary,
+            mark: mark,
+            number: shared ? null : left,
+          ),
+          const SizedBox(height: 3),
+          _Bar(
+            value: second,
+            low: low,
+            high: high,
+            color: EdgeColors.accent,
+            mark: mark,
+            number: shared ? left : right,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Bar extends StatelessWidget {
+  const _Bar({
+    required this.value,
+    required this.low,
+    required this.high,
+    required this.color,
+    required this.number,
+    this.mark,
+  });
+
+  final double? value;
+  final double low;
+  final double high;
+  final Color color;
+  final String? number;
+  final double? mark;
+
+  @override
+  Widget build(BuildContext context) {
+    final span = high - low;
+    final share = value == null || span <= 0
+        ? 0.0
+        : ((value! - low) / span).clamp(0.0, 1.0);
+    final markShare = mark == null || span <= 0
+        ? null
+        : ((mark! - low) / span).clamp(0.0, 1.0);
+    return SizedBox(
+      height: 18,
+      child: Row(
+        children: [
+          Expanded(
+            child: Stack(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: EdgeColors.surface,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: EdgeColors.border),
+                  ),
+                ),
+                FractionallySizedBox(
+                  widthFactor: share,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+                if (markShare != null)
+                  Align(
+                    alignment: Alignment(markShare * 2 - 1, 0),
+                    child: Container(width: 1, color: EdgeColors.text),
+                  ),
+              ],
+            ),
+          ),
+          SizedBox(
+            width: 58,
+            child: Text(
+              number ?? '',
+              textAlign: TextAlign.right,
+              style: EdgeType.label.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _three(double value) => value.toStringAsFixed(3);
+
 class _GameTiles extends StatelessWidget {
   const _GameTiles({required this.game});
   final BacktestReport? game;
@@ -366,6 +597,12 @@ class _Calibration extends StatelessWidget {
               fontWeight: FontWeight.w500,
               color: EdgeColors.warn,
             ),
+          ),
+        ] else ...[
+          const SizedBox(height: 8),
+          Text(
+            'It did not call a 60% chance on this test.',
+            style: EdgeType.label.copyWith(fontWeight: FontWeight.w500),
           ),
         ],
       ],

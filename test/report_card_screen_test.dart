@@ -13,10 +13,10 @@ void main() {
   testWidgets(
     'the report card leads with the result and names what was not tested',
     (tester) async {
-      await tester.binding.setSurfaceSize(const Size(390, 1600));
+      await tester.binding.setSurfaceSize(const Size(390, 2400));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       final now = DateTime.utc(2026, 11, 12);
-      final model = await loadBundledCoachModel();
+      final model = (await tester.runAsync(loadBundledCoachModel))!;
       await tester.pumpWidget(
         MaterialApp(
           theme: edgeTheme(),
@@ -60,11 +60,18 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Game model: no edge yet'), findsOneWidget);
       expect(find.text('No edge'), findsOneWidget);
+      expect(find.byKey(const Key('game-version-chart')), findsOneWidget);
       expect(find.text('50.8%'), findsOneWidget);
+      expect(find.text('50.5%'), findsOneWidget);
       expect(find.text('-2.9%'), findsOneWidget);
-      expect(find.text('2,885'), findsOneWidget);
+      expect(find.text('-3.6%'), findsOneWidget);
+      expect(find.text('2,885 games'), findsOneWidget);
+      expect(find.textContaining('no edge against the market'), findsOneWidget);
       expect(find.byKey(const Key('calibration-chart')), findsOneWidget);
-      expect(find.textContaining('covered'), findsOneWidget);
+      expect(
+        find.text('It did not call a 60% chance on this test.'),
+        findsOneWidget,
+      );
       expect(
         find.text('Not yet tested against sportsbook prices.'),
         findsOneWidget,

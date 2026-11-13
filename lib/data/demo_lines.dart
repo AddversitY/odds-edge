@@ -11,7 +11,7 @@ Map<String, List<LineSnapshot>> demoLineHistory(OddsBoard board) {
   for (final event in board.events) {
     final shots = switch (event.id) {
       'demo-buf-kc' => _chiefs(event, at),
-      'demo-det-gb' => _quiet(event, at),
+      'demo-min-gb' => _quiet(event, at),
       'demo-bal-cin' => _slow(event, at),
       _ => const <LineSnapshot>[],
     };
@@ -45,8 +45,8 @@ List<LineSnapshot> _quiet(SportEvent event, DateTime at) {
   final open = at.subtract(const Duration(hours: 8));
   final later = at.subtract(const Duration(hours: 3));
   return [
-    _shot(event, open, us: -3.5, pinnacle: -3.5),
-    _shot(event, later, us: -3.5, pinnacle: -3.5),
+    _shot(event, open, us: -2.5, pinnacle: -2.5),
+    _shot(event, later, us: -2.5, pinnacle: -2.5),
   ];
 }
 

@@ -516,6 +516,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
         pricedBoard.quotes,
         settings: edgeSettings,
         books: enabledBooks,
+        injuries: injuryReport,
       );
       if (line != null) lines.add(line);
     }

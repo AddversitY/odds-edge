@@ -22,6 +22,17 @@ from pathlib import Path
 import pandas as pd
 import pyarrow.parquet as pq
 
+from build_features import (
+    attach_longitudes,
+    contexts_for,
+    load_outs as load_out_players,
+    load_quarterbacks,
+    load_snaps,
+    upcoming_forecasts,
+    weather_counts,
+    weather_rows,
+    _lookup,
+)
 from nfl_model import (
     HALF_LIFE_DAYS,
     LOGISTIC_C,
@@ -40,6 +51,22 @@ from nfl_model import (
     plain_english,
     walk_forward,
 )
+from nfl_model_v2 import (
+    ADOPTION_MIN_GAMES,
+    BACKUP_EPA,
+    MARGIN_CAP,
+    MARGIN_SIGMA,
+    TOTAL_CAP,
+    TOTAL_SIGMA,
+    LiveQb,
+    adopt_v2,
+    assemble_v2,
+    differs_helped,
+    has_betting_edge,
+    v2_plain,
+    walk_forward_v2,
+)
+from weather import historical_weather
 
 ROOT = Path(__file__).resolve().parents[1]
 CACHE = Path(__file__).resolve().parent / ".cache"
@@ -429,6 +456,7 @@ def build_document(team_games, schedule_frame, outs, result, as_of: date) -> dic
             "hitRate": None if result.primary.hit_rate is None else _round(result.primary.hit_rate),
             "roi": None if result.primary.roi is None else _round(result.primary.roi),
             "brier": None if result.brier is None else _round(result.brier),
+            "logLoss": None if result.log_loss is None else _round(result.log_loss),
             "calibration": [
                 {
                     "from": _round(bin_["from"], 2),
@@ -486,6 +514,227 @@ def validate(document: dict) -> None:
     print(f"Home field advantage fit at {home_field:.2f} points.")
 
 
+def _qb_json(qb: LiveQb | None) -> dict | None:
+    if qb is None:
+        return None
+    return {
+        "id": qb.player_id,
+        "name": qb.name,
+        "epa": _round(qb.epa),
+        "dropbacks": _round(qb.dropbacks, 1),
+    }
+
+
+def _planned_qb(
+    info: dict,
+    usual: LiveQb | None,
+    replacements: list[LiveQb],
+    known: dict[str, LiveQb],
+) -> LiveQb | None:
+    starter_id = info["home_qb_id"] if info["side"] == "home" else info["away_qb_id"]
+    starter_name = info["home_qb_name"] if info["side"] == "home" else info["away_qb_name"]
+    if not starter_id:
+        return usual
+    if usual is not None and starter_id == usual.player_id:
+        return usual
+    for qb in replacements:
+        if qb.player_id == starter_id:
+            return qb
+    found = known.get(starter_id)
+    if found is not None:
+        return LiveQb(
+            found.player_id,
+            starter_name or found.name,
+            found.epa,
+            found.dropbacks,
+        )
+    return LiveQb(starter_id, starter_name or starter_id, BACKUP_EPA, 0.0)
+
+
+def version_two(schedule, games, v1) -> dict:
+    """Fit version 2 on the same completed games and describe the next week."""
+    print("Building version 2 features...", flush=True)
+    seasons = list(range(FIRST_SEASON, int(schedule["season"].max()) + 1))
+    extra = _lookup(schedule)
+    kept = {game.game_id for game in games}
+    print("Reading historical weather...", flush=True)
+    weather = historical_weather(weather_rows(extra, kept), CACHE / "weather")
+    counts = weather_counts(weather)
+    print("Weather", counts, flush=True)
+    contexts = attach_longitudes(contexts_for(games, extra, weather), extra, CACHE / "weather")
+    quarterbacks = load_quarterbacks(CACHE, seasons)
+    snaps = load_snaps(CACHE, seasons)
+    detailed_outs = load_out_players(CACHE, seasons)
+    built, live = assemble_v2(contexts, quarterbacks, snaps, detailed_outs)
+    print(f"Version 2 rows: {len(built)}. Walking forward...", flush=True)
+    result = walk_forward_v2(built)
+    if result.primary.games < ADOPTION_MIN_GAMES:
+        raise SystemExit(
+            f"Version 2 scored only {result.primary.games} games. The feature build looks short."
+        )
+    adopted = adopt_v2(
+        v1_brier=v1.brier,
+        v1_log_loss=v1.log_loss,
+        v2_brier=result.brier,
+        v2_log_loss=result.log_loss,
+        games=result.brier_count,
+    )
+    helped = differs_helped(result.flagged)
+    edge = has_betting_edge(result.primary)
+    future = [
+        info
+        for info in extra.values()
+        if info["home_score"] is None and info["game_type"] == "REG"
+    ]
+    planned: dict[str, dict] = {}
+    if future:
+        season = min(info["season"] for info in future)
+        week = min(info["week"] for info in future if info["season"] == season)
+        for info in future:
+            if info["season"] != season or info["week"] != week:
+                continue
+            for side, team in (("home", info["home"]), ("away", info["away"])):
+                planned[team] = {**info, "side": side}
+    teams = {}
+    for abbr, team in live.teams.items():
+        if abbr not in TEAM_NAMES:
+            continue
+        usual = team.usual
+        plan_info = planned.get(abbr)
+        plan = (
+            _planned_qb(plan_info, usual, team.replacements, live.known_qbs)
+            if plan_info
+            else usual
+        )
+        teams[abbr] = {
+            "homeLon": None if team.home_lon is None else _round(team.home_lon, 4),
+            "usualQb": _qb_json(usual),
+            "plannedQb": _qb_json(plan),
+            "replacements": [_qb_json(qb) for qb in team.replacements if qb is not None],
+        }
+    players = [
+        {
+            "team": player.team,
+            "name": player.name,
+            "position": player.position,
+            "points": _round(player.points, 3),
+        }
+        for player in live.players
+        if player.team in TEAM_NAMES
+    ]
+    print("Reading forecasts...", flush=True)
+    forecasts = upcoming_forecasts(extra, CACHE / "weather")
+    scales = result.scales
+    summary = v2_plain(result, adopted, helped)
+    block = {
+        "adopted": adopted,
+        "hasEdge": edge,
+        "differsHelped": helped,
+        "sigma": MARGIN_SIGMA,
+        "totalSigma": TOTAL_SIGMA,
+        "marginCap": MARGIN_CAP,
+        "totalCap": TOTAL_CAP,
+        "scales": {
+            "qb": _round(scales.qb),
+            "injury": _round(scales.injury),
+            "rest": _round(scales.rest),
+            "travel": _round(scales.travel),
+            "weather": _round(scales.weather),
+            "injuryTotal": _round(scales.injury_total),
+            "qbTotal": _round(scales.qb_total),
+        },
+        "coverCalibration": {
+            "intercept": _round(result.cover_platt[0]),
+            "slope": _round(result.cover_platt[1]),
+        },
+        "totalCalibration": {
+            "intercept": _round(result.total_platt[0]),
+            "slope": _round(result.total_platt[1]),
+        },
+        "weather": {
+            "backtest": "Open-Meteo archive, kickoff hour, Eastern time",
+            "forecast": "National Weather Service, then Open-Meteo",
+            "archiveGames": counts.get("open-meteo-archive", 0),
+            "fallbackGames": counts.get("nflverse-fallback", 0),
+            "missingGames": counts.get("missing", 0),
+            "attribution": "Historical and forecast weather from Open-Meteo.com. US forecasts from the National Weather Service.",
+        },
+        "backtest": {
+            "method": (
+                "Walk-forward by week. The line starts at the closing number. "
+                "Scales and the recalibration use only earlier weeks. Same-week games are not used."
+            ),
+            "seasons": result.seasons,
+            "stake": "1.10 staked to win 1.00, the usual -110 price",
+            "breakEvenHitRate": _round(110 / 210),
+            "games": result.primary.games,
+            "decided": result.primary.decided,
+            "wins": result.primary.wins,
+            "losses": result.primary.losses,
+            "pushes": result.primary.pushes,
+            "hitRate": None if result.primary.hit_rate is None else _round(result.primary.hit_rate),
+            "roi": None if result.primary.roi is None else _round(result.primary.roi),
+            "brier": None if result.brier is None else _round(result.brier),
+            "logLoss": None if result.log_loss is None else _round(result.log_loss),
+            "calibration": [
+                {
+                    "from": _round(bin_["from"], 2),
+                    "to": _round(bin_["to"], 2),
+                    "games": int(bin_["games"]),
+                    "predicted": _round(bin_["predicted"]),
+                    "actual": _round(bin_["actual"]),
+                }
+                for bin_ in result.calibration
+            ],
+            "clvBeatRate": None if result.clv_beat_rate is None else _round(result.clv_beat_rate),
+            "clvGames": result.clv_games,
+            "meanModelError": None
+            if result.mean_model_error is None
+            else _round(result.mean_model_error),
+            "meanMarketError": None
+            if result.mean_market_error is None
+            else _round(result.mean_market_error),
+            "favoriteHitRate": None,
+            "homeHitRate": None,
+            "flagged": {
+                **_score_json(result.flagged),
+                "rule": (
+                    "The side version 2 liked, only when its number and the close "
+                    f"differed by {SPREAD_EDGE_POINTS:.1f} points or more."
+                ),
+            },
+            "totals": _score_json(result.overs),
+            "hasEdge": edge,
+            "plainEnglish": summary,
+        },
+        "teams": teams,
+        "players": players,
+        "forecasts": forecasts,
+    }
+    print(
+        "v2 games",
+        result.primary.games,
+        "hit",
+        block["backtest"]["hitRate"],
+        "roi",
+        block["backtest"]["roi"],
+        "brier",
+        block["backtest"]["brier"],
+        "logLoss",
+        block["backtest"]["logLoss"],
+        "closer",
+        block["backtest"]["clvBeatRate"],
+        "adopted",
+        adopted,
+        "edge",
+        edge,
+        "differs",
+        helped,
+    )
+    print(summary)
+    return block
+
+
 def main() -> None:
     schedule = load_schedule()
     latest = int(schedule["season"].max())
@@ -499,6 +748,8 @@ def main() -> None:
     print(f"Rated games: {len(rated)}. Walking forward...", flush=True)
     result = walk_forward(rated)
     document = build_document(team_games, schedule, outs, result, date.today())
+    document["v2"] = version_two(schedule, games, result)
+    document["version"] = 2
     validate(document)
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")

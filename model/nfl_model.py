@@ -189,6 +189,15 @@ def sigmoid(logit: float) -> float:
     return float(1.0 / (1.0 + np.exp(-logit)))
 
 
+def bernoulli_log_loss(probability: float, outcome: float) -> float:
+    """Negative log probability of a 0/1 result. Clipped so a 0 or 1 cannot explode."""
+    if not np.isfinite(probability) or not np.isfinite(outcome):
+        raise ValueError("Log loss inputs must be finite")
+    probability = float(min(1.0 - 1e-6, max(1e-6, probability)))
+    y = float(outcome)
+    return float(-(y * np.log(probability) + (1.0 - y) * np.log(1.0 - probability)))
+
+
 def logistic_probability(
     features: dict[str, float],
     names: Sequence[str],
@@ -755,6 +764,8 @@ class WalkForwardResult:
     seasons: list[int]
     brier_sum: float
     brier_count: int
+    log_loss_sum: float
+    log_loss_count: int
     calibration: list[dict[str, float]]
     clv_beats: int
     clv_games: int
@@ -776,6 +787,12 @@ class WalkForwardResult:
         if self.brier_count == 0:
             return None
         return self.brier_sum / self.brier_count
+
+    @property
+    def log_loss(self) -> float | None:
+        if self.log_loss_count == 0:
+            return None
+        return self.log_loss_sum / self.log_loss_count
 
     @property
     def clv_beat_rate(self) -> float | None:
@@ -811,6 +828,8 @@ def walk_forward(
     seasons: set[int] = set()
     brier_sum = 0.0
     brier_count = 0
+    log_loss_sum = 0.0
+    log_loss_count = 0
     clv_beats = 0
     clv_games = 0
     model_error_sum = 0.0
@@ -883,8 +902,11 @@ def walk_forward(
             probability = cover_model.predict(features)
             covered = home_covered(row.margin, row.spread_line)
             if covered is not None:
-                brier_sum += (probability - (1.0 if covered else 0.0)) ** 2
+                outcome = 1.0 if covered else 0.0
+                brier_sum += (probability - outcome) ** 2
                 brier_count += 1
+                log_loss_sum += bernoulli_log_loss(probability, outcome)
+                log_loss_count += 1
                 calibration_rows.append((probability, 1 if covered else 0))
                 home_decided += 1
                 if covered:
@@ -956,6 +978,8 @@ def walk_forward(
         seasons=sorted(seasons),
         brier_sum=brier_sum,
         brier_count=brier_count,
+        log_loss_sum=log_loss_sum,
+        log_loss_count=log_loss_count,
         calibration=bins,
         clv_beats=clv_beats,
         clv_games=clv_games,

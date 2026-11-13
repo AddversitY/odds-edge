@@ -197,6 +197,7 @@ class _ParlaysScreenState extends State<ParlaysScreen> {
             widget.board.quotes,
             settings: widget.settings,
             books: widget.enabledBooks,
+            injuries: widget.injuries,
           );
     final chance = _modelChance(line, leg.quote.selection);
     final other = _paired(scan, leg.quote.selection);
@@ -236,6 +237,7 @@ class _ParlaysScreenState extends State<ParlaysScreen> {
         widget.board.quotes,
         settings: widget.settings,
         books: widget.enabledBooks,
+        injuries: widget.injuries,
       );
       if (line == null) continue;
       final spreads = scan.markets.where(

@@ -3,8 +3,11 @@ import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 
+import 'coach_line_v2.dart';
+import 'injury_report.dart';
 import 'nfl_teams.dart';
 import 'odds.dart';
+import 'value_check.dart';
 
 /// How much a past game still counts. A game one half-life ago counts half.
 double decayWeight(int daysAgo, {double halfLifeDays = 42}) {
@@ -308,6 +311,7 @@ class BacktestReport {
     required this.totalsRoi,
     required this.hasEdge,
     required this.plainEnglish,
+    this.logLoss,
     this.breakEvenHitRate = 0.52381,
   });
 
@@ -321,6 +325,7 @@ class BacktestReport {
   final double? hitRate;
   final double? roi;
   final double? brier;
+  final double? logLoss;
   final List<CalibrationBin> calibration;
   final double? clvBeatRate;
   final int clvGames;
@@ -378,6 +383,7 @@ class CoachModel {
     required this.total,
     required this.teams,
     required this.backtest,
+    this.lineVersion,
   });
 
   final String? generatedAt;
@@ -392,6 +398,12 @@ class CoachModel {
   final LogisticModel total;
   final List<TeamStrength> teams;
   final BacktestReport backtest;
+  final LineVersion? lineVersion;
+
+  bool get usesV2 => lineVersion?.adopted == true;
+
+  BacktestReport get liveReport =>
+      usesV2 ? lineVersion!.report : backtest;
 
   TeamStrength? team(String nameOrAbbr) {
     final abbr = canonicalTeam(nameOrAbbr);
@@ -407,18 +419,19 @@ class CoachModel {
     List<OddsQuote> quotes, {
     required EdgeSettings settings,
     Set<String>? books,
+    InjuryReport? injuries,
   }) {
     final home = team(event.home);
     final away = team(event.away);
     if (home == null || away == null) return null;
     final market = readMarketLine(event, quotes, books: books);
-    final ourMargin = projectedMargin(
+    var ourMargin = projectedMargin(
       homeNet: home.netEpa,
       awayNet: away.netEpa,
       scale: marginScale,
       homeField: homeFieldAdvantage,
     );
-    final ourTotal = projectedTotal(
+    var ourTotal = projectedTotal(
       homeOff: home.offEpa,
       homeDef: home.defEpa,
       awayOff: away.offEpa,
@@ -430,30 +443,68 @@ class CoachModel {
     final awayRest = restDays(away.lastGame, event.startsAt);
     double? homeCover;
     double? overChance;
-    if (homeRest != null && awayRest != null && market.homeSpread != null) {
-      final marketMargin = -market.homeSpread!;
-      homeCover = cover.probability({
-        'spread_edge': ourMargin - marketMargin,
-        'off_diff': home.offEpa - away.offEpa,
-        'def_diff': away.defEpa - home.defEpa,
-        'form_diff': home.formEpa - away.formEpa,
-        'rest_diff': (homeRest - awayRest).toDouble(),
-        'success_diff': home.successRate - away.successRate,
-        'explosive_diff': home.explosiveRate - away.explosiveRate,
-        'turnover_diff': away.turnoverRate - home.turnoverRate,
-        'out_diff': (away.playersOut - home.playersOut).toDouble(),
-      });
+    final version = lineVersion;
+    final homeAbbr = canonicalTeam(event.home);
+    final awayAbbr = canonicalTeam(event.away);
+    LineBreakdown? breakdown;
+    if (version != null &&
+        market.homeSpread != null &&
+        homeAbbr != null &&
+        awayAbbr != null) {
+      breakdown = projectVersion2(
+        scales: version.scales,
+        cover: version.cover,
+        totalFit: version.total,
+        sigma: version.sigma,
+        totalSigma: version.totalSigma,
+        marginCap: version.marginCap,
+        totalCap: version.totalCap,
+        teams: version.teams,
+        players: version.players,
+        forecasts: version.forecasts,
+        home: homeAbbr,
+        away: awayAbbr,
+        marketMargin: -market.homeSpread!,
+        marketTotal: market.total,
+        marketCover: market.homeCoverFair,
+        marketOver: market.overFair,
+        marketSource: market.sourceLabel,
+        homeRest: homeRest,
+        awayRest: awayRest,
+        injuries: injuries,
+      );
     }
-    if (homeRest != null && awayRest != null && market.total != null) {
-      overChance = total.probability({
-        'total_edge': ourTotal - market.total!,
-        'off_sum': home.offEpa + away.offEpa,
-        'def_sum': home.defEpa + away.defEpa,
-        'explosive_sum': home.explosiveRate + away.explosiveRate,
-        'success_sum': home.successRate + away.successRate,
-        'rest_sum': (homeRest + awayRest).toDouble(),
-        'out_sum': (home.playersOut + away.playersOut).toDouble(),
-      });
+    if (usesV2 && breakdown != null) {
+      ourMargin = breakdown.finalMargin;
+      if (breakdown.finalTotal != null) ourTotal = breakdown.finalTotal!;
+      homeCover = breakdown.homeCover;
+      overChance = breakdown.overChance;
+    } else {
+      if (homeRest != null && awayRest != null && market.homeSpread != null) {
+        final marketMargin = -market.homeSpread!;
+        homeCover = cover.probability({
+          'spread_edge': ourMargin - marketMargin,
+          'off_diff': home.offEpa - away.offEpa,
+          'def_diff': away.defEpa - home.defEpa,
+          'form_diff': home.formEpa - away.formEpa,
+          'rest_diff': (homeRest - awayRest).toDouble(),
+          'success_diff': home.successRate - away.successRate,
+          'explosive_diff': home.explosiveRate - away.explosiveRate,
+          'turnover_diff': away.turnoverRate - home.turnoverRate,
+          'out_diff': (away.playersOut - home.playersOut).toDouble(),
+        });
+      }
+      if (homeRest != null && awayRest != null && market.total != null) {
+        overChance = total.probability({
+          'total_edge': ourTotal - market.total!,
+          'off_sum': home.offEpa + away.offEpa,
+          'def_sum': home.defEpa + away.defEpa,
+          'explosive_sum': home.explosiveRate + away.explosiveRate,
+          'success_sum': home.successRate + away.successRate,
+          'rest_sum': (homeRest + awayRest).toDouble(),
+          'out_sum': (home.playersOut + away.playersOut).toDouble(),
+        });
+      }
     }
     return CoachLine(
       event: event,
@@ -470,6 +521,11 @@ class CoachModel {
       overPrice: market.overPrice,
       underPrice: market.underPrice,
       settings: settings,
+      marketSource: market.sourceLabel,
+      marketFirst: !liveReport.hasEdge,
+      differsAllowed: usesV2 ? version!.differsHelped : true,
+      breakdown: breakdown,
+      breakdownIsLive: usesV2 && breakdown != null,
     );
   }
 
@@ -490,16 +546,6 @@ class CoachModel {
         teams is! List) {
       throw const FormatException('Coach model file is missing a section.');
     }
-    final flagged = backtest['flagged'];
-    final totals = backtest['totals'];
-    if (flagged is! Map || totals is! Map) {
-      throw const FormatException('Coach model backtest is missing a section.');
-    }
-    final seasons = backtest['seasons'];
-    if (seasons is! List) {
-      throw const FormatException('Coach model seasons are missing.');
-    }
-    final bins = backtest['calibration'];
     return CoachModel(
       generatedAt: json['generatedAt']?.toString(),
       asOf: json['asOf']?.toString(),
@@ -535,48 +581,193 @@ class CoachModel {
           if (team is Map)
             TeamStrength.fromJson(Map<String, dynamic>.from(team)),
       ],
-      backtest: BacktestReport(
-        method: '${backtest['method'] ?? ''}',
-        seasons: [for (final season in seasons) (season as num).toInt()],
-        games: _asInt(backtest['games']),
-        decided: _asInt(backtest['decided']),
-        wins: _asInt(backtest['wins']),
-        losses: _asInt(backtest['losses']),
-        pushes: _asInt(backtest['pushes']),
-        hitRate: _maybeDouble(backtest['hitRate']),
-        roi: _maybeDouble(backtest['roi']),
-        brier: _maybeDouble(backtest['brier']),
-        calibration: [
-          if (bins is List)
-            for (final bin in bins)
-              if (bin is Map)
-                CalibrationBin(
-                  from: _asDouble(bin['from'], 'from'),
-                  to: _asDouble(bin['to'], 'to'),
-                  games: _asInt(bin['games']),
-                  predicted: _asDouble(bin['predicted'], 'predicted'),
-                  actual: _asDouble(bin['actual'], 'actual'),
-                ),
-        ],
-        clvBeatRate: _maybeDouble(backtest['clvBeatRate']),
-        clvGames: _asInt(backtest['clvGames']),
-        meanModelError: _maybeDouble(backtest['meanModelError']),
-        meanMarketError: _maybeDouble(backtest['meanMarketError']),
-        favoriteHitRate: _maybeDouble(backtest['favoriteHitRate']),
-        homeHitRate: _maybeDouble(backtest['homeHitRate']),
-        flaggedGames: _asInt(flagged['games']),
-        flaggedDecided: _asInt(flagged['decided']),
-        flaggedHitRate: _maybeDouble(flagged['hitRate']),
-        flaggedRoi: _maybeDouble(flagged['roi']),
-        flaggedRule: '${flagged['rule'] ?? ''}',
-        totalsHitRate: _maybeDouble(totals['hitRate']),
-        totalsRoi: _maybeDouble(totals['roi']),
-        hasEdge: backtest['hasEdge'] == true,
-        plainEnglish: '${backtest['plainEnglish'] ?? ''}',
-        breakEvenHitRate: _maybeDouble(backtest['breakEvenHitRate']) ?? 0.52381,
-      ),
+      backtest: _readBacktest(backtest),
+      lineVersion: _readLineVersion(json['v2']),
     );
   }
+}
+
+BacktestReport _readBacktest(Map<dynamic, dynamic> backtest) {
+  final flagged = backtest['flagged'];
+  final totals = backtest['totals'];
+  if (flagged is! Map || totals is! Map) {
+    throw const FormatException('Coach model backtest is missing a section.');
+  }
+  final seasons = backtest['seasons'];
+  if (seasons is! List) {
+    throw const FormatException('Coach model seasons are missing.');
+  }
+  final bins = backtest['calibration'];
+  return BacktestReport(
+    method: '${backtest['method'] ?? ''}',
+    seasons: [for (final season in seasons) (season as num).toInt()],
+    games: _asInt(backtest['games']),
+    decided: _asInt(backtest['decided']),
+    wins: _asInt(backtest['wins']),
+    losses: _asInt(backtest['losses']),
+    pushes: _asInt(backtest['pushes']),
+    hitRate: _maybeDouble(backtest['hitRate']),
+    roi: _maybeDouble(backtest['roi']),
+    brier: _maybeDouble(backtest['brier']),
+    logLoss: _maybeDouble(backtest['logLoss']),
+    calibration: [
+      if (bins is List)
+        for (final bin in bins)
+          if (bin is Map)
+            CalibrationBin(
+              from: _asDouble(bin['from'], 'from'),
+              to: _asDouble(bin['to'], 'to'),
+              games: _asInt(bin['games']),
+              predicted: _asDouble(bin['predicted'], 'predicted'),
+              actual: _asDouble(bin['actual'], 'actual'),
+            ),
+    ],
+    clvBeatRate: _maybeDouble(backtest['clvBeatRate']),
+    clvGames: _asInt(backtest['clvGames']),
+    meanModelError: _maybeDouble(backtest['meanModelError']),
+    meanMarketError: _maybeDouble(backtest['meanMarketError']),
+    favoriteHitRate: _maybeDouble(backtest['favoriteHitRate']),
+    homeHitRate: _maybeDouble(backtest['homeHitRate']),
+    flaggedGames: _asInt(flagged['games']),
+    flaggedDecided: _asInt(flagged['decided']),
+    flaggedHitRate: _maybeDouble(flagged['hitRate']),
+    flaggedRoi: _maybeDouble(flagged['roi']),
+    flaggedRule: '${flagged['rule'] ?? ''}',
+    totalsHitRate: _maybeDouble(totals['hitRate']),
+    totalsRoi: _maybeDouble(totals['roi']),
+    hasEdge: backtest['hasEdge'] == true,
+    plainEnglish: '${backtest['plainEnglish'] ?? ''}',
+    breakEvenHitRate: _maybeDouble(backtest['breakEvenHitRate']) ?? 0.52381,
+  );
+}
+
+LineVersion? _readLineVersion(Object? raw) {
+  if (raw is! Map) return null;
+  final backtest = raw['backtest'];
+  final scales = raw['scales'];
+  if (backtest is! Map || scales is! Map) return null;
+  final teams = <String, V2TeamContext>{};
+  final teamRaw = raw['teams'];
+  if (teamRaw is Map) {
+    for (final entry in teamRaw.entries) {
+      if (entry.value is! Map) continue;
+      final team = Map<String, dynamic>.from(entry.value as Map);
+      final replacements = <V2Quarterback>[];
+      final listed = team['replacements'];
+      if (listed is List) {
+        for (final item in listed) {
+          if (item is Map) replacements.add(V2Quarterback.fromJson(item));
+        }
+      }
+      final lon = team['homeLon'];
+      teams['${entry.key}'] = V2TeamContext(
+        homeLon: lon is num ? lon.toDouble() : null,
+        usual: team['usualQb'] == null
+            ? null
+            : V2Quarterback.fromJson(team['usualQb']),
+        planned: team['plannedQb'] == null
+            ? null
+            : V2Quarterback.fromJson(team['plannedQb']),
+        replacements: replacements,
+      );
+    }
+  }
+  final players = <V2PlayerWeight>[];
+  final playerRaw = raw['players'];
+  if (playerRaw is List) {
+    for (final item in playerRaw) {
+      if (item is! Map) continue;
+      players.add(
+        V2PlayerWeight(
+          team: '${item['team'] ?? ''}',
+          name: '${item['name'] ?? ''}',
+          position: '${item['position'] ?? ''}',
+          points: item['points'] is num ? (item['points'] as num).toDouble() : 0,
+        ),
+      );
+    }
+  }
+  final forecasts = <GameForecast>[];
+  final forecastRaw = raw['forecasts'];
+  if (forecastRaw is List) {
+    for (final item in forecastRaw) {
+      if (item is! Map) continue;
+      double? numOrNull(Object? value) =>
+          value is num ? value.toDouble() : null;
+      forecasts.add(
+        GameForecast(
+          home: '${item['home'] ?? ''}',
+          away: '${item['away'] ?? ''}',
+          stadium: '${item['stadium'] ?? ''}',
+          openRoof: item['openRoof'] == true,
+          windMph: numOrNull(item['windMph']),
+          tempF: numOrNull(item['tempF']),
+          precipMm: numOrNull(item['precipMm']),
+          source: '${item['source'] ?? ''}',
+          at: '${item['at'] ?? ''}',
+          longitude: numOrNull(item['longitude']),
+        ),
+      );
+    }
+  }
+  final weather = raw['weather'];
+  return LineVersion(
+    adopted: raw['adopted'] == true,
+    hasEdge: raw['hasEdge'] == true,
+    differsHelped: raw['differsHelped'] == true,
+    sigma: raw['sigma'] is num ? (raw['sigma'] as num).toDouble() : 13,
+    totalSigma: raw['totalSigma'] is num
+        ? (raw['totalSigma'] as num).toDouble()
+        : 13,
+    marginCap: raw['marginCap'] is num
+        ? (raw['marginCap'] as num).toDouble()
+        : 4,
+    totalCap: raw['totalCap'] is num ? (raw['totalCap'] as num).toDouble() : 6,
+    scales: V2Scales.fromJson(Map<String, dynamic>.from(scales)),
+    cover: PlattFit.fromJson(raw['coverCalibration']),
+    total: PlattFit.fromJson(raw['totalCalibration']),
+    report: _readBacktest(backtest),
+    teams: teams,
+    players: players,
+    forecasts: forecasts,
+    weatherNote: weather is Map ? '${weather['attribution'] ?? ''}' : '',
+  );
+}
+
+class LineVersion {
+  const LineVersion({
+    required this.adopted,
+    required this.hasEdge,
+    required this.differsHelped,
+    required this.sigma,
+    required this.totalSigma,
+    required this.marginCap,
+    required this.totalCap,
+    required this.scales,
+    required this.cover,
+    required this.total,
+    required this.report,
+    required this.teams,
+    required this.players,
+    required this.forecasts,
+    required this.weatherNote,
+  });
+
+  final bool adopted;
+  final bool hasEdge;
+  final bool differsHelped;
+  final double sigma;
+  final double totalSigma;
+  final double marginCap;
+  final double totalCap;
+  final V2Scales scales;
+  final PlattFit cover;
+  final PlattFit total;
+  final BacktestReport report;
+  final Map<String, V2TeamContext> teams;
+  final List<V2PlayerWeight> players;
+  final List<GameForecast> forecasts;
+  final String weatherNote;
 }
 
 class MarketLine {
@@ -587,6 +778,9 @@ class MarketLine {
     this.awaySpreadPrice,
     this.overPrice,
     this.underPrice,
+    this.sourceLabel = 'Books',
+    this.homeCoverFair = 0.5,
+    this.overFair = 0.5,
   });
 
   /// Home team's number. Negative means the home team is laying points.
@@ -596,6 +790,13 @@ class MarketLine {
   final OddsQuote? awaySpreadPrice;
   final OddsQuote? overPrice;
   final OddsQuote? underPrice;
+
+  /// "Pinnacle" when that book posted both sides, otherwise "Books".
+  final String sourceLabel;
+
+  /// No-vig chance the home side covers, and the no-vig chance of the over.
+  final double homeCoverFair;
+  final double overFair;
 }
 
 class SideEdge {
@@ -634,6 +835,11 @@ class CoachLine {
     required this.overPrice,
     required this.underPrice,
     required this.settings,
+    this.marketSource = 'Books',
+    this.marketFirst = false,
+    this.differsAllowed = true,
+    this.breakdown,
+    this.breakdownIsLive = false,
   });
 
   final SportEvent event;
@@ -650,6 +856,11 @@ class CoachLine {
   final OddsQuote? overPrice;
   final OddsQuote? underPrice;
   final EdgeSettings settings;
+  final String marketSource;
+  final bool marketFirst;
+  final bool differsAllowed;
+  final LineBreakdown? breakdown;
+  final bool breakdownIsLive;
 
   double? get marketMargin =>
       marketHomeSpread == null ? null : -marketHomeSpread!;
@@ -678,10 +889,11 @@ class CoachLine {
   SideEdge? get underEdge => _totalEdge(over: false);
 
   bool get flagged =>
-      (homeSpreadEdge?.flagged ?? false) ||
-      (awaySpreadEdge?.flagged ?? false) ||
-      (overEdge?.flagged ?? false) ||
-      (underEdge?.flagged ?? false);
+      differsAllowed &&
+      ((homeSpreadEdge?.flagged ?? false) ||
+          (awaySpreadEdge?.flagged ?? false) ||
+          (overEdge?.flagged ?? false) ||
+          (underEdge?.flagged ?? false));
 
   String get edgeReason {
     final reasons = <String>[
@@ -691,7 +903,7 @@ class CoachLine {
       if (underEdge?.flagged ?? false) underEdge!.reason,
     ];
     if (reasons.isEmpty) {
-      return 'Our number is close to the books at the current setting. It can still be compared. This is a comparison, not a pick.';
+      return 'Our number is close to the books at the current setting. It can still be compared.';
     }
     return reasons.join(' ');
   }
@@ -801,12 +1013,12 @@ String _reason({
   final byPrice = profit != null && profit > 0;
   final gapText = pointGap.abs().toStringAsFixed(1);
   if (byPoints && byPrice) {
-    return '$name differs from the books by $gapText points, and the best price in this snapshot is longer than our chance. The past test of this number lost money. Comparison, not a pick.';
+    return '$name differs from the books by $gapText points, and the best price in this snapshot is longer than our chance. The past test of this number lost money.';
   }
   if (byPoints) {
-    return '$name differs from the books by $gapText points. The past test of this number lost money. Comparison, not a pick.';
+    return '$name differs from the books by $gapText points. The past test of this number lost money.';
   }
-  return 'The best price on $name is longer than our chance. The past test of this number lost money. Comparison, not a pick.';
+  return 'The best price on $name is longer than our chance. The past test of this number lost money.';
 }
 
 /// Days from the last game to kickoff, using the UTC date. Null when the last
@@ -868,7 +1080,14 @@ MarketLine readMarketLine(
       totals.add(quote.selection.point!);
     }
   }
-  var homeSpread = _mode(homeSpreads);
+  final pinSpread = _pinnaclePair(
+    quotes,
+    open,
+    market: 'spreads',
+    homeOutcome: event.home,
+    awayOutcome: event.away,
+  );
+  var homeSpread = pinSpread?.point ?? _mode(homeSpreads);
   if (homeSpread == null) {
     final awaySpreads = <double>[];
     for (final quote in quotes) {
@@ -880,7 +1099,14 @@ MarketLine readMarketLine(
     }
     homeSpread = _mode(awaySpreads);
   }
-  final total = _mode(totals);
+  final pinTotal = _pinnaclePair(
+    quotes,
+    open,
+    market: 'totals',
+    homeOutcome: 'Over',
+    awayOutcome: 'Under',
+  );
+  final total = pinTotal?.point ?? _mode(totals);
   OddsQuote? best(bool Function(OddsQuote quote) match) {
     OddsQuote? chosen;
     for (final quote in quotes) {
@@ -895,9 +1121,34 @@ MarketLine readMarketLine(
 
   final spread = homeSpread;
   final marketTotal = total;
+  final coverFair = pinSpread != null
+      ? (noVigChance(pinSpread.homeDecimal, pinSpread.awayDecimal) ?? 0.5)
+      : _averageNoVig(
+          quotes,
+          open,
+          market: 'spreads',
+          side: event.home,
+          other: event.away,
+          point: spread,
+          otherPoint: spread == null ? null : -spread,
+        );
+  final overFair = pinTotal != null
+      ? (noVigChance(pinTotal.homeDecimal, pinTotal.awayDecimal) ?? 0.5)
+      : _averageNoVig(
+          quotes,
+          open,
+          market: 'totals',
+          side: 'Over',
+          other: 'Under',
+          point: marketTotal,
+          otherPoint: marketTotal,
+        );
   return MarketLine(
     homeSpread: spread,
     total: marketTotal,
+    sourceLabel: pinSpread != null ? 'Pinnacle' : 'Books',
+    homeCoverFair: coverFair,
+    overFair: overFair,
     homeSpreadPrice: spread == null
         ? null
         : best(
@@ -931,6 +1182,85 @@ MarketLine readMarketLine(
                 near(quote.selection.point, marketTotal),
           ),
   );
+}
+
+class _BookPair {
+  const _BookPair({
+    required this.point,
+    required this.homeDecimal,
+    required this.awayDecimal,
+  });
+
+  final double point;
+  final double homeDecimal;
+  final double awayDecimal;
+}
+
+double _halfPoint(double point) => (point * 2).round() / 2;
+
+_BookPair? _pinnaclePair(
+  List<OddsQuote> quotes,
+  bool Function(OddsQuote quote) open, {
+  required String market,
+  required String homeOutcome,
+  required String awayOutcome,
+}) {
+  final home = <double, double>{};
+  final away = <double, double>{};
+  for (final quote in quotes) {
+    if (!open(quote) || quote.bookId != 'pinnacle') continue;
+    if (quote.selection.market != market || quote.selection.point == null) {
+      continue;
+    }
+    final point = _halfPoint(quote.selection.point!);
+    if (quote.selection.outcome == homeOutcome) home[point] = quote.decimal;
+    if (quote.selection.outcome == awayOutcome) away[point] = quote.decimal;
+  }
+  for (final entry in home.entries) {
+    final other = market == 'totals' ? away[entry.key] : away[-entry.key];
+    if (other == null) continue;
+    return _BookPair(
+      point: entry.key,
+      homeDecimal: entry.value,
+      awayDecimal: other,
+    );
+  }
+  return null;
+}
+
+double _averageNoVig(
+  List<OddsQuote> quotes,
+  bool Function(OddsQuote quote) open, {
+  required String market,
+  required String side,
+  required String other,
+  required double? point,
+  required double? otherPoint,
+}) {
+  if (point == null || otherPoint == null) return 0.5;
+  final home = <String, double>{};
+  final away = <String, double>{};
+  for (final quote in quotes) {
+    if (!open(quote) || quote.selection.market != market) continue;
+    if (quote.selection.point == null) continue;
+    final posted = _halfPoint(quote.selection.point!);
+    if (quote.selection.outcome == side && (posted - point).abs() < 0.01) {
+      home[quote.bookId] = quote.decimal;
+    } else if (quote.selection.outcome == other &&
+        (posted - otherPoint).abs() < 0.01) {
+      away[quote.bookId] = quote.decimal;
+    }
+  }
+  var sum = 0.0;
+  var count = 0;
+  for (final entry in home.entries) {
+    final fair = noVigChance(entry.value, away[entry.key]);
+    if (fair == null) continue;
+    sum += fair;
+    count += 1;
+  }
+  if (count == 0) return 0.5;
+  return sum / count;
 }
 
 double? _mode(List<double> points) {
