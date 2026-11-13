@@ -32,7 +32,8 @@ class ModelScreen extends StatelessWidget {
         ),
       );
     }
-    final report = loaded.backtest;
+    final report = loaded.liveReport;
+    final version = loaded.lineVersion;
     final verdict = report.hasEdge ? 'Past edge' : 'No edge';
     final hit = report.hitRate == null ? '—' : percentLabel(report.hitRate!);
     return Column(
@@ -59,16 +60,18 @@ class ModelScreen extends StatelessWidget {
               Text(report.plainEnglish, style: EdgeType.body),
             ],
           ),
-          reasons: const Column(
+          reasons: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              const Text(
                 'Each team gets a strength number from how the offense and the defense have played. The stat is EPA per play, from nflverse play-by-play: about how many points a play added, compared with an average play. Newer games count more. A game from about six weeks ago counts half as much. A short sample is pulled back toward average so one blowout cannot rewrite a team.',
                 style: EdgeType.body,
               ),
-              SizedBox(height: 12),
+              const SizedBox(height: 12),
               Text(
-                'The chance a team covers, and the chance the over hits, come from a small model. It looks at both teams, recent games, rest, and a count of players listed Out. It then compares our number with the line on the screen. The injury report is not the final inactive list. Weather is not in the model. It is not a tip.',
+                version != null && version.adopted
+                    ? 'The number starts at the books. Version 2 then adds the quarterback, injuries weighted by position and snaps, weather on an open roof, rest, and travel. The size of each nudge was fit on earlier weeks only. ${version.weatherNote}'
+                    : 'The chance a team covers, and the chance the over hits, come from a small model. It looks at both teams, recent games, rest, and a count of players listed Out. It then compares our number with the line on the screen. The injury report is not the final inactive list. Weather is not in the model. It is not a tip.',
                 style: EdgeType.body,
               ),
             ],

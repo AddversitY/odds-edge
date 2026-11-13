@@ -111,6 +111,7 @@ class _GamesScreenState extends State<GamesScreen> {
             widget.board.quotes,
             settings: widget.settings,
             books: widget.enabledBooks,
+            injuries: widget.injuries,
           ),
         ),
       ),
@@ -177,6 +178,7 @@ class _GamesScreenState extends State<GamesScreen> {
                 widget.board.quotes,
                 settings: widget.settings,
                 books: widget.enabledBooks,
+                injuries: widget.injuries,
               ),
               onOpen: () => _open(game),
             ),
@@ -374,14 +376,25 @@ class _GameDetail extends StatelessWidget {
               injuries: injuries,
             ),
           const SizedBox(height: 12),
-          const ToolNote(
-            'Place the bet at the sportsbook. This app does not send it. '
-            "Coach's Line uses past nflverse games, shared under CC BY 4.0. Odds Edge is not affiliated with nflverse. "
-            'The injury count is only players listed Out, not a starting lineup. Weather is not in the model. '
-            'A model does not guarantee the result.',
+          ToolNote(
+            line?.breakdownIsLive == true
+                ? 'Place the bet at the sportsbook. This app does not send it. '
+                      "Coach's Line starts from the books' number, then adds the quarterback, weighted injuries, open-roof weather, rest, and travel. "
+                      'Past nflverse games are shared under CC BY 4.0. Odds Edge is not affiliated with nflverse. '
+                      'Weather for past games is from Open-Meteo. A US forecast is from the National Weather Service when it has one. '
+                      'A model does not guarantee the result.'
+                : 'Place the bet at the sportsbook. This app does not send it. '
+                      "Coach's Line uses past nflverse games, shared under CC BY 4.0. Odds Edge is not affiliated with nflverse. "
+                      'The injury count is only players listed Out, not a starting lineup. Weather is not in the model. '
+                      'A model does not guarantee the result.',
           ),
           const SizedBox(height: 8),
           const ToolNote(responsibleGamblingNote),
+          const SizedBox(height: 12),
+          Text(
+            'Comparison, not a pick.',
+            style: EdgeType.label.copyWith(color: EdgeColors.textSecondary),
+          ),
         ],
       ),
     );

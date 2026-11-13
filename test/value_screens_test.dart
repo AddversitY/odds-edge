@@ -131,7 +131,7 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(390, 1400));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       final now = DateTime.utc(2026, 11, 12);
-      final model = await loadBundledCoachModel();
+      final model = (await tester.runAsync(loadBundledCoachModel))!;
       await tester.pumpWidget(
         MaterialApp(
           theme: edgeTheme(),

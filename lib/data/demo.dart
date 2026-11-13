@@ -3,12 +3,11 @@ import '../domain/odds.dart';
 
 OddsBoard demoBoard(DateTime now) {
   final sunday = nextEasternKickoff(now, DateTime.sunday, 13, 0);
-  final late = nextEasternKickoff(now, DateTime.sunday, 16, 25);
   final night = nextEasternKickoff(now, DateTime.sunday, 20, 20);
   final monday = nextEasternKickoff(now, DateTime.monday, 20, 15);
   final events = [
     NflEvent('demo-buf-kc', 'Buffalo Bills', 'Kansas City Chiefs', sunday),
-    NflEvent('demo-det-gb', 'Detroit Lions', 'Green Bay Packers', late),
+    NflEvent('demo-min-gb', 'Minnesota Vikings', 'Green Bay Packers', sunday),
     NflEvent('demo-bal-cin', 'Baltimore Ravens', 'Cincinnati Bengals', night),
     NflEvent('demo-phi-dal', 'Philadelphia Eagles', 'Dallas Cowboys', monday),
   ];
@@ -58,11 +57,17 @@ OddsBoard demoBoard(DateTime now) {
 
       add('h2h', event.away, null, 2.05 + b * .04 + e * .03);
       add('h2h', event.home, null, 1.75 + b * .015);
-      add('spreads', event.away, 3.5, 1.85 + b * .015);
-      add('spreads', event.home, -3.5, 1.91 + b * .01);
-      add('spreads', event.away, 2.5, 2.04 + b * .01);
-      add('totals', 'Over', 47.5, 1.88 + b * .012);
-      add('totals', 'Under', 47.5, 1.91 + b * .008);
+      const homeLines = [-3.5, -2.5, -3.5, -1.5];
+      const gameTotals = [47.5, 43.5, 47.5, 46.0];
+      final homeLine = homeLines[e];
+      final totalLine = gameTotals[e];
+      add('spreads', event.away, -homeLine, 1.85 + b * .015);
+      add('spreads', event.home, homeLine, 1.91 + b * .01);
+      if (e == 0) {
+        add('spreads', event.away, 2.5, 2.04 + b * .01);
+      }
+      add('totals', 'Over', totalLine, 1.88 + b * .012);
+      add('totals', 'Under', totalLine, 1.91 + b * .008);
       if (e == 0) {
         add(
           'player_pass_yds',
@@ -118,7 +123,7 @@ OddsBoard demoBoard(DateTime now) {
           eventId: event.id,
           market: 'spreads',
           outcome: event.away,
-          point: 3.5,
+          point: [3.5, 2.5, 3.5, 1.5][e],
         ),
         bookId: 'pinnacle',
         book: 'Pinnacle',
@@ -135,7 +140,7 @@ OddsBoard demoBoard(DateTime now) {
           eventId: event.id,
           market: 'spreads',
           outcome: event.home,
-          point: -3.5,
+          point: [-3.5, -2.5, -3.5, -1.5][e],
         ),
         bookId: 'pinnacle',
         book: 'Pinnacle',
@@ -152,7 +157,7 @@ OddsBoard demoBoard(DateTime now) {
           eventId: event.id,
           market: 'totals',
           outcome: 'Over',
-          point: 47.5,
+          point: [47.5, 43.5, 47.5, 46.0][e],
         ),
         bookId: 'pinnacle',
         book: 'Pinnacle',
@@ -169,7 +174,7 @@ OddsBoard demoBoard(DateTime now) {
           eventId: event.id,
           market: 'totals',
           outcome: 'Under',
-          point: 47.5,
+          point: [47.5, 43.5, 47.5, 46.0][e],
         ),
         bookId: 'pinnacle',
         book: 'Pinnacle',

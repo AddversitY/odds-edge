@@ -61,7 +61,9 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
   void initState() {
     super.initState();
     final ready = widget.propReport;
-    if (ready != null) {
+    // A record report on its own is not the version comparison. Loading
+    // still runs so the usage tiles cannot disappear behind a stub.
+    if (ready != null && widget.comparison != null) {
       report = ready;
       comparison = widget.comparison;
       clv = propClosingValue(widget.lineHistory);
@@ -127,7 +129,8 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final game = widget.model?.backtest;
+    final game = widget.model?.liveReport;
+    final version = widget.model?.lineVersion;
     final prop = report;
     final closing = summarizeLineHistory(
       history: widget.lineHistory,
@@ -151,7 +154,10 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
             ],
             _Headline(game: game),
             const SizedBox(height: 16),
-            _GameTiles(game: game),
+            if (version != null && widget.model != null)
+              _GameVersionCompare(v1: widget.model!.backtest, version: version)
+            else
+              _GameTiles(game: game),
             const SizedBox(height: 22),
             Text(
               'We said vs it happened',
@@ -176,11 +182,6 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
               loading: loading,
               error: error,
               clv: clv,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _propLine(prop),
-              style: EdgeType.label.copyWith(fontWeight: FontWeight.w500),
             ),
             const SizedBox(height: 22),
             Text(
@@ -282,6 +283,154 @@ class _Headline extends StatelessWidget {
   }
 }
 
+class _GameVersionCompare extends StatelessWidget {
+  const _GameVersionCompare({required this.v1, required this.version});
+
+  final BacktestReport v1;
+  final LineVersion version;
+
+  @override
+  Widget build(BuildContext context) {
+    final v2 = version.report;
+    final games = v1.games == v2.games
+        ? '${_count(v1.games)} games'
+        : 'Version 1 ${_count(v1.games)} games · Version 2 ${_count(v2.games)} games';
+    final note = !version.adopted
+        ? 'Version 2 was not adopted. The games still use version 1, and that test has no edge.'
+        : version.hasEdge
+        ? 'Version 2 is the number on the games. The past test beat a -110 price. It can still lose.'
+        : 'Version 2 is the number on the games. It still has no edge against the market.';
+    return Column(
+      key: const Key('game-version-chart'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(games, style: EdgeType.label),
+        const SizedBox(height: 8),
+        const Row(
+          children: [
+            _Swatch(color: EdgeColors.textSecondary, label: 'Version 1'),
+            SizedBox(width: 14),
+            _Swatch(color: EdgeColors.accent, label: 'Version 2'),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _CompareRow(
+          label: 'Hit rate',
+          first: v1.hitRate,
+          second: v2.hitRate,
+          format: percentLabel,
+          foot: '${percentLabel(v1.breakEvenHitRate)} breaks even',
+        ),
+        _CompareRow(
+          label: 'Return',
+          first: v1.roi,
+          second: v2.roi,
+          format: signedPercent,
+        ),
+        _CompareRow(
+          label: 'Closer than the close',
+          first: v1.clvBeatRate,
+          second: v2.clvBeatRate,
+          format: percentLabel,
+        ),
+        _CompareRow(
+          label: 'Brier · lower is closer',
+          first: v1.brier,
+          second: v2.brier,
+          format: _three,
+        ),
+        _CompareRow(
+          label: 'Log loss · lower is closer',
+          first: v1.logLoss,
+          second: v2.logLoss,
+          format: _three,
+        ),
+        const SizedBox(height: 8),
+        Text(note, style: EdgeType.body),
+      ],
+    );
+  }
+}
+
+class _CompareRow extends StatelessWidget {
+  const _CompareRow({
+    required this.label,
+    required this.first,
+    required this.second,
+    required this.format,
+    this.foot,
+  });
+
+  final String label;
+  final double? first;
+  final double? second;
+  final String Function(double value) format;
+  final String? foot;
+
+  @override
+  Widget build(BuildContext context) {
+    final left = first == null ? '—' : format(first!);
+    final right = second == null ? '—' : format(second!);
+    final once = left == right;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: EdgeColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: EdgeColors.border),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: EdgeType.label),
+              const SizedBox(height: 4),
+              if (once)
+                Text(
+                  left,
+                  style: EdgeType.display.copyWith(fontSize: 26, height: 1.05),
+                )
+              else
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        left,
+                        style: EdgeType.display.copyWith(
+                          fontSize: 26,
+                          height: 1.05,
+                          color: EdgeColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        right,
+                        style: EdgeType.display.copyWith(
+                          fontSize: 26,
+                          height: 1.05,
+                          color: EdgeColors.accent,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              if (foot != null) ...[
+                const SizedBox(height: 2),
+                Text(foot!, style: EdgeType.label),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _three(double value) => value.toStringAsFixed(3);
+
 class _GameTiles extends StatelessWidget {
   const _GameTiles({required this.game});
   final BacktestReport? game;
@@ -366,6 +515,12 @@ class _Calibration extends StatelessWidget {
               fontWeight: FontWeight.w500,
               color: EdgeColors.warn,
             ),
+          ),
+        ] else ...[
+          const SizedBox(height: 8),
+          Text(
+            'It did not call a 60% chance on this test.',
+            style: EdgeType.label.copyWith(fontWeight: FontWeight.w500),
           ),
         ],
       ],
@@ -944,15 +1099,6 @@ class _VersusPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _VersusPainter oldDelegate) =>
       oldDelegate.value != value || oldDelegate.mark != mark;
-}
-
-String _propLine(PropReport? prop) {
-  if (prop == null) return 'Scoring past box scores.';
-  if (prop.scored == 0) return 'No scored games in this file.';
-  if (!prop.usedSportsbookPrices) {
-    return 'Not yet tested against sportsbook prices.';
-  }
-  return 'Tested against sportsbook prices.';
 }
 
 String _closeLine(ClosingSummary closing) {

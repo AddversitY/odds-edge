@@ -135,6 +135,22 @@ void main() {
     expect(model.source.license, 'CC BY 4.0');
     expect(model.cover.features, contains('spread_edge'));
     expect(model.total.features, contains('total_edge'));
+    expect(model.backtest.logLoss, isNotNull);
+    final version = model.lineVersion;
+    expect(version, isNotNull);
+    expect(model.usesV2, isTrue);
+    expect(version!.report.games, greaterThanOrEqualTo(1000));
+    expect(version.report.brier!, lessThan(model.backtest.brier!));
+    expect(version.report.logLoss!, lessThan(model.backtest.logLoss!));
+    expect(version.hasEdge, isFalse);
+    expect(version.differsHelped, isFalse);
+    expect(version.players.length, greaterThan(200));
+    expect(
+      version.players.length,
+      lessThan(2500),
+      reason: 'The live file keeps this season, not every player who ever snapped.',
+    );
+    expect(model.liveReport.hasEdge, isFalse);
     final chiefs = model.team('Kansas City Chiefs');
     final bills = model.team('BUF');
     expect(chiefs, isNotNull);
@@ -184,7 +200,8 @@ void main() {
     );
     expect(find.text("Coach's Line"), findsWidgets);
     expect(find.textContaining('Our number:'), findsWidgets);
-    expect(find.text('The books: Chiefs -3.5'), findsWidgets);
+    expect(find.text('Chiefs -3.5'), findsWidgets);
+    expect(find.textContaining('The books:'), findsNothing);
     expect(find.text('Differs from books'), findsWidgets);
     expect(find.text('Edge'), findsNothing);
     expect(
@@ -193,13 +210,18 @@ void main() {
     );
     expect(find.textContaining('only a comparison'), findsWidgets);
     expect(find.textContaining('Bet the'), findsNothing);
-    expect(find.text('Shown for comparison, not a pick.'), findsWidgets);
+    expect(find.text('Shown for comparison, not a pick.'), findsNothing);
+    expect(find.textContaining('The comparison is not a pick.'), findsOneWidget);
     await tester.tap(find.text('Buffalo Bills').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Why').first);
     await tester.pumpAndSettle();
     expect(find.textContaining('Chance the favorite covers'), findsOneWidget);
-    expect(find.textContaining('comparison, not a pick'), findsWidgets);
+    await tester.scrollUntilVisible(
+      find.text('Comparison, not a pick.'),
+      300,
+    );
+    expect(find.text('Comparison, not a pick.'), findsOneWidget);
   });
 
   testWidgets('My Bets compares the logged number with the closing number', (

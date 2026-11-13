@@ -2,7 +2,7 @@
 
 Odds Edge has its own NFL number. It is a team-strength rating plus a small logistic regression. The app shows it as **Coach's Line** on the Games list and the game page, and the full write-up is under More → Coach's model.
 
-The number is not a tip. The model page repeats the past-seasons test, including when that test lost money. A difference from the books is marked "Differs from books". That mark is a comparison, not a pick.
+The number is not a tip. The model page repeats the past-seasons test, including when that test lost money. "Differs from books" is shown only when moving off the market helped in the past test. That mark is a comparison, not a pick. Version 2 is on the game cards. It has no edge against the market.
 
 ## What it uses
 
@@ -41,7 +41,36 @@ For every scored game the test bets the side the model likes, at the closing num
 
 A separate line in the report counts only games where our number and the close differed by 2.5 points or more. That slice is easier to overread. The headline is the test that bets every game.
 
-The "Differs from books" mark on a current game uses the books in the snapshot, not a new download. It appears when our number and those books differ by at least the setting (default 2.5 points) or the best price is at least 2% ahead of our chance per dollar, if our chance were right. The setting is on the model page. Moving it does not rewrite the past test. The mark is a comparison, not a pick. The past test of this number lost money.
+The "Differs from books" mark on a current game uses the books in the snapshot, not a new download. On version 1 it appears when our number and those books differ by at least the setting (default 2.5 points) or the best price is at least 2% ahead of our chance per dollar, if our chance were right. On version 2 the mark is shown only when moving off the market beat a -110 price on at least 200 decided games in the past test. The setting is on the model page. Moving it does not rewrite the past test. The mark is a comparison, not a pick. The past test of the spread lost money.
+
+## Version 2
+
+Version 2 is the number on the game cards. It was adopted because, on the same 2,885 games, its Brier score and its log loss were both lower than version 1. That is a test of the chances, not of profit. It still has no edge against the market.
+
+The line starts at the market. For a live game that is Pinnacle when the snapshot has both sides, and otherwise the most common number in the snapshot. For the past test the free schedule file only has the closing number, so the close is the starting number. That is not the final score, and it is not a number from later in the week. The model then adds a small residual. The size of each piece was fit with ridge regression on earlier weeks only, with the strength fixed before the run. Same-week games are not used.
+
+The pieces, and what the past weeks did with them:
+
+- Quarterback. Points only when the starter is not the team's usual starter. The rate is EPA per dropback from nflverse play-by-play, shrunk toward average, and it is updated after the week. A quarterback listed Out is replaced. The same player's injury is not also counted in the injury piece.
+- Injuries. Outs and doubtful players are weighted by position and by their snap share from earlier weeks. A left tackle counts more than a kicker. The quarterback's position weight is zero.
+- Weather, on the total, and only with an open roof. Wind, cold, and rain each pull the total down. A dome, a closed roof, or an unknown roof adds nothing. The backtest uses the Open-Meteo archive at the kickoff hour, in Eastern time. If that hour is missing, the nflverse temperature and wind are the fallback and rain is unknown. Live US games use the National Weather Service hourly forecast, then Open-Meteo. Historical and forecast weather from [Open-Meteo](https://open-meteo.com/). US forecasts from the [National Weather Service](https://www.weather.gov/). No key and no account.
+- Rest and travel. A short week is negative and a long rest is a small plus. Travel is time zones from the away team's home stadium, and the first week of the sample has none because the home longitude is learned after the week.
+
+The chance starts at the no-vig market chance and shifts with the residual. A recalibration, fit only on earlier weeks' chances, pulls a stated 60% back toward what those weeks actually did. On this run it pulled so hard that version 2 did not call a 60% chance.
+
+On the 2,885-game walk-forward, betting the side version 2 liked at the close and at -110:
+
+| | Version 1 | Version 2 |
+| --- | ---: | ---: |
+| Hit rate | 50.8% | 50.5% |
+| Return | -2.9% | -3.6% |
+| Closer than the close | 42.4% | 46.8% |
+| Brier | 0.251 | 0.250 |
+| Log loss | 0.695 | 0.694 |
+
+Version 2 was closer to the final margin a bit more often, and its misses were still about 9.8 points, the same as the close. The slice where it moved 2.5 points or more off the close was 16 games. That is too small to show the "Differs from books" mark, so the games do not say it differs. The same test on totals hit 53.0% and returned 1.1% of the stake. That return does not clear the edge bar either.
+
+When the live model has no edge, the game card shows the books' number in the large type and our number under it. "Comparison, not a pick" is on the game page once, and on the report card once. The list already says the comparison is not a pick, so the cards do not repeat it.
 
 ## Run it
 
