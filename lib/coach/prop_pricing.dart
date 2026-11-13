@@ -2,14 +2,17 @@ import '../domain/coach_board.dart';
 import '../domain/eastern.dart';
 import '../domain/coach_model.dart';
 import '../domain/edge_gap.dart';
+import '../domain/history.dart';
 import '../domain/hit_rate.dart';
-import '../domain/injury_report.dart';
 import '../domain/matchup.dart';
 import '../domain/nfl_teams.dart';
 import '../domain/odds.dart';
 import '../domain/parlay_value.dart';
+import '../domain/injury_report.dart';
 import '../domain/prop_chance.dart';
 import '../domain/prop_history.dart';
+import '../domain/prop_model.dart';
+import '../domain/prop_projection.dart';
 import '../domain/prop_value.dart';
 import '../domain/value_check.dart';
 
@@ -35,6 +38,8 @@ class ShownProp {
     required this.badge,
     required this.note,
     required this.pairedBook,
+    this.projection,
+    this.usingProjection = false,
   });
 
   final PropCardModel card;
@@ -51,6 +56,12 @@ class ShownProp {
   /// rather than the average of every book.
   final bool pairedBook;
 
+  /// The usage projection, even when the card still uses the record.
+  final PropProjection? projection;
+
+  /// True when [projection] is the chance in [verdict].
+  final bool usingProjection;
+
   ValueVerdict get verdict => value.verdict;
 
   double? get edge => edgePoints(verdict.ourChance, verdict.fairChance);
@@ -66,6 +77,7 @@ ShownProp showProp({
   required OddsBoard board,
   required DateTime now,
   InjuryReport? injuries,
+  List<HistoricalGame> scores = const [],
 }) {
   final windows = directory == null ? null : propWindows(directory, card, now);
   final opponent = opponentFor(card, windows);
@@ -77,6 +89,49 @@ ShownProp showProp({
   final paired = quote == null
       ? null
       : otherDecimalAtBook(card, cards, quote.bookId);
+  final rows = directory?.data.rows;
+  final index = rows == null
+      ? null
+      : usageIndexFor(rows, matchup: context);
+  final calibrator = propLiveChance == PropLiveChance.calibrated && rows != null
+      ? cachedPropComparison(rows, scores: scores, matchup: context).calibrator
+      : null;
+  final outs = _teammateOuts(injuries, windows?.team, card.player);
+  PropProjection? project(PropCardModel item, double? market) {
+    final metric = propStatMetrics[item.market];
+    final players = directory;
+    final usage = index;
+    if (metric == null || players == null || usage == null) return null;
+    final looked = item.id == card.id
+        ? windows
+        : propWindows(players, item, now);
+    final id = looked?.playerId;
+    if (id == null) return null;
+    return projectProp(
+      index: usage,
+      playerId: id,
+      metric: metric,
+      line: item.line,
+      side: item.lineSide,
+      beforeSeason: 10000,
+      beforeWeek: 1,
+      team: looked?.team,
+      opponent: item.id == card.id ? opponent : opponentFor(item, looked),
+      teamSpread: item.id == card.id
+          ? spread
+          : teamSpreadFor(item, looked, board),
+      total: item.event == null
+          ? null
+          : readMarketLine(item.event!, board.quotes).total,
+      market: market,
+      teammateOuts: item.id == card.id
+          ? outs
+          : _teammateOuts(injuries, looked?.team, item.player),
+      calibrator: calibrator,
+    );
+  }
+
+  final shownProjection = project(card, propMarketAnchor(card, cards));
   final value = priceProp(
     card: card,
     cards: cards,
@@ -95,6 +150,9 @@ ShownProp showProp({
     total: total,
     seasonYear: windows?.seasonYear,
     recent: windows?.last5,
+    projectedChance: propV2Adopted
+        ? (item, rate, market) => project(item, market)?.chance
+        : null,
   );
   return ShownProp(
     card: card,
@@ -117,7 +175,27 @@ ShownProp showProp({
       side: card.lineSide,
     ),
     pairedBook: paired != null && value.verdict.fairChance != null,
+    projection: shownProjection,
+    usingProjection:
+        propV2Adopted && shownProjection?.chance != null,
   );
+}
+
+List<({String name, String position})> _teammateOuts(
+  InjuryReport? injuries,
+  String? team,
+  String player,
+) {
+  if (injuries == null || team == null || team.isEmpty) return const [];
+  final club = boxScoreTeam(team);
+  final self = normalizePropName(player);
+  return [
+    for (final entry in injuries.entries)
+      if (entry.outLike &&
+          boxScoreTeam(entry.team) == club &&
+          normalizePropName(entry.player) != self)
+        (name: entry.player, position: entry.position),
+  ];
 }
 
 List<ShownProp> showProps({
@@ -127,6 +205,7 @@ List<ShownProp> showProps({
   required OddsBoard board,
   required DateTime now,
   InjuryReport? injuries,
+  List<HistoricalGame> scores = const [],
 }) {
   return [
     for (final card in cards)
@@ -138,8 +217,50 @@ List<ShownProp> showProps({
         board: board,
         now: now,
         injuries: injuries,
+        scores: scores,
       ),
   ];
+}
+
+/// One card per player, market, and line. The side with the larger gap
+/// between our chance and the book's no-vig is the one on the card.
+/// A tie, or two missing chances, keeps the over. The other side stays
+/// on [ShownProp.cards] so the detail can switch to it.
+List<ShownProp> preferredPropSides(List<ShownProp> shown) {
+  final best = <String, ShownProp>{};
+  final order = <String>[];
+  for (final prop in shown) {
+    final key = _sideGroup(prop.card);
+    final current = best[key];
+    if (current == null) {
+      best[key] = prop;
+      order.add(key);
+    } else {
+      best[key] = _betterSide(current, prop);
+    }
+  }
+  return [for (final key in order) best[key]!];
+}
+
+String _sideGroup(PropCardModel card) {
+  final event = card.event?.id ?? card.side.eventId;
+  return '$event|${card.player}|${card.market}|${card.line}';
+}
+
+ShownProp _betterSide(ShownProp a, ShownProp b) {
+  final left = a.edge;
+  final right = b.edge;
+  if (left == null && right == null) return _overOrFirst(a, b);
+  if (left == null) return b;
+  if (right == null) return a;
+  if ((left - right).abs() < 1e-6) return _overOrFirst(a, b);
+  return left > right ? a : b;
+}
+
+ShownProp _overOrFirst(ShownProp a, ShownProp b) {
+  if (a.card.lineSide == LineSide.over) return a;
+  if (b.card.lineSide == LineSide.over) return b;
+  return a;
 }
 
 /// A slip leg judged with the same chance the prop card used.
@@ -162,7 +283,9 @@ TicketLegInput ticketLegFor(ShownProp shown) {
     ourChance: shown.verdict.ourChance,
     otherDecimal: otherDecimalAtBook(card, shown.cards, quote.bookId),
     consensusFair: card.fairProbability,
-    source: rate == null
+    source: shown.usingProjection
+        ? propProjectionSource
+        : rate == null
         ? 'the recorded games'
         : shown.verdict.fairChance == null
         ? propEvenSource

@@ -8,7 +8,7 @@ import 'providers.dart';
 import 'quota.dart';
 
 /// Player-prop markets whose hit rate can be counted from the bundled NFL
-/// box scores. The free credit plan requests only the first two.
+/// box scores. The free credit plan requests the first four, on one game.
 const propMarketAllowlist = <String>[
   'player_pass_yds',
   'player_receptions',
@@ -19,12 +19,19 @@ const propMarketAllowlist = <String>[
   'player_reception_tds',
 ];
 
-/// Passing yards and receptions. Two markets, so one event costs 2 credits
-/// when a bookmaker list is sent.
-const defaultPropMarkets = <String>['player_pass_yds', 'player_receptions'];
+/// Passing yards, receptions, rushing yards, and receiving yards.
+/// Four markets on one game cost 4 credits with a bookmaker list, the
+/// same as the old two markets on two games. The daily cap stays 4.
+/// The monthly cap stays 60. More markets means fewer games, not more credits.
+const defaultPropMarkets = <String>[
+  'player_pass_yds',
+  'player_receptions',
+  'player_rush_yds',
+  'player_reception_yds',
+];
 
-/// Two upcoming games. 2 events × 2 markets = 4 credits per refresh.
-const defaultPropMaxEvents = 2;
+/// One upcoming game. 1 event × 4 markets = 4 credits per refresh.
+const defaultPropMaxEvents = 1;
 
 /// One refresh a day. 4 credits × 30 days = 120, and the monthly cap below
 /// stops it sooner so the main-line schedule still fits in 500.
@@ -50,9 +57,9 @@ List<String> resolvePropMarkets(Iterable<String>? raw) {
       'Prop markets must be a subset of the NFL box-score list.',
     );
   }
-  if (values.length > 2) {
+  if (values.length > defaultPropMarkets.length) {
     throw const FormatException(
-      'At most two prop markets. More than that does not fit the free credit plan.',
+      'At most four prop markets. More than that does not fit the free credit plan.',
     );
   }
   return values;

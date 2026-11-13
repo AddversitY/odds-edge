@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/nfl_assets.dart';
 import '../domain/coach_board.dart';
+import '../domain/history.dart';
 import '../domain/injury_report.dart';
 import '../domain/matchup.dart';
 import '../domain/nfl_teams.dart';
@@ -64,6 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String query = '';
   PlayerDirectory? directory;
   MatchupContext? matchup;
+  List<HistoricalGame> scores = const [];
   String? statsNote;
   final search = TextEditingController();
 
@@ -100,6 +102,13 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {
       // A missing matchup file leaves the meter blank. It does not invent a rank.
     }
+    try {
+      final games = await loadBundledHistoryGames();
+      if (!mounted) return;
+      setState(() => scores = games);
+    } catch (_) {
+      // Without earlier scores the curve stays the identity until they load.
+    }
   }
 
   @override
@@ -109,13 +118,16 @@ class _HomeScreenState extends State<HomeScreen> {
       widget.now,
       books: widget.enabledBooks,
     );
-    final shown = showProps(
-      cards: cards,
-      directory: directory,
-      context: matchup,
-      board: widget.board,
-      now: widget.now,
-      injuries: widget.injuries,
+    final shown = preferredPropSides(
+      showProps(
+        cards: cards,
+        directory: directory,
+        context: matchup,
+        board: widget.board,
+        now: widget.now,
+        injuries: widget.injuries,
+        scores: scores,
+      ),
     );
     final filtered = _filter(shown);
     final kickoffs = gamesBoard.events.map((event) => event.startsAt);
@@ -443,6 +455,7 @@ class _HomeScreenState extends State<HomeScreen> {
           directory: directory,
           context: matchup,
           injuries: widget.injuries,
+          scores: scores,
           slip: widget.slip,
         ),
       ),

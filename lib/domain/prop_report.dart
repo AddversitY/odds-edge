@@ -4,9 +4,9 @@ import 'coach_model.dart';
 import 'player_stats.dart';
 import 'prop_chance.dart';
 
-/// Box-score counts the prop chance can score. Passing yards and
-/// receptions are the markets on the card today. Rushing yards and
-/// receiving yards use the same chance function and the same file.
+/// Box-score counts the prop chance can score. Passing yards,
+/// receptions, rushing yards, and receiving yards are the markets
+/// the free plan prices, one game at a time.
 const propReportMetrics = <String>[
   'passing_yards',
   'rushing_yards',

@@ -66,7 +66,7 @@ void main() {
       tester,
       '/opt/cursor/artifacts/report_card_calibration_390.png',
     );
-    await tester.scrollUntilVisible(find.text('Prop chance'), 500);
+    await tester.scrollUntilVisible(find.text('Record vs usage'), 500);
     await tester.pumpAndSettle(const Duration(milliseconds: 50));
     await _save(tester, '/opt/cursor/artifacts/report_card_props_390.png');
 

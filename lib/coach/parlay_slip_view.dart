@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/research_store.dart';
 import '../domain/coach_board.dart';
+import '../domain/history.dart';
 import '../domain/injury_report.dart';
 import '../domain/matchup.dart';
 import '../domain/odds.dart';
@@ -24,6 +25,7 @@ class ParlaySlipView extends StatefulWidget {
     this.directory,
     this.context,
     this.injuries,
+    this.scores = const [],
     this.enabledBooks,
     this.store,
     this.onAddLeg,
@@ -35,6 +37,7 @@ class ParlaySlipView extends StatefulWidget {
   final PlayerDirectory? directory;
   final MatchupContext? context;
   final InjuryReport? injuries;
+  final List<HistoricalGame> scores;
   final Set<String>? enabledBooks;
   final ResearchStore? store;
   final VoidCallback? onAddLeg;
@@ -115,6 +118,7 @@ class _ParlaySlipViewState extends State<ParlaySlipView> {
           board: widget.board,
           now: widget.now,
           injuries: widget.injuries,
+          scores: widget.scores,
         ),
       );
     }

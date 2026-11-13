@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../domain/coach_board.dart';
 import '../domain/edge_gap.dart';
+import '../domain/history.dart';
 import '../domain/hit_rate.dart';
 import '../domain/injury_report.dart';
 import '../domain/matchup.dart';
@@ -10,6 +11,7 @@ import '../domain/parlay_slip.dart';
 import '../domain/prop_history.dart';
 import '../domain/why_brief.dart';
 import '../theme/edge_theme.dart';
+import '../ui/prop_breakdown.dart';
 import '../ui/value_check.dart';
 import '../ui/wordmark.dart';
 import 'coach_widgets.dart';
@@ -28,6 +30,7 @@ class PropDetailScreen extends StatefulWidget {
     this.context,
     this.injuries,
     this.history,
+    this.scores = const [],
     this.slip,
   });
 
@@ -39,6 +42,7 @@ class PropDetailScreen extends StatefulWidget {
   final MatchupContext? context;
   final InjuryReport? injuries;
   final Future<List<OddsQuote>> Function(Selection selection)? history;
+  final List<HistoricalGame> scores;
   final ParlaySlipController? slip;
 
   @override
@@ -83,6 +87,7 @@ class _PropDetailScreenState extends State<PropDetailScreen> {
     board: widget.board,
     now: widget.now,
     injuries: widget.injuries,
+    scores: widget.scores,
   );
 
   @override
@@ -109,8 +114,7 @@ class _PropDetailScreenState extends State<PropDetailScreen> {
                   : gap < 0
                   ? 'lower'
                   : 'level'} '
-              'than the book\'s no-vig price by ${edgePointsLabel(gap)}. '
-              'That is a comparison, not a pick.';
+              'than the book\'s no-vig price by ${edgePointsLabel(gap)}.';
     final injuries = _injuries(face);
     final held = widget.slip?.slip.contains(card.id) ?? false;
     return Scaffold(
@@ -195,6 +199,10 @@ class _PropDetailScreenState extends State<PropDetailScreen> {
               note: note,
             ),
           ),
+          if (face.projection != null) ...[
+            const SizedBox(height: 12),
+            PropBreakdown(projection: face.projection!),
+          ],
           const SizedBox(height: 4),
           ValueView(
             headline: false,
@@ -335,9 +343,7 @@ class _PropDetailScreenState extends State<PropDetailScreen> {
             ),
           const SizedBox(height: 16),
           Text(
-            widget.board.demo
-                ? 'Example data · our chance versus the book\'s fee-free chance · not a pick'
-                : 'Our chance versus the book\'s fee-free chance · not a pick',
+            'Comparison, not a pick.',
             textAlign: TextAlign.center,
             style: EdgeType.label.copyWith(
               fontSize: 11,

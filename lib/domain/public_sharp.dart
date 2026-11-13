@@ -29,6 +29,7 @@ class LinePrice {
     required this.outcome,
     required this.decimal,
     this.point,
+    this.player = '',
     this.status = 'open',
   });
 
@@ -37,6 +38,9 @@ class LinePrice {
   final String outcome;
   final double decimal;
   final double? point;
+
+  /// Set on a player prop. Empty on a game line.
+  final String player;
   final String status;
 
   bool get usable =>
@@ -85,6 +89,7 @@ class LineSnapshot {
           outcome: '${row['outcome'] ?? ''}',
           decimal: decimal.toDouble(),
           point: point is num ? point.toDouble() : null,
+          player: '${row['player'] ?? ''}',
           status: '${row['status'] ?? 'open'}',
         ),
       );
@@ -406,7 +411,7 @@ LineSnapshot _mergeSnapshots(LineSnapshot saved, LineSnapshot current) {
 }
 
 String _priceKey(LinePrice price) =>
-    '${price.bookId}|${price.market}|${price.outcome}|${price.point}|${price.decimal}|${price.status}';
+    '${price.bookId}|${price.market}|${price.outcome}|${price.player}|${price.point}|${price.decimal}|${price.status}';
 
 /// Sharp signals for one game, from snapshots we already stored plus the
 /// board on screen. [publicSplit] is omitted when public percentages are
