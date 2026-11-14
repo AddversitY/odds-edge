@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'data/research_store.dart';
-import 'domain/bets.dart';
 import 'domain/hit_rate.dart';
 import 'domain/market_math.dart';
 import 'domain/odds.dart';
@@ -14,7 +13,7 @@ import 'domain/player_stats.dart';
 import 'explained_number.dart';
 import 'theme/edge_theme.dart';
 
-enum ToolId { prices, hedges, movement, parlay, bets, stake, props }
+enum ToolId { prices, hedges, movement, parlay, stake, props }
 
 class ToolsPage extends StatefulWidget {
   const ToolsPage({
@@ -27,6 +26,7 @@ class ToolsPage extends StatefulWidget {
     this.enabledBooks,
     this.backendConnected = false,
     this.loadPlayers,
+    this.onOpenParlays,
   });
 
   final OddsBoard board;
@@ -37,6 +37,7 @@ class ToolsPage extends StatefulWidget {
   final Future<List<OddsQuote>> Function(Selection selection) history;
   final String Function(DateTime time) stamp;
   final Future<PlayerStatsDataset> Function()? loadPlayers;
+  final VoidCallback? onOpenParlays;
 
   @override
   State<ToolsPage> createState() => _ToolsPageState();
@@ -73,7 +74,6 @@ class _ToolsPageState extends State<ToolsPage> {
             stamp: widget.stamp,
           ),
           ToolId.parlay => const _ParlayScreen(),
-          ToolId.bets => _BetLogScreen(store: widget.store),
           ToolId.stake => const _StakeScreen(),
           ToolId.props => _PropHistoryScreen(
             loadPlayers: widget.loadPlayers ?? _loadBundledPlayers,
@@ -97,6 +97,15 @@ class _ToolsPageState extends State<ToolsPage> {
         'Each tool uses odds already saved, stats already on this device, or numbers you type. Nothing here is a live stream or a recommendation.',
       ),
       const SizedBox(height: 18),
+      if (widget.onOpenParlays != null) ...[
+        OutlinedButton.icon(
+          key: const Key('open-parlay-builder'),
+          onPressed: widget.onOpenParlays,
+          icon: const Icon(Icons.receipt_long_outlined),
+          label: const Text('Parlay builder'),
+        ),
+        const SizedBox(height: 16),
+      ],
       _link(
         ToolId.prices,
         'Best price',
@@ -122,12 +131,6 @@ class _ToolsPageState extends State<ToolsPage> {
         Icons.account_tree_outlined,
       ),
       _link(
-        ToolId.bets,
-        'My bets',
-        'A log you type in. Profit, ROI, and closing-line value from your own numbers.',
-        Icons.receipt_long_outlined,
-      ),
-      _link(
         ToolId.stake,
         'Stake size',
         'A Kelly stake from a win chance you supply. Not a suggestion to bet.',
@@ -148,12 +151,18 @@ class _ToolsPageState extends State<ToolsPage> {
         child: Card(
           child: ListTile(
             leading: Icon(icon, color: EdgeColors.accent),
-            title: Text(title, style: EdgeType.body.copyWith(fontWeight: FontWeight.w700)),
+            title: Text(
+              title,
+              style: EdgeType.body.copyWith(fontWeight: FontWeight.w700),
+            ),
             subtitle: Padding(
               padding: const EdgeInsets.only(top: 6),
               child: Text(subtitle, style: EdgeType.label),
             ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 8,
+            ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => setState(() => tool = id),
           ),
@@ -276,7 +285,9 @@ class _PriceScreenState extends State<_PriceScreen> {
                     'Versus that market: ${_signedPercent(side.marketEv!)} per \$1',
                 title: 'Market comparison',
                 body: 'If the vig-free chance were right, this is the average profit per \$1 staked at the best snapshot price. A positive number means the sportsbook price is longer than that market chance. It is not a recommendation and not a promise the bet wins. A tie or a push is not included: anything except a win is treated as a loss.',
-                style: TextStyle(color: side.marketEv! > 0 ? EdgeColors.good : EdgeColors.bad),
+                style: TextStyle(
+                  color: side.marketEv! > 0 ? EdgeColors.good : EdgeColors.bad,
+                ),
               ),
             if (side.sharpEv != null)
               ExplainedValue(
@@ -947,246 +958,6 @@ class _ParlayScreenState extends State<_ParlayScreen> {
   );
 }
 
-class _BetLogScreen extends StatefulWidget {
-  const _BetLogScreen({required this.store});
-  final ResearchStore store;
-  @override
-  State<_BetLogScreen> createState() => _BetLogScreenState();
-}
-
-class _BetLogScreenState extends State<_BetLogScreen> {
-  final description = TextEditingController();
-  final book = TextEditingController();
-  final odds = TextEditingController(text: '-110');
-  final stake = TextEditingController(text: '10');
-  List<TrackedBet> bets = [];
-  String? message;
-  final closing = <String, TextEditingController>{};
-
-  @override
-  void initState() {
-    super.initState();
-    _reload();
-  }
-
-  @override
-  void dispose() {
-    description.dispose();
-    book.dispose();
-    odds.dispose();
-    stake.dispose();
-    for (final controller in closing.values) {
-      controller.dispose();
-    }
-    super.dispose();
-  }
-
-  Future<void> _reload() async {
-    try {
-      final rows = await widget.store.loadBets();
-      if (!mounted) return;
-      setState(() {
-        bets = rows;
-        message = null;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => message = 'Saved bets could not be read on this device.');
-    }
-  }
-
-  Future<void> _save(TrackedBet bet) async {
-    try {
-      await widget.store.saveBet(bet);
-      await _reload();
-    } catch (_) {
-      if (!mounted) return;
-      setState(
-        () => message =
-            'This device has no saved-bets folder. The bet was not stored.',
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final ledger = BetLedger(bets);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _title('My bets'),
-        const ToolNote(
-          'You type every bet and every result. Nothing is synced from a sportsbook account. Closing-line value uses a closing price you type, not a downloaded close.',
-        ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 16,
-          runSpacing: 8,
-          children: [
-            ExplainedValue(
-              value: ledger.roi == null
-                  ? 'ROI: no settled bets'
-                  : 'ROI ${_signedPercent(ledger.roi!)}',
-              title: 'ROI',
-              body: 'Profit divided by the money staked on settled bets. A win pays the profit in the odds. A loss costs the stake. A push returns the stake and counts as zero profit. Pending and void bets are left out. ROI is not the same thing as closing-line value.',
-            ),
-            ExplainedValue(
-              value: ledger.averageClosingLineValue == null
-                  ? 'Closing-line value: none entered'
-                  : 'Average closing-line value ${_signedPoints(ledger.averageClosingLineValue!)}',
-              title: 'Closing-line value',
-              body:
-                  'For each bet with a closing price you typed, we subtract the chance implied by your price from the chance implied by that close. Positive means the close was shorter than the price you took. ${ledger.beatClose} of ${ledger.closingLineValues.length} priced bets beat the close you entered. This is not a no-vig close, and it is not verified.',
-            ),
-            Text(
-              'Record ${ledger.wins}-${ledger.losses}-${ledger.pushes} · ${ledger.pending} pending · profit ${_money(ledger.profit)}',
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        _fields(context, [
-          _box('What you bet', description, numeric: false),
-          _box('Sportsbook', book, numeric: false),
-          _box('American odds', odds),
-          _box('Stake', stake),
-        ]),
-        const SizedBox(height: 12),
-        FilledButton(
-          onPressed: () async {
-            final decimal = _american(odds.text);
-            final amount = double.tryParse(stake.text.trim());
-            if (decimal == null ||
-                amount == null ||
-                amount <= 0 ||
-                description.text.trim().isEmpty ||
-                book.text.trim().isEmpty) {
-              setState(
-                () => message = 'Enter a description, a sportsbook, American odds, and a stake greater than zero.',
-              );
-              return;
-            }
-            await _save(
-              TrackedBet(
-                id: DateTime.now().toUtc().microsecondsSinceEpoch.toString(),
-                placedAt: DateTime.now().toUtc(),
-                description: description.text.trim(),
-                book: book.text.trim(),
-                decimal: decimal,
-                stake: amount,
-                result: BetResult.pending,
-              ),
-            );
-            description.clear();
-          },
-          child: const Text('Add bet'),
-        ),
-        if (message != null) ...[
-          const SizedBox(height: 8),
-          Text(message!, style: const TextStyle(color: Colors.orangeAccent)),
-        ],
-        const SizedBox(height: 16),
-        if (bets.isEmpty) const Text('No bets saved on this device yet.'),
-        for (final bet in bets) _betCard(bet),
-        const SizedBox(height: 8),
-        const ToolNote(
-          'Bets stay on this device with your other research notes. The Proof Lab backup includes them.',
-        ),
-        const SizedBox(height: 8),
-        const ResponsibleLine(),
-      ],
-    );
-  }
-
-  Widget _betCard(TrackedBet bet) {
-    final close = closing.putIfAbsent(bet.id, () {
-      final text = bet.closingDecimal == null
-          ? ''
-          : americanLabel(bet.closingDecimal!);
-      return TextEditingController(text: text);
-    });
-    final profit = bet.profit;
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              bet.description,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            Text(
-              '${bet.book} · ${americanLabel(bet.decimal)} · stake ${_money(bet.stake)}',
-            ),
-            Text(
-              profit == null
-                  ? 'Not in the ROI yet.'
-                  : 'Result ${_money(profit)}',
-            ),
-            if (bet.closingLineValue != null)
-              Text(
-                'Closing-line value ${_signedPoints(bet.closingLineValue!)}',
-              ),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<BetResult>(
-              key: ValueKey('${bet.id}-${bet.result.name}'),
-              initialValue: bet.result,
-              decoration: const InputDecoration(labelText: 'Result'),
-              items: const [
-                DropdownMenuItem(
-                  value: BetResult.pending,
-                  child: Text('Pending'),
-                ),
-                DropdownMenuItem(value: BetResult.won, child: Text('Won')),
-                DropdownMenuItem(value: BetResult.lost, child: Text('Lost')),
-                DropdownMenuItem(value: BetResult.push, child: Text('Push')),
-                DropdownMenuItem(value: BetResult.voided, child: Text('Void')),
-              ],
-              onChanged: (result) {
-                if (result == null || result == bet.result) return;
-                _save(bet.copyWith(result: result));
-              },
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: close,
-              decoration: const InputDecoration(
-                labelText: 'Closing American odds (optional)',
-              ),
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-                signed: true,
-              ),
-            ),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton(
-                onPressed: () {
-                  final text = close.text.trim();
-                  if (text.isEmpty) {
-                    _save(bet.copyWith(replaceClosing: true));
-                    return;
-                  }
-                  final decimal = _american(text);
-                  if (decimal == null) {
-                    setState(
-                      () => message = 'Closing odds must be +100 or longer, or −100 or shorter.',
-                    );
-                    return;
-                  }
-                  _save(bet.copyWith(closingDecimal: decimal));
-                },
-                child: const Text('Save closing price'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _StakeScreen extends StatefulWidget {
   const _StakeScreen();
   @override
@@ -1578,10 +1349,7 @@ class ResponsibleLine extends StatelessWidget {
 
 Widget _title(String text) => Padding(
   padding: const EdgeInsets.only(bottom: 8),
-  child: Text(
-    text,
-    style: EdgeType.title,
-  ),
+  child: Text(text, style: EdgeType.title),
 );
 
 Widget _snapshotBanner(MarketScan scan, String Function(DateTime) stamp) =>
@@ -1674,11 +1442,6 @@ String formatPlainPercent(double value) {
   if (tenths == 0) return '0.0%';
   final digits = (tenths.abs() / 10).toStringAsFixed(1);
   return tenths < 0 ? '-$digits%' : '$digits%';
-}
-
-String _signedPoints(double value) {
-  final points = (value * 100).toStringAsFixed(1);
-  return value > 0 ? '+$points percentage points' : '$points percentage points';
 }
 
 String _money(double value) {

@@ -180,9 +180,9 @@ class TicketValue {
   final String? bestBook;
 
   String get wordLabel => switch (word) {
-    ValueWord.bet => 'Bet',
-    ValueWord.lean => 'Lean',
-    ValueWord.skip => 'Skip',
+    ValueWord.bet => 'Review',
+    ValueWord.lean => 'Thin margin',
+    ValueWord.skip => 'Pass',
   };
 }
 
@@ -413,9 +413,9 @@ String _why({
     buffer.write('The payout is the leg prices multiplied. ');
   }
   buffer.write(switch (word) {
-    ValueWord.bet => 'Bet.',
-    ValueWord.lean => 'Lean.',
-    ValueWord.skip => 'Skip.',
+    ValueWord.bet => 'Review.',
+    ValueWord.lean => 'Thin margin.',
+    ValueWord.skip => 'Pass.',
   });
   return buffer.toString();
 }

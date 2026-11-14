@@ -70,9 +70,9 @@ void main() {
     await tester.pumpAndSettle(const Duration(milliseconds: 50));
     await _save(tester, '/opt/cursor/artifacts/report_card_props_390.png');
 
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Home'));
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Today'));
     await tester.pumpAndSettle(const Duration(milliseconds: 100));
-    await tester.tap(find.text("Don't"));
+    await tester.tap(find.text('Pass'));
     await tester.pumpAndSettle(const Duration(milliseconds: 100));
     expect(find.textContaining('not a pick'), findsWidgets);
     await _save(tester, '/opt/cursor/artifacts/dont_390.png');

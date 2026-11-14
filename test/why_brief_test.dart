@@ -65,7 +65,7 @@ void main() {
       ),
     );
 
-    expect(brief.line, startsWith('Skip. The price is short'));
+    expect(brief.line, startsWith('Pass. The price is short'));
     expect(brief.line, isNot(contains('long paragraph')));
     expect(brief.hitLabel, 'Over in 4 of last 5');
     expect(brief.seasonLabel, 'Season: Over in 2 of 2');
@@ -120,11 +120,11 @@ void main() {
     );
     final brief = buildTicketBrief(ticket);
 
-    expect(brief.line, startsWith('Skip.'));
+    expect(brief.line, startsWith('Pass.'));
     expect(brief.line, contains('estimate'));
     expect(brief.facts, hasLength(3));
     expect(brief.facts[0].label, 'Josh Allen over 249.5');
-    expect(brief.facts[0].text, contains('Skip'));
+    expect(brief.facts[0].text, contains('Pass'));
     expect(brief.facts[0].text, contains('Ours 40.0%'));
     expect(brief.facts.last.label, 'How the legs fit together');
     expect(brief.facts.last.text, contains('move together'));
@@ -139,7 +139,7 @@ void main() {
         home: Scaffold(
           body: WhyBriefView(
             brief: WhyBrief(
-              line: 'Skip. The price is short of our chance.',
+              line: 'Pass. The price is short of our chance.',
               bars: [
                 HitSample(game: game(1, 100), value: 100, outcome: 'miss'),
                 HitSample(game: game(2, 260), value: 260, outcome: 'hit'),
@@ -169,6 +169,6 @@ void main() {
       joint: 0.31,
     );
     expect(legsFitNote(ticket), contains('multiply'));
-    expect(ticketVerdictLine(ticket), startsWith('Lean.'));
+    expect(ticketVerdictLine(ticket), startsWith('Thin margin.'));
   });
 }

@@ -131,9 +131,9 @@ class ValueVerdict {
   final bool overpriced;
 
   String get wordLabel => switch (word) {
-    ValueWord.bet => 'Bet',
-    ValueWord.lean => 'Lean',
-    ValueWord.skip => 'Skip',
+    ValueWord.bet => 'Review',
+    ValueWord.lean => 'Thin margin',
+    ValueWord.skip => 'Pass',
   };
 }
 
@@ -159,7 +159,7 @@ ValueVerdict judgeValue(ValueInput input) {
       ourChance: chance,
       fairChance: fair,
       breakEven: breakEven,
-      why: 'Skip. The price could not be compared with our chance.',
+      why: 'Pass. The price could not be compared with our chance.',
       math: _math(input, chance, fair, breakEven, null),
     );
   }
@@ -183,17 +183,17 @@ ValueVerdict judgeValue(ValueInput input) {
 
 String _missingWhy(ValueInput input, double? chance, double? price) {
   if (price == null) {
-    return 'Skip. ${input.label} has no open price in this snapshot, so there is nothing to judge.';
+    return 'Pass. ${input.label} has no open price in this snapshot, so there is nothing to judge.';
   }
   if (chance == null) {
     final games = input.observed;
     if (games != null && games < 4) {
-      return 'Skip. ${input.label} has only $games recorded ${games == 1 ? 'game' : 'games'}. '
+      return 'Pass. ${input.label} has only $games recorded ${games == 1 ? 'game' : 'games'}. '
           'That is not enough to estimate a chance, and a short streak is not filled in.';
     }
-    return 'Skip. ${input.label} has no chance from ${input.source}, so the price is not called a bet.';
+    return 'Pass. ${input.label} has no chance from ${input.source}, so no price advantage is claimed.';
   }
-  return 'Skip. ${input.label} could not be priced.';
+  return 'Pass. ${input.label} could not be priced.';
 }
 
 String _why(
@@ -242,9 +242,9 @@ String _why(
     }
   }
   buffer.write(switch (word) {
-    ValueWord.bet => 'Bet.',
-    ValueWord.lean => 'Lean. The advantage is small.',
-    ValueWord.skip => 'Skip.',
+    ValueWord.bet => 'Review.',
+    ValueWord.lean => 'Thin margin. The advantage is small.',
+    ValueWord.skip => 'Pass.',
   });
   if (input.modelUnproven) {
     buffer.write(

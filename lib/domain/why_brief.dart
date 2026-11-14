@@ -52,26 +52,26 @@ String verdictLine(ValueVerdict verdict, {bool modelUnproven = false}) {
       ? ', using Coach\'s Line, which lost money in its past test'
       : '';
   if (verdict.ourChance == null && verdict.breakEven == null) {
-    return 'Skip. There is no open price to judge$caution.';
+    return 'Pass. There is no open price to judge$caution.';
   }
   if (verdict.ourChance == null) {
-    return 'Skip. There isn\'t a chance on file, so this is not called a bet$caution.';
+    return 'Pass. There isn\'t a chance on file, so this is not called a bet$caution.';
   }
   final profit = verdict.expectedValue;
   if (profit != null && profit.abs() < 0.0005) {
-    return 'Skip. At our chance, this price only breaks even$caution.';
+    return 'Pass. At our chance, this price only breaks even$caution.';
   }
   return switch (verdict.word) {
     ValueWord.bet =>
-      'Bet. Our chance is high enough that this price expects to make money$caution.',
+      'Review. Our chance is high enough that this price expects to make money$caution.',
     ValueWord.lean =>
-      'Lean. The price is only a little better than fair$caution.',
+      'Thin margin. The price is only a little better than fair$caution.',
     ValueWord.skip =>
       profit == null
-          ? 'Skip. The price could not be compared with our chance$caution.'
+          ? 'Pass. The price could not be compared with our chance$caution.'
           : verdict.overpriced
-          ? 'Skip. The price is short of our chance$caution.'
-          : 'Skip. At our chance, this price does not pay enough$caution.',
+          ? 'Pass. The price is short of our chance$caution.'
+          : 'Pass. At our chance, this price does not pay enough$caution.',
   };
 }
 
@@ -279,15 +279,15 @@ String ticketVerdictLine(TicketValue ticket) {
       ? ', and the same-game payout is an estimate'
       : '';
   if (skipped != null) {
-    return 'Skip. ${skipped.input.label} is not a price to build on, so the ticket is a skip$estimate.';
+    return 'Pass. ${skipped.input.label} is not a price to build on, so the ticket is a skip$estimate.';
   }
   return switch (ticket.word) {
     ValueWord.bet =>
-      'Bet. The ticket expects to make money if our chances are right$estimate.',
+      'Review. The ticket expects to make money if our chances are right$estimate.',
     ValueWord.lean =>
-      'Lean. The ticket is only a little better than fair$estimate.',
+      'Thin margin. The ticket is only a little better than fair$estimate.',
     ValueWord.skip =>
-      'Skip. At our chances, this ticket does not pay enough$estimate.',
+      'Pass. At our chances, this ticket does not pay enough$estimate.',
   };
 }
 

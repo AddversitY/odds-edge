@@ -8,7 +8,9 @@ import 'prop_history.dart';
 /// into "live".
 String priceAge(DateTime source, DateTime now) {
   final age = now.difference(source);
-  if (age.isNegative) return 'The price time is after the clock, so it is not used as current.';
+  if (age.isNegative) {
+    return 'The price time is after the clock, so it is not used as current.';
+  }
   if (age.inMinutes < 1) return 'Under a minute old';
   if (age.inMinutes < 60) {
     final minutes = age.inMinutes;
@@ -57,10 +59,7 @@ const bestPriceExplanation =
     'It may be a sample price or hours old. Read the age before you treat it as offered.';
 
 class BookPriceRow {
-  const BookPriceRow({
-    required this.quote,
-    required this.expectedProfit,
-  });
+  const BookPriceRow({required this.quote, required this.expectedProfit});
 
   final OddsQuote quote;
   final double? expectedProfit;
@@ -127,6 +126,62 @@ class PropFilter {
 }
 
 enum PropSort { expectedProfit, historyGap, price, line }
+
+Map<String, dynamic> propFilterJson(PropFilter filter) => {
+  'market': filter.market,
+  'bookId': filter.bookId,
+  'minAmerican': filter.minAmerican,
+  'maxAmerican': filter.maxAmerican,
+  'minFair': filter.minFair,
+  'onlyLongerThanTheBooks': filter.onlyLongerThanTheBooks,
+  'sort': filter.sort.name,
+};
+
+PropFilter propFilterFromJson(Map<String, dynamic> json) {
+  String? text(String key) {
+    final value = json[key];
+    if (value == null) return null;
+    if (value is! String || value.trim().isEmpty) {
+      throw FormatException('Invalid $key');
+    }
+    return value;
+  }
+
+  int? price(String key) {
+    final value = json[key];
+    if (value == null) return null;
+    if (value is! int || value.abs() < 100) {
+      throw FormatException('Invalid $key');
+    }
+    return value;
+  }
+
+  final min = price('minAmerican'), max = price('maxAmerican');
+  if (min != null && max != null && min > max) {
+    throw const FormatException('Reversed odds range');
+  }
+  final fair = json['minFair'];
+  if (fair != null &&
+      (fair is! num || !fair.isFinite || fair < 0 || fair > 1)) {
+    throw const FormatException('Invalid market chance');
+  }
+  if (json['onlyLongerThanTheBooks'] is! bool || json['sort'] is! String) {
+    throw const FormatException('Invalid prop preferences');
+  }
+  final market = text('market');
+  if (market != null && !propMarketLabels.containsKey(market)) {
+    throw const FormatException('Unsupported saved stat');
+  }
+  return PropFilter(
+    market: market,
+    bookId: text('bookId'),
+    minAmerican: min,
+    maxAmerican: max,
+    minFair: (fair as num?)?.toDouble(),
+    onlyLongerThanTheBooks: json['onlyLongerThanTheBooks'],
+    sort: PropSort.values.byName(json['sort']),
+  );
+}
 
 List<PropCardModel> propCards(
   OddsBoard board,
@@ -456,8 +511,7 @@ GameSummary _gameSummary(
   PricedMarket? moneyline;
   for (final market in markets) {
     if (market.market != 'h2h' || !market.complete) continue;
-    if (moneyline == null ||
-        market.booksAveraged > moneyline.booksAveraged) {
+    if (moneyline == null || market.booksAveraged > moneyline.booksAveraged) {
       moneyline = market;
     }
   }
@@ -570,9 +624,7 @@ List<ParlaySuggestion> buildParlays(
   for (final entry in byBook.entries) {
     final candidates = entry.value.values.toList()
       ..sort((a, b) => _legEdge(b).compareTo(_legEdge(a)));
-    final pool = candidates.length > 6
-        ? candidates.sublist(0, 6)
-        : candidates;
+    final pool = candidates.length > 6 ? candidates.sublist(0, 6) : candidates;
     for (final combo in _combinations(pool, filter.legs)) {
       final price = priceParlay(
         legs: [
@@ -670,10 +722,7 @@ class SlipLeg {
 }
 
 class SlipCheck {
-  const SlipCheck({
-    required this.price,
-    required this.plainEnglish,
-  });
+  const SlipCheck({required this.price, required this.plainEnglish});
 
   final ParlayPrice price;
   final String plainEnglish;

@@ -1,4 +1,7 @@
 # Miscellaneous
+.venv/
+.tools/
+__pycache__/
 backend/data/
 model/.cache/
 .env

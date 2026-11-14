@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../data/nfl_assets.dart';
-import '../data/research_store.dart';
 import '../domain/coach_board.dart';
 import '../domain/history.dart';
 import '../domain/coach_model.dart';
@@ -35,7 +34,6 @@ class ParlaysScreen extends StatefulWidget {
       minExpectedValue: 0.02,
     ),
     this.slip,
-    this.store,
     this.injuries,
     this.onAddLeg,
     this.loadPlayers,
@@ -48,7 +46,6 @@ class ParlaysScreen extends StatefulWidget {
   final CoachModel? model;
   final EdgeSettings settings;
   final ParlaySlipController? slip;
-  final ResearchStore? store;
   final InjuryReport? injuries;
   final VoidCallback? onAddLeg;
   final Future<PlayerStatsDataset> Function()? loadPlayers;
@@ -111,7 +108,6 @@ class _ParlaysScreenState extends State<ParlaysScreen> {
             injuries: widget.injuries,
             scores: scores,
             enabledBooks: widget.enabledBooks,
-            store: widget.store,
             onAddLeg: widget.onAddLeg,
           ),
           const SizedBox(height: 16),

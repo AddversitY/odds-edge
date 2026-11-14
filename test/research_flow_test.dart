@@ -218,13 +218,13 @@ void main() {
         'Test named research',
       );
       await tester.pump(const Duration(milliseconds: 500));
-      await tester.tap(find.widgetWithText(ListTile, 'Home'));
+      await tester.tap(find.widgetWithText(ListTile, 'Today'));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('more-menu')));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(ListTile, 'More'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Research'));
+      await tester.tap(find.byKey(const ValueKey('library-Research')));
       await tester.pumpAndSettle();
       expect(
         tester

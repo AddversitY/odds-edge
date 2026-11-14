@@ -41,7 +41,9 @@ void main() {
     );
     await tester.pumpAndSettle(const Duration(milliseconds: 100));
 
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Props'));
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Research'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Props', skipOffstage: false));
     await tester.pump();
     await _until(tester, find.textContaining('rush yards'));
     await _until(tester, find.textContaining('/'));
@@ -103,7 +105,7 @@ void main() {
     Navigator.of(tester.element(find.byKey(const Key('prop-detail')))).pop();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Home'));
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Today'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.byKey(const Key('open-report-card')));
@@ -167,13 +169,17 @@ Future<void> _frameBoth(WidgetTester tester, Finder left, Finder right) async {
     final a = tester.getRect(left);
     final b = tester.getRect(right);
     final view = tester.view.physicalSize.height;
-    final onScreen = a.top >= 80 &&
+    final onScreen =
+        a.top >= 80 &&
         a.bottom <= view - 40 &&
         b.top >= 80 &&
         b.bottom <= view - 40;
     if (onScreen) return;
     final target = a.top < b.top ? a.top : b.top;
-    await tester.drag(find.byKey(const Key('props-list')), Offset(0, 120 - target));
+    await tester.drag(
+      find.byKey(const Key('props-list')),
+      Offset(0, 120 - target),
+    );
     await tester.pumpAndSettle(const Duration(milliseconds: 50));
   }
 }

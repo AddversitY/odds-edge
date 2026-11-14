@@ -39,7 +39,7 @@ void main() {
     expect(verdict.overpriced, isTrue);
     expect(verdict.why, contains('likely to hit'));
     expect(verdict.why, contains('The price is short'));
-    expect(verdict.why, contains('Skip'));
+    expect(verdict.why, contains('Pass'));
   });
 
   test('a price ahead of our chance by at least three cents is a bet', () {
@@ -102,7 +102,7 @@ void main() {
       otherLegs: const [],
     );
     expect(sameBook, contains('same line at another book'));
-    expect(sameBook, contains('Bet'));
+    expect(sameBook, contains('Review'));
 
     final line = suggestAlternative(
       current: current,

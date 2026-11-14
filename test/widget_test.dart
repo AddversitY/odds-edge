@@ -15,7 +15,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(OddsEdgeApp(researchStore: MemoryResearchStore()));
-    expect(find.byType(NavigationDestination), findsNWidgets(5));
+    expect(find.byType(NavigationDestination), findsNWidgets(3));
     expect(find.textContaining('Snapshot as of'), findsWidgets);
     await tester.tap(find.byKey(const Key('more-menu')));
     await tester.pumpAndSettle();
@@ -31,7 +31,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(ListTile, 'More'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Research'));
+    await tester.tap(find.byKey(const ValueKey('library-Research')));
     await tester.pump();
     expect(find.widgetWithText(Tab, 'Matchups'), findsOneWidget);
     expect(find.widgetWithText(Tab, 'Players'), findsOneWidget);
@@ -54,8 +54,8 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(OddsEdgeApp(researchStore: MemoryResearchStore()));
-    expect(find.widgetWithText(ListTile, 'Home'), findsOneWidget);
-    expect(find.widgetWithText(ListTile, 'Research'), findsNothing);
+    expect(find.widgetWithText(ListTile, 'Today'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, 'Research'), findsOneWidget);
     expect(find.widgetWithText(ListTile, 'NFL matchups'), findsNothing);
     expect(find.widgetWithText(ListTile, 'Player stats'), findsNothing);
     expect(find.widgetWithText(ListTile, 'Proof Lab'), findsNothing);
@@ -87,13 +87,13 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(ListTile, 'More'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Tools'));
+    await tester.tap(find.byKey(const ValueKey('library-Tools')));
     await tester.pumpAndSettle();
     expect(find.text('Best price'), findsOneWidget);
     expect(find.text('Arbitrage and middles'), findsOneWidget);
     expect(find.text('Line movement'), findsOneWidget);
     expect(find.text('Parlay price'), findsOneWidget);
-    expect(find.text('My bets'), findsOneWidget);
+    expect(find.text('My bets'), findsNothing);
     expect(find.text('Stake size'), findsOneWidget);
     expect(find.text('Prop history'), findsOneWidget);
     expect(find.textContaining('last 20'), findsOneWidget);
@@ -444,6 +444,8 @@ void main() {
     Navigator.of(tester.element(find.text('Ask Coach'))).pop();
     await tester.pumpAndSettle();
 
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Research'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Props', skipOffstage: false));
     await tester.pump();
     expect(find.text('PLAYER PROPS'), findsOneWidget);
@@ -462,7 +464,9 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Parlays', skipOffstage: false));
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Tools'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('open-parlay-builder')));
     await tester.pumpAndSettle();
     expect(find.text('PARLAYS'), findsOneWidget);
     expect(find.textContaining('No legs yet'), findsOneWidget);
@@ -473,13 +477,8 @@ void main() {
     expect(find.text('How these tickets are built'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
-    await tester.tap(find.text('Bets', skipOffstage: false));
-    await tester.pumpAndSettle();
-    expect(find.text('MY BETS'), findsOneWidget);
-    await tester.tap(find.text('Bet log'));
-    await tester.pumpAndSettle();
-    expect(find.text('Nothing settled'), findsOneWidget);
-    expect(find.text('Nothing pending'), findsOneWidget);
+    expect(find.widgetWithText(NavigationDestination, 'Bets'), findsNothing);
+    expect(find.text('Bet log'), findsNothing);
     expect(tester.takeException(), isNull);
 
     tester.view.physicalSize = const Size(360, 780);

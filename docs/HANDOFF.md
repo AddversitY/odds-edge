@@ -2,11 +2,26 @@
 
 Odds Edge is an NFL odds app. It compares a price with the app's own chance. It does not tell the user to bet. The footer line is **Comparison, not a pick.**
 
-This branch does not add the correlated parlay simulator or the automatic "Our record" log. Both were left out. Nothing unfinished is hidden behind a flag. The next-steps list at the bottom is the spec.
+The correlated parlay simulator is still unimplemented. Owner direction on
+14 November: personal bet logging, outcome entry and a record-led experience
+are not product priorities. The new automatic observation journal was removed,
+along with the Bets navigation destination, My bets tool and save-to-bet-log
+actions. Existing stored data remains intact for backward compatibility.
+
+Read the [14 November product review](PRODUCT_REVIEW_2026-11-14.md) before
+starting another feature. Focus on a simple, deep NFL research experience:
+find a prop, compare its price and understand the evidence. Model-quality
+backtests stay in secondary methodology tools. Today, Research and Tools are
+the primary destinations. Research groups Props/Games and preserves search
+and list state across navigation. Filters persist locally. Prop details lead
+with price and evidence; Performance, Matchup, Prices and Model/math disclose
+depth progressively. Assessment labels are Review, Thin margin and Pass;
+legacy value enums and calculations are unchanged. Nothing unfinished is
+hidden behind a flag.
 
 ## Architecture
 
-- **Flutter app** (`lib/`). iPhone-simple screens on top (Home, Props, Games, Parlays, My Bets, More) and the older research tools underneath. Web, Windows, and iOS share one codebase. `lib/main.dart` sets `debugShowCheckedModeBanner: false`.
+- **Flutter app** (`lib/`). Today, Research (Props/Games), and Tools, with a parlay builder and older research tools underneath. Web, Windows, and iOS share one codebase. `lib/main.dart` sets `debugShowCheckedModeBanner: false`.
 - **Dart backend** (`backend/server.dart`). Loopback only, port 8787. The Flutter app never holds an API key. `BackendRepository` talks to `ODDS_API_BASE_URL` (default `http://127.0.0.1:8787`; a remote host must be HTTPS).
 - **Python model** (`model/train.py`, `model/nfl_model.py`, `model/nfl_model_v2.py`, `model/build_features.py`). Downloads nflverse into `model/.cache/` (gitignored), fits Coach's Line, and writes `assets/nfl-model.json`. The Dart file `lib/domain/coach_line_v2.dart` must stay in step with the Python formulas. No Odds API call.
 - **Bundled data** (committed, keep it small): `assets/nfl-model.json`, `assets/nfl-history.json`, `assets/nfl-player-stats.json`, `assets/nfl-matchup.json`. nflverse, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). License copy: `assets/NFLVERSE-LICENSE.md`. Odds Edge is not affiliated with nflverse.
@@ -38,7 +53,7 @@ Checks:
 ```bash
 flutter analyze
 flutter test
-python -m unittest discover -s model -t .
+python -m unittest discover -s model -t model
 python model/train.py
 ```
 
@@ -101,7 +116,7 @@ Props, from the walk-forward on the bundled box scores (PR #17, 17,097 paired pl
 
 ## Design
 
-Night ink and one chartreuse mark. `lib/theme/edge_theme.dart`: background `#100E0C`, surface `#1B1814`, text `#F7F2E9`, accent `#D6F25C`. Fraunces for display numbers and titles, Outfit for everything else. Green, amber, and coral are only for the value check (Bet, Lean, Skip), not for chrome.
+Cool graphite and a pale-blue interaction accent. `lib/theme/edge_theme.dart`: background `#0C1017`, surface `#151C25`, text `#F3F6FA`, accent `#A8C7FA`. Fraunces stays on the wordmark; Outfit is used for interface headings and figures. Mint, amber and coral describe labeled value states, separate from navigation. Full direction: [product review](PRODUCT_REVIEW_2026-11-14.md).
 
 The value rail is `ValueCheck` (`lib/ui/value_check.dart`): our chance, the book's no-vig, the gap, and one word. Bet is at least 3 cents of expected profit per dollar. Lean is any smaller profit. Skip is zero, a loss, or a missing chance. A likely side can still be Skip when the price is short.
 
@@ -120,11 +135,16 @@ iPhone width is the layout that matters (390px). One idea on the card, the math 
 Left out, not flagged off:
 
 1. **Correlated parlay simulator.** Today `lib/domain/parlay_value.dart` uses a fixed same-game correlation (about 0.15, 0.30 for a quarterback and a receiver on the same team, -0.95 for the two sides of one line) and a closed-form joint. There is no Monte Carlo game script, no empirical correlation from nflverse, no shrink-and-cap of those correlations, no weakest-leg, no "most likely way this loses," and no backtest of joint chance against the independent product. Same-game payouts are already labeled estimated.
-2. **Self-tracking ("Our record").** My Bets saves a play only when the user taps save. After kickoff, a logged bet can pick up a closing number from line history. The app does not automatically store every Bet, Lean, and Skip it shows, and the report card has no weekly review of those suggestions by market and spot.
-3. **Screenshots** of a simulated ticket, the weakest leg, parlay calibration, and a weekly record. Not produced, because those screens do not exist.
+2. **Personal bet tracking.** Intentionally omitted from product flows per owner direction. No manual outcome journal or automatic shown-suggestion record is exposed. Old storage formats and legacy tests remain compatible; no existing files are deleted.
+3. **Parlay simulator screenshots** of a simulated ticket, the weakest leg and parlay calibration remain outstanding. Current Home, Props, Games, prop-detail and existing parlay screenshots are available from the optional screenshot test.
 
 ## Next
 
-1. **Finish the two features above, or do not start them halfway.** A solid cut is: walk-forward correlations from earlier seasons only, shrunk toward zero and capped; a seeded simulation (on the order of 10,000 draws) of margin and total, then team pass and rush, then each player's stat from the prop projection; joint chance versus the product of the legs versus the book's implied chance, with same-game prices labeled estimated; weakest leg and the usual swap (same line at another book, an alternate line, or another leg); a historical Brier and log loss of the joint against the independent product, shown on the report card, with no claim of an edge and no extra Odds API credits. Self-tracking: append each shown suggestion (time, book, line, price, our chance, no-vig) to a local or `backend/data/` file, grade it from scores and closing lines already stored, and put CLV, hit rate versus the chance we stated, and thin-sample slices on the report card. Tests before UI. No sportsbook scraping.
+The newer product review supersedes the old self-tracking proposal below.
+Do not reintroduce personal bet journals, outcome entry, or record-based
+engagement. Focus the next milestone on research and price comparison before
+the remaining simulator and ensemble work.
+
+1. **Finish the correlated parlay simulator as a complete feature.** A solid cut is: walk-forward correlations from earlier seasons only, shrunk toward zero and capped; a seeded simulation (on the order of 10,000 draws) of margin and total, then team pass and rush, then each player's stat from the prop projection; joint chance versus the product of the legs versus the book's implied chance, with same-game prices labeled estimated; weakest leg and the usual swap (same line at another book, an alternate line, or another leg); a historical Brier and log loss of the joint against the independent product, shown on the report card, with no claim of an edge and no extra Odds API credits. Tests before UI. No sportsbook scraping.
 2. **Elo plus a gradient-boosted ensemble** (XGBoost or LightGBM) for the game residual, with the anti-overfit rules fixed before any run: week-based walk-forward, shallow trees, regularization, early stopping, a stable feature set, permutation importance and a noise-feature check, monotone constraints where the direction is known, and one locked holdout season that is not used to pick anything. Same adoption rule as version 2: both Brier and log loss strictly better on at least 1,000 games, and no "edge" unless the -110 test clears the existing profit bar. Keep `coach_line_v2.dart` matched to whatever the trainer ships. Do not search the ridge, the caps, or the tree depth after seeing the holdout.
 3. **A stable public link and edge alerts.** Free permanent hosting, and a ping when a price is ahead of our chance. This needs the owner's approval before any signup, host account, or paid tier. The loopback server has no auth and should not be put on the public internet as it is.

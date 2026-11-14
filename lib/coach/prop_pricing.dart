@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../domain/coach_board.dart';
 import '../domain/eastern.dart';
 import '../domain/coach_model.dart';
@@ -69,6 +71,13 @@ class ShownProp {
   String get bookChanceLabel => pairedBook ? "Book's no-vig" : "Books' no-vig";
 }
 
+/// One pricing pass only. Share across a board, never across changed inputs.
+/// Alternative suggestions repeatedly ask for the same player's projection.
+class PropPricingMemo {
+  final windows = <String, PropWindows>{};
+  final projections = <String, PropProjection?>{};
+}
+
 ShownProp showProp({
   required PropCardModel card,
   required List<PropCardModel> cards,
@@ -78,8 +87,19 @@ ShownProp showProp({
   required DateTime now,
   InjuryReport? injuries,
   List<HistoricalGame> scores = const [],
+  PropPricingMemo? memo,
 }) {
-  final windows = directory == null ? null : propWindows(directory, card, now);
+  final cache = memo ?? PropPricingMemo();
+  PropWindows? windowsFor(PropCardModel item) {
+    final players = directory;
+    if (players == null) return null;
+    return cache.windows.putIfAbsent(
+      item.id,
+      () => propWindows(players, item, now),
+    );
+  }
+
+  final windows = windowsFor(card);
   final opponent = opponentFor(card, windows);
   final spread = teamSpreadFor(card, windows, board);
   final total = card.event == null
@@ -90,24 +110,22 @@ ShownProp showProp({
       ? null
       : otherDecimalAtBook(card, cards, quote.bookId);
   final rows = directory?.data.rows;
-  final index = rows == null
-      ? null
-      : usageIndexFor(rows, matchup: context);
+  final index = rows == null ? null : usageIndexFor(rows, matchup: context);
   final calibrator = propLiveChance == PropLiveChance.calibrated && rows != null
       ? cachedPropComparison(rows, scores: scores, matchup: context).calibrator
       : null;
   final outs = _teammateOuts(injuries, windows?.team, card.player);
   PropProjection? project(PropCardModel item, double? market) {
+    final key = jsonEncode([item.id, market]);
+    if (cache.projections.containsKey(key)) return cache.projections[key];
     final metric = propStatMetrics[item.market];
     final players = directory;
     final usage = index;
     if (metric == null || players == null || usage == null) return null;
-    final looked = item.id == card.id
-        ? windows
-        : propWindows(players, item, now);
+    final looked = windowsFor(item);
     final id = looked?.playerId;
     if (id == null) return null;
-    return projectProp(
+    final projection = projectProp(
       index: usage,
       playerId: id,
       metric: metric,
@@ -129,6 +147,8 @@ ShownProp showProp({
           : _teammateOuts(injuries, looked?.team, item.player),
       calibrator: calibrator,
     );
+    cache.projections[key] = projection;
+    return projection;
   }
 
   final shownProjection = project(card, propMarketAnchor(card, cards));
@@ -139,7 +159,7 @@ ShownProp showProp({
       if (directory == null) {
         return item.id == card.id ? preferredRate(windows) : null;
       }
-      return preferredRate(propWindows(directory, item, now));
+      return preferredRate(windowsFor(item));
     },
     context: context,
     rows: directory?.data.rows ?? const [],
@@ -176,8 +196,7 @@ ShownProp showProp({
     ),
     pairedBook: paired != null && value.verdict.fairChance != null,
     projection: shownProjection,
-    usingProjection:
-        propV2Adopted && shownProjection?.chance != null,
+    usingProjection: propV2Adopted && shownProjection?.chance != null,
   );
 }
 
@@ -207,6 +226,7 @@ List<ShownProp> showProps({
   InjuryReport? injuries,
   List<HistoricalGame> scores = const [],
 }) {
+  final memo = PropPricingMemo();
   return [
     for (final card in cards)
       showProp(
@@ -218,6 +238,7 @@ List<ShownProp> showProps({
         now: now,
         injuries: injuries,
         scores: scores,
+        memo: memo,
       ),
   ];
 }

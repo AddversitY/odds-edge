@@ -9,7 +9,6 @@ import 'coach/home_screen.dart';
 import 'coach/injuries_screen.dart';
 import 'coach/sharp_view.dart';
 import 'coach/model_screen.dart';
-import 'coach/my_bets_screen.dart';
 import 'coach/report_card_screen.dart';
 import 'coach/stale_board_screen.dart';
 import 'coach/parlays_screen.dart';
@@ -34,6 +33,7 @@ import 'domain/player_stats.dart';
 import 'tools_page.dart';
 import 'theme/edge_theme.dart';
 import 'ui/wordmark.dart';
+import 'ui/value_check.dart' show EdgeSegments;
 
 void main() => runApp(const OddsEdgeApp());
 
@@ -70,6 +70,8 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
   int page = 0;
   int shell = 0;
   int lastResearchPage = 1;
+  int marketResearchShell = 1;
+  final visitedShells = <int>{0};
   String? eventId, selectionKey;
   String market = 'h2h';
   Set<String>? enabledBooks;
@@ -94,25 +96,25 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       defaultValue: 'http://127.0.0.1:8787',
     ),
   );
-  static const navShells = [0, 2, 1, 3, 4];
-  static const navLabels = ['Home', 'Games', 'Props', 'Parlays', 'Bets'];
+  static const navShells = [0, 1, 5];
+  static const navLabels = ['Today', 'Research', 'Tools'];
   static const navIcons = [
     Icons.home_outlined,
-    Icons.sports_football_outlined,
-    Icons.person_outline,
-    Icons.receipt_long_outlined,
-    Icons.bookmark_outline,
+    Icons.search_outlined,
+    Icons.tune_outlined,
   ];
   static const researchPages = [1, 4, 3];
   static const researchNames = ['Matchups', 'Players', 'Proof Lab'];
   bool get inResearch => researchPages.contains(page);
-  bool get inMore => shell == 5;
+  bool get inMore => shell == 5 && page != 5;
   int get navIndex {
-    final index = navShells.indexOf(shell);
-    return index < 0 ? 0 : index;
+    if (shell == 1 || shell == 2) return 1;
+    if (shell == 3 || (shell == 5 && page == 5)) return 2;
+    return 0;
   }
 
   String get screenTitle {
+    if (shell == 3) return 'Parlay builder';
     if (!inMore) return navLabels[navIndex];
     return switch (page) {
       2 => 'Odds',
@@ -137,7 +139,51 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
     if (next != 3) researchContext = null;
   });
 
-  void openShell(int index) => setState(() => shell = index);
+  void openShell(int index) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      if (index == 1) {
+        shell = marketResearchShell;
+      } else {
+        shell = index;
+        if (index == 2) marketResearchShell = 2;
+        if (index == 5) page = 5;
+      }
+    });
+  }
+
+  Widget workspaceBody(bool wide) {
+    if (shell < 4) visitedShells.add(shell);
+    return IndexedStack(
+      index: shell == 5 ? 4 : shell,
+      children: [
+        for (var i = 0; i < 4; i++)
+          visitedShells.contains(i) ? coachPage(i) : const SizedBox.shrink(),
+        shell == 5 ? legacyPage(wide) : const SizedBox.shrink(),
+      ],
+    );
+  }
+
+  Widget marketResearchTabs() => Align(
+    alignment: Alignment.topCenter,
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 560),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+        child: EdgeSegments(
+          labels: const ['Props', 'Games'],
+          index: shell == 2 ? 1 : 0,
+          onChanged: (index) {
+            FocusManager.instance.primaryFocus?.unfocus();
+            setState(() {
+              shell = index == 0 ? 1 : 2;
+              marketResearchShell = shell;
+            });
+          },
+        ),
+      ),
+    ),
+  );
 
   void openMore() => setState(() {
     shell = 5;
@@ -595,7 +641,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                selected: !inMore && shell == navShells[i],
+                                selected: !inMore && navIndex == i,
                                 selectedColor: EdgeColors.accent,
                                 selectedTileColor: EdgeColors.accent.withValues(
                                   alpha: .12,
@@ -655,9 +701,8 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                     ),
                     const Divider(height: 1),
                     if (shell == 5 && inResearch) researchTabs(),
-                    Expanded(
-                      child: shell == 5 ? legacyPage(wide) : coachPage(),
-                    ),
+                    if (shell == 1 || shell == 2) marketResearchTabs(),
+                    Expanded(child: workspaceBody(wide)),
                   ],
                 ),
               ),
@@ -700,7 +745,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
     },
   );
 
-  Widget coachPage() => switch (shell) {
+  Widget coachPage(int destination) => switch (destination) {
     0 => HomeScreen(
       board: propSource,
       games: pricedBoard,
@@ -712,11 +757,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       onOpenGame: (id) => setState(() {
         openGameId = id;
         shell = 2;
-      }),
-      onOpenReport: () => setState(() {
-        shell = 5;
-        page = 10;
-        researchContext = null;
+        marketResearchShell = 2;
       }),
       onOpenStale: () => setState(() {
         shell = 5;
@@ -758,16 +799,11 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       model: coachModel,
       settings: edgeSettings,
       slip: slip,
-      store: researchStore,
       injuries: injuryReport,
-      onAddLeg: () => openShell(1),
-    ),
-    4 => MyBetsScreen(
-      store: researchStore,
-      board: board,
-      now: now,
-      books: enabledBooks,
-      lineHistory: lineHistory,
+      onAddLeg: () => setState(() {
+        shell = 1;
+        marketResearchShell = 1;
+      }),
     ),
     _ => const SizedBox(),
   };
@@ -872,6 +908,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
           ),
           clipBehavior: Clip.antiAlias,
           child: ListTile(
+            key: ValueKey('library-$title'),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
               vertical: 6,
@@ -923,11 +960,13 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
         events: board.events,
         onOpenGame: (id) => setState(() {
           shell = 2;
+          marketResearchShell = 2;
           openGameId = id;
           researchContext = null;
         }),
         onOpenMarket: (market) => setState(() {
           shell = 1;
+          marketResearchShell = 1;
           focusPropMarket = market;
           researchContext = null;
         }),
@@ -959,7 +998,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (page != 4 && page != 8 && page != 9) ...[
+            if (page != 4 && page != 5 && page != 8 && page != 9) ...[
               sourcePanel(),
               const SizedBox(height: 26),
             ],
@@ -995,6 +1034,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                 enabledBooks: enabledBooks,
                 backendConnected: backend && error == null,
                 store: researchStore,
+                onOpenParlays: () => openShell(3),
                 stamp: stamp,
                 history: (selection) => backend && error == null
                     ? repository.history(selection)

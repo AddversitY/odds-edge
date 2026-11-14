@@ -5,7 +5,6 @@ import '../domain/coach_board.dart';
 import '../domain/history.dart';
 import '../domain/injury_report.dart';
 import '../domain/matchup.dart';
-import '../domain/nfl_teams.dart';
 import '../domain/odds.dart';
 import '../domain/parlay_slip.dart';
 import '../domain/player_stats.dart';
@@ -19,6 +18,7 @@ import '../ui/value_check.dart';
 import '../ui/wordmark.dart';
 import 'prop_detail_screen.dart';
 import 'prop_pricing.dart';
+import 'coach_widgets.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -67,6 +67,7 @@ class _HomeScreenState extends State<HomeScreen> {
   MatchupContext? matchup;
   List<HistoricalGame> scores = const [];
   String? statsNote;
+  bool statsLoading = true;
   final search = TextEditingController();
 
   OddsBoard get gamesBoard => widget.games ?? widget.board;
@@ -95,6 +96,8 @@ class _HomeScreenState extends State<HomeScreen> {
             'Box scores could not be read, so hit rates are left blank.',
       );
     }
+    if (!mounted) return;
+    setState(() => statsLoading = false);
     try {
       final context = await (widget.loadMatchup ?? loadBundledMatchup)();
       if (!mounted) return;
@@ -118,17 +121,19 @@ class _HomeScreenState extends State<HomeScreen> {
       widget.now,
       books: widget.enabledBooks,
     );
-    final shown = preferredPropSides(
-      showProps(
-        cards: cards,
-        directory: directory,
-        context: matchup,
-        board: widget.board,
-        now: widget.now,
-        injuries: widget.injuries,
-        scores: scores,
-      ),
-    );
+    final shown = statsLoading
+        ? <ShownProp>[]
+        : preferredPropSides(
+            showProps(
+              cards: cards,
+              directory: directory,
+              context: matchup,
+              board: widget.board,
+              now: widget.now,
+              injuries: widget.injuries,
+              scores: scores,
+            ),
+          );
     final filtered = _filter(shown);
     final kickoffs = gamesBoard.events.map((event) => event.startsAt);
     return Align(
@@ -140,7 +145,7 @@ class _HomeScreenState extends State<HomeScreen> {
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
           children: [
             EdgeSegments(
-              labels: const ['Value', 'Trending', 'Games', "Don't"],
+              labels: const ['Value', 'Recent', 'Pass'],
               index: segment,
               onChanged: (index) => setState(() => segment = index),
             ),
@@ -150,12 +155,10 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    segment == 3
-                        ? "Don't"
-                        : segment == 2
-                        ? 'Games'
+                    segment == 2
+                        ? 'Pass on price'
                         : segment == 1
-                        ? 'Trending hit rates'
+                        ? 'Recent clear rates'
                         : slateTitle(kickoffs),
                     style: EdgeType.title.copyWith(
                       fontFamily: EdgeFont.display,
@@ -225,15 +228,23 @@ class _HomeScreenState extends State<HomeScreen> {
               Text(statsNote!, style: EdgeType.label),
               const SizedBox(height: 8),
             ],
-            if (segment == 3)
-              ..._dont(shown)
+            if (statsLoading)
+              const CoachCard(
+                child: Row(
+                  children: [
+                    Icon(Icons.query_stats, size: 20, color: EdgeColors.accent),
+                    SizedBox(width: 12),
+                    Expanded(child: Text('Loading saved player stats…')),
+                  ],
+                ),
+              )
             else if (segment == 2)
-              ..._games(shown)
+              ..._dont(shown)
             else
               ..._props(filtered, trending: segment == 1),
             const SizedBox(height: 8),
             Text(
-              segment == 3
+              segment == 2
                   ? 'Comparison, not a pick.'
                   : widget.board.demo
                   ? 'Example data · our chance versus the book\'s fee-free chance · not a pick'
@@ -414,31 +425,6 @@ class _HomeScreenState extends State<HomeScreen> {
     ];
   }
 
-  List<Widget> _games(List<ShownProp> shown) {
-    final q = query.trim().toLowerCase();
-    final events = [
-      for (final event in gamesBoard.events)
-        if (q.isEmpty ||
-            '${event.away} ${event.home}'.toLowerCase().contains(q))
-          event,
-    ];
-    if (events.isEmpty) {
-      return const [EmptyNote('No games in this snapshot.')];
-    }
-    return [
-      for (final event in events) ...[
-        _GameRow(
-          event: event,
-          props: shown.where((prop) => prop.card.event?.id == event.id).length,
-          onTap: widget.onOpenGame == null
-              ? null
-              : () => widget.onOpenGame!(event.id),
-        ),
-        const SizedBox(height: 8),
-      ],
-    ];
-  }
-
   void _open(ShownProp prop) {
     final cards = propCards(
       widget.board,
@@ -457,64 +443,6 @@ class _HomeScreenState extends State<HomeScreen> {
           injuries: widget.injuries,
           scores: scores,
           slip: widget.slip,
-        ),
-      ),
-    );
-  }
-}
-
-class _GameRow extends StatelessWidget {
-  const _GameRow({required this.event, required this.props, this.onTap});
-
-  final SportEvent event;
-  final int props;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final away = canonicalTeam(event.away) ?? event.away;
-    final home = canonicalTeam(event.home) ?? event.home;
-    return Material(
-      color: EdgeColors.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: const BorderSide(color: EdgeColors.border),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '$away at $home',
-                      style: EdgeType.title.copyWith(
-                        fontFamily: EdgeFont.display,
-                        fontSize: 18,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(kickoffLabel(event.startsAt), style: EdgeType.label),
-                  ],
-                ),
-              ),
-              Text(
-                props == 0
-                    ? 'No props'
-                    : '$props ${props == 1 ? 'prop' : 'props'}',
-                style: EdgeType.label,
-              ),
-              if (onTap != null) ...[
-                const SizedBox(width: 4),
-                const Icon(Icons.chevron_right, color: EdgeColors.textTertiary),
-              ],
-            ],
-          ),
         ),
       ),
     );

@@ -1,25 +1,26 @@
 import 'package:flutter/material.dart';
 
-/// Night-ledger ink with a chartreuse mark. Green, amber, and coral
-/// are reserved for the value check, not for the wordmark.
+/// Cool graphite surfaces with a pale-blue interaction accent. Value colors
+/// remain separate from navigation and always accompany a text label.
 class EdgeColors {
-  static const background = Color(0xFF100E0C);
-  static const surface = Color(0xFF1B1814);
-  static const surfaceHigh = Color(0xFF28231D);
-  static const border = Color(0xFF3A332B);
-  static const text = Color(0xFFF7F2E9);
-  static const textSecondary = Color(0xFFC9BBA9);
-  static const textTertiary = Color(0xFF8F8274);
-  static const accent = Color(0xFFD6F25C);
-  static const good = Color(0xFF3DDB9A);
-  static const warn = Color(0xFFE6B15A);
-  static const bad = Color(0xFFFF6E5A);
-  static const onAccent = Color(0xFF17140A);
+  static const background = Color(0xFF0C1017);
+  static const surface = Color(0xFF151C25);
+  static const surfaceHigh = Color(0xFF202A37);
+  static const border = Color(0xFF303D4D);
+  static const text = Color(0xFFF3F6FA);
+  static const textSecondary = Color(0xFFBAC6D6);
+  static const textTertiary = Color(0xFF9BAABE);
+  static const accent = Color(0xFFA8C7FA);
+  static const good = Color(0xFF69D7B0);
+  static const warn = Color(0xFFF1C27A);
+  static const bad = Color(0xFFFF918A);
+  static const onAccent = Color(0xFF102542);
 }
 
 class EdgeFont {
   static const sans = 'Outfit';
-  static const display = 'Fraunces';
+  static const display = sans;
+  static const brand = 'Fraunces';
 }
 
 /// Four sizes, used everywhere: 34, 22, 17, 15.
@@ -85,6 +86,8 @@ ThemeData edgeTheme() {
     secondary: EdgeColors.accent,
     onSecondary: EdgeColors.onAccent,
     surface: EdgeColors.surface,
+    outline: EdgeColors.border,
+    outlineVariant: EdgeColors.border,
     onSurface: EdgeColors.text,
     error: EdgeColors.bad,
     onError: EdgeColors.onAccent,
@@ -108,6 +111,11 @@ ThemeData edgeTheme() {
     ),
     iconTheme: const IconThemeData(color: EdgeColors.text, size: 22),
     dividerColor: EdgeColors.border,
+    dividerTheme: const DividerThemeData(
+      color: EdgeColors.border,
+      thickness: 1,
+      space: 1,
+    ),
     splashFactory: InkRipple.splashFactory,
     appBarTheme: const AppBarTheme(
       backgroundColor: EdgeColors.background,

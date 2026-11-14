@@ -106,15 +106,6 @@ class _PropDetailScreenState extends State<PropDetailScreen> {
     final stats = sampleStats(
       selected?.samples.map((sample) => sample.value) ?? const [],
     );
-    final gap = face.edge;
-    final note = gap == null
-        ? null
-        : 'Our chance is ${gap > 0
-                  ? 'higher'
-                  : gap < 0
-                  ? 'lower'
-                  : 'level'} '
-              'than the book\'s no-vig price by ${edgePointsLabel(gap)}.';
     final injuries = _injuries(face);
     final held = widget.slip?.slip.contains(card.id) ?? false;
     return Scaffold(
@@ -181,7 +172,7 @@ class _PropDetailScreenState extends State<PropDetailScreen> {
             ),
           ],
           const SizedBox(height: 12),
-          _PriceHero(card: card, quote: quote),
+          _PriceHero(card: card, quote: quote, now: widget.now),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(16),
@@ -190,157 +181,226 @@ class _PropDetailScreenState extends State<PropDetailScreen> {
               borderRadius: BorderRadius.circular(18),
               border: Border.all(color: EdgeColors.border),
             ),
-            child: ValueCheck(
-              word: verdict.word,
-              overpriced: verdict.overpriced,
-              ourChance: verdict.ourChance,
-              bookChance: verdict.fairChance,
-              bookLabel: face.bookChanceLabel,
-              note: note,
-            ),
-          ),
-          if (face.projection != null) ...[
-            const SizedBox(height: 12),
-            PropBreakdown(projection: face.projection!),
-          ],
-          const SizedBox(height: 4),
-          ValueView(
-            headline: false,
-            verdict: verdict,
-            whyBody: WhyBriefView(
-              brief: buildPropBrief(
-                verdict: verdict,
-                line: card.line,
-                side: card.lineSide,
-                market: card.market,
-                player: card.player,
-                windows: windows,
-                matchup: face.value.matchup,
-                teamName: clubNickname(windows?.team),
-                teamSpread: face.teamSpread,
-                total: face.total,
-                injuries: widget.injuries,
-                playerTeam: windows?.team,
-                opponent: face.opponent,
-              ),
-            ),
-            extraMath: face.value.matchup == null
-                ? null
-                : Padding(
-                    padding: const EdgeInsets.only(top: 12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          face.value.matchup!.snapLine,
-                          style: EdgeType.body,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(face.value.matchup!.credit, style: EdgeType.label),
-                      ],
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text('Price check', style: EdgeType.label),
                     ),
-                  ),
-          ),
-          const SizedBox(height: 18),
-          _SectionHead(
-            title: 'Hit rate',
-            trailing: windows?.seasonYear == null
-                ? null
-                : '${windows!.seasonYear}',
-          ),
-          const SizedBox(height: 8),
-          EdgeSegments(
-            labels: const ['L5', 'L10', 'H2H', 'Season'],
-            index: window,
-            onChanged: (index) => setState(() => window = index),
+                    WordPill(
+                      word: verdict.word,
+                      overpriced: verdict.overpriced,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                ValueCheck(
+                  word: verdict.word,
+                  overpriced: verdict.overpriced,
+                  ourChance: verdict.ourChance,
+                  bookChance: verdict.breakEven,
+                  ourLabel: 'Model estimate',
+                  bookLabel: 'Price requires',
+                  compact: true,
+                  note: 'Model estimate; no demonstrated betting edge.',
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 12),
-          Row(
+          _EvidenceSummary(
+            face: face,
+            average: stats.average,
+            observed: stats.count,
+          ),
+          const SizedBox(height: 12),
+          _ResearchSection(
+            title: 'Performance',
+            initiallyExpanded: true,
             children: [
-              _StatReadout('Avg', stats.average),
-              const SizedBox(width: 16),
-              _StatReadout('Median', stats.median),
-              const Spacer(),
+              const SizedBox(height: 18),
+              _SectionHead(
+                title: 'Hit rate',
+                trailing: windows?.seasonYear == null
+                    ? null
+                    : '${windows!.seasonYear}',
+              ),
+              const SizedBox(height: 8),
+              EdgeSegments(
+                labels: const ['L5', 'L10', 'H2H', 'Season'],
+                index: window,
+                onChanged: (index) => setState(() => window = index),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  _StatReadout('Avg', stats.average),
+                  const SizedBox(width: 16),
+                  _StatReadout('Median', stats.median),
+                  const Spacer(),
+                  Text(
+                    stats.count == 0
+                        ? 'No games'
+                        : '${stats.count} ${stats.count == 1 ? 'game' : 'games'}',
+                    style: EdgeType.label,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              _HitBoard(
+                samples: selected?.samples ?? const [],
+                line: card.line,
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Green cleared the line. Red missed.',
+                      style: EdgeType.label,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'How these windows are counted',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => _countNote(windows?.note),
+                    icon: const Icon(Icons.info_outline, size: 20),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _ResearchSection(
+            title: 'Matchup and availability',
+            children: [
+              const SizedBox(height: 18),
+              const _SectionHead(title: 'Matchup'),
+              const SizedBox(height: 8),
+              _MatchupMeter(
+                defense: face.value.matchup?.defense,
+                note: face.note,
+              ),
+              const SizedBox(height: 18),
+              _SectionHead(
+                title: 'Injuries',
+                trailing: widget.injuries?.freshness(widget.now),
+              ),
+              const SizedBox(height: 8),
+              if (widget.injuries == null)
+                const EmptyNote(
+                  'No injury report is loaded. Nothing was filled in.',
+                )
+              else if (injuries.isEmpty)
+                const EmptyNote(
+                  'No Out or Questionable player in this report is tied to this prop.',
+                )
+              else
+                for (final entry in injuries) ...[
+                  _InjuryRow(entry: entry),
+                  const SizedBox(height: 8),
+                ],
+            ],
+          ),
+          const SizedBox(height: 12),
+          _ResearchSection(
+            title: 'Price comparison',
+            children: [
               Text(
-                stats.count == 0
-                    ? 'No games'
-                    : '${stats.count} ${stats.count == 1 ? 'game' : 'games'}',
+                verdict.fairChance == null
+                    ? "Market no-vig chance unavailable."
+                    : "Market no-vig chance: ${(verdict.fairChance! * 100).toStringAsFixed(1)}%",
                 style: EdgeType.label,
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          _HitBoard(samples: selected?.samples ?? const [], line: card.line),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Green cleared the line. Red missed.',
-                  style: EdgeType.label,
-                ),
-              ),
-              IconButton(
-                tooltip: 'How these windows are counted',
-                visualDensity: VisualDensity.compact,
-                onPressed: () => _countNote(windows?.note),
-                icon: const Icon(Icons.info_outline, size: 20),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          const _SectionHead(title: 'Matchup'),
-          const SizedBox(height: 8),
-          _MatchupMeter(defense: face.value.matchup?.defense, note: face.note),
-          const SizedBox(height: 18),
-          _SectionHead(
-            title: 'Injuries',
-            trailing: widget.injuries?.freshness(widget.now),
-          ),
-          const SizedBox(height: 8),
-          if (widget.injuries == null)
-            const EmptyNote(
-              'No injury report is loaded. Nothing was filled in.',
-            )
-          else if (injuries.isEmpty)
-            const EmptyNote(
-              'No Out or Questionable player in this report is tied to this prop.',
-            )
-          else
-            for (final entry in injuries) ...[
-              _InjuryRow(entry: entry),
+              const SizedBox(height: 10),
+              const _SectionHead(title: 'Prices'),
               const SizedBox(height: 8),
+              if (card.bookRows.isEmpty)
+                const EmptyNote('No open price for this side.')
+              else
+                for (var i = 0; i < card.bookRows.length; i++)
+                  _BookRow(
+                    row: card.bookRows[i],
+                    best: i == 0,
+                    now: widget.now,
+                  ),
+              const SizedBox(height: 16),
+              const _SectionHead(title: 'Odds over time'),
+              const SizedBox(height: 8),
+              if (widget.history == null)
+                const EmptyNote(
+                  'Price history is collected by the local backend. Nothing is drawn in its place.',
+                )
+              else
+                FutureBuilder<List<OddsQuote>>(
+                  future: widget.history!(card.side),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState != ConnectionState.done) {
+                      return const LinearProgressIndicator();
+                    }
+                    if (snapshot.hasError) {
+                      return const EmptyNote(
+                        'Saved price history could not be read.',
+                      );
+                    }
+                    return OddsHistoryChart(quotes: snapshot.data ?? const []);
+                  },
+                ),
             ],
-          const SizedBox(height: 10),
-          const _SectionHead(title: 'Prices'),
-          const SizedBox(height: 8),
-          if (card.bookRows.isEmpty)
-            const EmptyNote('No open price for this side.')
-          else
-            for (var i = 0; i < card.bookRows.length; i++)
-              _BookRow(row: card.bookRows[i], best: i == 0, now: widget.now),
-          const SizedBox(height: 16),
-          const _SectionHead(title: 'Odds over time'),
-          const SizedBox(height: 8),
-          if (widget.history == null)
-            const EmptyNote(
-              'Price history is collected by the local backend. Nothing is drawn in its place.',
-            )
-          else
-            FutureBuilder<List<OddsQuote>>(
-              future: widget.history!(card.side),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState != ConnectionState.done) {
-                  return const LinearProgressIndicator();
-                }
-                if (snapshot.hasError) {
-                  return const EmptyNote(
-                    'Saved price history could not be read.',
-                  );
-                }
-                return OddsHistoryChart(quotes: snapshot.data ?? const []);
-              },
-            ),
+          ),
+          const SizedBox(height: 12),
+          _ResearchSection(
+            title: 'Model and math',
+            children: [
+              if (face.projection != null) ...[
+                const SizedBox(height: 12),
+                PropBreakdown(projection: face.projection!),
+              ],
+              const SizedBox(height: 4),
+              ValueView(
+                headline: false,
+                verdict: verdict,
+                whyBody: WhyBriefView(
+                  brief: buildPropBrief(
+                    verdict: verdict,
+                    line: card.line,
+                    side: card.lineSide,
+                    market: card.market,
+                    player: card.player,
+                    windows: windows,
+                    matchup: face.value.matchup,
+                    teamName: clubNickname(windows?.team),
+                    teamSpread: face.teamSpread,
+                    total: face.total,
+                    injuries: widget.injuries,
+                    playerTeam: windows?.team,
+                    opponent: face.opponent,
+                  ),
+                ),
+                extraMath: face.value.matchup == null
+                    ? null
+                    : Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              face.value.matchup!.snapLine,
+                              style: EdgeType.body,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              face.value.matchup!.credit,
+                              style: EdgeType.label,
+                            ),
+                          ],
+                        ),
+                      ),
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
           Text(
             'Comparison, not a pick.',
@@ -470,9 +530,14 @@ class _SideSwitch extends StatelessWidget {
 }
 
 class _PriceHero extends StatelessWidget {
-  const _PriceHero({required this.card, required this.quote});
+  const _PriceHero({
+    required this.card,
+    required this.quote,
+    required this.now,
+  });
   final PropCardModel card;
   final OddsQuote? quote;
+  final DateTime now;
 
   @override
   Widget build(BuildContext context) {
@@ -505,8 +570,111 @@ class _PriceHero extends StatelessWidget {
                 priceBlurb(card),
                 style: EdgeType.label.copyWith(fontSize: 11),
               ),
+              if (quote != null)
+                Text(
+                  '${quote!.demo ? 'Example' : 'Saved'} · ${priceAge(quote!.sourceAt, now)}',
+                  style: EdgeType.label.copyWith(fontSize: 11),
+                ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ResearchSection extends StatelessWidget {
+  const _ResearchSection({
+    required this.title,
+    required this.children,
+    this.initiallyExpanded = false,
+  });
+  final String title;
+  final List<Widget> children;
+  final bool initiallyExpanded;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    decoration: BoxDecoration(
+      color: EdgeColors.surface,
+      border: Border.all(color: EdgeColors.border),
+      borderRadius: BorderRadius.circular(18),
+    ),
+    child: ExpansionTile(
+      key: PageStorageKey('prop-section-$title'),
+      title: Text(title, style: EdgeType.title.copyWith(fontSize: 18)),
+      initiallyExpanded: initiallyExpanded,
+      maintainState: true,
+      shape: const Border(),
+      collapsedShape: const Border(),
+      childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: children,
+        ),
+      ],
+    ),
+  );
+}
+
+class _EvidenceSummary extends StatelessWidget {
+  const _EvidenceSummary({
+    required this.face,
+    required this.average,
+    required this.observed,
+  });
+  final ShownProp face;
+  final double? average;
+  final int observed;
+
+  @override
+  Widget build(BuildContext context) {
+    final mean = average;
+    final supports =
+        mean != null &&
+        (face.card.lineSide == LineSide.over
+            ? mean > face.card.line
+            : mean < face.card.line);
+    final support = mean == null
+        ? 'No recorded average is available for the selected window.'
+        : 'The average in $observed recorded games was ${mean.toStringAsFixed(1)}, ${mean > face.card.line
+              ? 'above'
+              : mean < face.card.line
+              ? 'below'
+              : 'on'} this line.';
+    return CoachCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Evidence at a glance',
+            style: EdgeType.title.copyWith(fontSize: 18),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            supports ? 'Supports this side' : 'Selected sample',
+            style: EdgeType.label,
+          ),
+          Text(support, style: EdgeType.body),
+          const SizedBox(height: 12),
+          Text('Reasons for caution', style: EdgeType.label),
+          Text(
+            observed < 10
+                ? 'Only $observed recorded games in this window. A short sample is not a forecast.'
+                : 'Past clear rates do not establish the chance of the next game.',
+            style: EdgeType.body,
+          ),
+          if (!supports && mean != null)
+            const Text(
+              'The recorded average does not support the selected side.',
+              style: EdgeType.body,
+            ),
+          if (face.badge != null)
+            const Text(
+              'Check player availability before relying on a projection.',
+              style: EdgeType.body,
+            ),
         ],
       ),
     );

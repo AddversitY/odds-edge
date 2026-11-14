@@ -4,8 +4,17 @@ import 'package:odds_edge/domain/autopsy.dart';
 import 'package:odds_edge/domain/player_investigation.dart';
 import 'package:odds_edge/domain/bets.dart';
 import 'package:odds_edge/domain/saved_play.dart';
+import 'package:odds_edge/domain/coach_board.dart';
 
 class MemoryResearchStore extends ResearchStore {
+  PropFilter? propFilter;
+  @override
+  Future<PropFilter?> loadPropFilter() async => propFilter;
+  @override
+  Future<void> savePropFilter(PropFilter filter) async {
+    propFilter = filter;
+  }
+
   final List<PlayerInvestigation> investigations = [];
   final Map<String, PlayerInvestigationReview> investigationReviews = {};
   @override

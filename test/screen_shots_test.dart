@@ -49,24 +49,30 @@ void main() {
       () => Future<void>.delayed(const Duration(milliseconds: 1500)),
     );
     await tester.pumpAndSettle(const Duration(milliseconds: 50));
-    await _save(tester, '/opt/cursor/artifacts/home-390.png');
+    await _save(tester, 'build/review/home-390.png');
     final legs = _crossGameLegs(tester);
 
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Games'));
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Research'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Games', skipOffstage: false));
     await tester.pumpAndSettle(const Duration(milliseconds: 100));
-    await _save(tester, '/opt/cursor/artifacts/games-390.png');
+    await _save(tester, 'build/review/games-390.png');
 
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Props'));
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Research'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Props', skipOffstage: false));
     await tester.pumpAndSettle(const Duration(milliseconds: 100));
-    await _save(tester, '/opt/cursor/artifacts/props-390.png');
+    await _save(tester, 'build/review/props-390.png');
 
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Home'));
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Today'));
     await tester.pumpAndSettle(const Duration(milliseconds: 100));
     await _addLeg(tester, legs.first, shot: true);
     await _addLeg(tester, legs.last, shot: false);
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Parlays'));
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Tools'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('open-parlay-builder')));
     await tester.pumpAndSettle(const Duration(milliseconds: 100));
-    await _save(tester, '/opt/cursor/artifacts/parlay-390.png');
+    await _save(tester, 'build/review/parlay-390.png');
   });
 }
 
@@ -103,7 +109,7 @@ Future<void> _addLeg(
   await tester.tap(card);
   await tester.pumpAndSettle(const Duration(milliseconds: 100));
   if (shot) {
-    await _save(tester, '/opt/cursor/artifacts/prop-detail-390.png');
+    await _save(tester, 'build/review/prop-detail-390.png');
   }
   await tester.tap(find.text('Add to parlay'));
   await tester.pumpAndSettle(const Duration(milliseconds: 100));

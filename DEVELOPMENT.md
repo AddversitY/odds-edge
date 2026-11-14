@@ -1,5 +1,47 @@
 # Odds Edge development
 
+## Set up a fresh checkout
+
+On Windows, Git and Python are the only prerequisites for project-local setup:
+
+```powershell
+.\tools\setup.ps1
+.\tools\flutter.ps1 run -d windows
+```
+
+This installs Flutter 3.47.7 under `.tools/flutter` and Python packages under
+`.venv`; neither is committed. The wrapper works without changing PATH.
+Windows desktop builds also need Visual Studio's C++ desktop workload. Web
+development can use Chrome. No Android SDK is needed for these targets.
+For checks with this setup, use `.\tools\flutter.ps1 analyze --no-pub` and
+`.\tools\flutter.ps1 test --no-pub`.
+
+For a browser preview, run `.\tools\flutter.ps1 build web --release --no-pub`,
+then `.\tools\preview.ps1`. It serves the built app at
+`http://127.0.0.1:8765/` in a hidden background Python process, bound to
+loopback only. This URL works on the computer running it; it is not public
+hosting. The PID is in `.tools/preview.pid`; logs are in `build/review`.
+The app starts in explicitly labeled sample mode without provider keys.
+
+Alternatively, use a separately installed Flutter 3.47.7 on PATH. The SDK path
+below is from the original development computer; it is not portable.
+From the repository root in PowerShell, prepare an isolated Python environment:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r model/requirements.txt
+.\.venv\Scripts\python.exe -m unittest discover -s model -t model
+flutter pub get
+flutter analyze
+flutter test
+```
+
+The Python tests use `model` as the discovery root because the trainer and
+tests import sibling modules directly. They do not need live odds or API keys.
+Read [the current handoff](docs/HANDOFF.md) for the current navigation,
+model results, and next feature specifications; older notes below describe
+earlier versions of the app.
+
 Flutter SDK: `C:\Users\vince\flutter`, added to the user PATH. Reopen terminals
 after changing PATH. Initial installed versions: Flutter 3.47.7, Dart 3.13.5.
 

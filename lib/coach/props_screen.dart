@@ -10,7 +10,6 @@ import '../domain/odds.dart';
 import '../domain/parlay_slip.dart';
 import '../domain/player_stats.dart';
 import '../domain/prop_history.dart';
-import '../domain/saved_play.dart';
 import '../explained_number.dart';
 import '../theme/edge_theme.dart';
 import '../ui/feed_card.dart';
@@ -57,6 +56,16 @@ class _PropsScreenState extends State<PropsScreen> {
   late Future<_PropFacts> facts;
   List<HistoricalGame> scores = const [];
   PropFilter filter = const PropFilter();
+  String query = '';
+  final search = TextEditingController();
+  String? preferenceNote;
+  int filterRevision = 0;
+
+  @override
+  void dispose() {
+    search.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -69,6 +78,26 @@ class _PropsScreenState extends State<PropsScreen> {
     _loadScores();
     final market = widget.focusMarket;
     if (market != null) filter = PropFilter(market: market);
+    _restoreFilter();
+  }
+
+  Future<void> _restoreFilter() async {
+    final revision = filterRevision;
+    try {
+      final saved = await widget.store.loadPropFilter();
+      if (!mounted ||
+          revision != filterRevision ||
+          widget.focusMarket != null) {
+        return;
+      }
+      if (saved != null) setState(() => filter = saved);
+    } catch (_) {
+      if (mounted && revision == filterRevision && widget.focusMarket == null) {
+        setState(
+          () => preferenceNote = 'Saved filters could not be restored. Choose filters for this session.',
+        );
+      }
+    }
   }
 
   @override
@@ -76,6 +105,7 @@ class _PropsScreenState extends State<PropsScreen> {
     super.didUpdateWidget(oldWidget);
     final market = widget.focusMarket;
     if (market != null && market != oldWidget.focusMarket) {
+      filterRevision++;
       filter = PropFilter(market: market);
     }
   }
@@ -106,10 +136,19 @@ class _PropsScreenState extends State<PropsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final cards = applyPropFilter(
-      propCards(widget.board, widget.now, books: widget.enabledBooks),
-      filter,
-    );
+    final cards =
+        applyPropFilter(
+              propCards(widget.board, widget.now, books: widget.enabledBooks),
+              filter,
+            )
+            .where(
+              (card) =>
+                  query.trim().isEmpty ||
+                  '${card.player} ${card.marketLabel} ${card.event?.home ?? ''} ${card.event?.away ?? ''}'
+                      .toLowerCase()
+                      .contains(query.trim().toLowerCase()),
+            )
+            .toList();
     return ListView(
       key: const Key('props-list'),
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -127,16 +166,67 @@ class _PropsScreenState extends State<PropsScreen> {
           style: EdgeType.label,
         ),
         const SizedBox(height: 12),
+        Material(
+          color: Colors.transparent,
+          child: TextField(
+            key: const Key('prop-search'),
+            controller: search,
+            decoration: InputDecoration(
+              hintText: 'Search player, team, or stat',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: query.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'Clear search',
+                      icon: const Icon(Icons.close),
+                      onPressed: () {
+                        search.clear();
+                        setState(() => query = '');
+                      },
+                    ),
+            ),
+            onChanged: (value) => setState(() => query = value),
+          ),
+        ),
+        if (preferenceNote != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(preferenceNote!, style: EdgeType.label),
+          ),
+        const SizedBox(height: 12),
         Align(
           alignment: Alignment.centerLeft,
           child: OutlinedButton.icon(
-            onPressed: () => _openFilters(cards),
+            onPressed: _openFilters,
             icon: const Icon(Icons.tune),
             label: const Text('Filter and sort'),
           ),
         ),
         const SizedBox(height: 12),
-        if (cards.isEmpty)
+        if (cards.isEmpty &&
+            (query.isNotEmpty ||
+                filter.market != null ||
+                filter.bookId != null ||
+                filter.minAmerican != null ||
+                filter.maxAmerican != null ||
+                filter.onlyLongerThanTheBooks))
+          CoachCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('No matches for this search and these filters.'),
+                TextButton(
+                  onPressed: () {
+                    search.clear();
+                    setState(() => query = '');
+                    _applyFilter(const PropFilter());
+                  },
+                  child: const Text('Clear search and filters'),
+                ),
+              ],
+            ),
+          )
+        else if (cards.isEmpty)
           const CoachCard(
             child: Text(
               'No player-prop prices in this snapshot. The free plan asks for passing yards, receptions, rushing yards, and receiving yards on the next game, at most once a day. Until those prices are saved, this list stays empty. Hit rates are not invented to fill it.',
@@ -153,26 +243,23 @@ class _PropsScreenState extends State<PropsScreen> {
                 );
               }
               final facts = snapshot.data;
-              final shown = preferredPropSides([
-                for (final card in cards)
-                  showProp(
-                    card: card,
-                    cards: cards,
-                    directory: facts?.players,
-                    context: facts?.matchup,
-                    board: widget.board,
-                    now: widget.now,
-                    injuries: widget.injuries,
-                    scores: scores,
-                  ),
-              ]);
+              final shown = preferredPropSides(
+                showProps(
+                  cards: cards,
+                  directory: facts?.players,
+                  context: facts?.matchup,
+                  board: widget.board,
+                  now: widget.now,
+                  injuries: widget.injuries,
+                  scores: scores,
+                ),
+              );
               return Column(
                 children: [
                   for (final face in shown) ...[
                     FeedPropCard(
                       shown: face,
                       onOpen: () => _open(face.card, facts, cards),
-                      onSave: () => _save(face.card),
                     ),
                     const SizedBox(height: 8),
                   ],
@@ -181,34 +268,6 @@ class _PropsScreenState extends State<PropsScreen> {
             },
           ),
       ],
-    );
-  }
-
-  Future<void> _save(PropCardModel card) async {
-    final quote = card.best;
-    await widget.store.saveSavedPlay(
-      SavedPlay(
-        id: card.id,
-        savedAt: DateTime.now().toUtc(),
-        title: '${card.player} ${card.marketLabel} ${card.lineLabel}',
-        detail: card.event == null
-            ? card.marketLabel
-            : '${card.event!.away} at ${card.event!.home}',
-        book: quote?.book ?? '',
-        decimal: quote?.decimal,
-        demo: card.demo || (quote?.demo ?? false),
-        priceNote: quote == null
-            ? 'No price in the snapshot'
-            : priceAge(quote.sourceAt, widget.now),
-      ),
-    );
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Saved to My Bets. Double-tap the player\'s name to do the same.',
-        ),
-      ),
     );
   }
 
@@ -231,11 +290,14 @@ class _PropsScreenState extends State<PropsScreen> {
     );
   }
 
-  Future<void> _openFilters(List<PropCardModel> cards) async {
-    final markets = {
-      for (final card in propCards(widget.board, widget.now))
-        card.market: card.marketLabel,
-    };
+  Future<void> _openFilters() async {
+    filterRevision++;
+    final cards = propCards(
+      widget.board,
+      widget.now,
+      books: widget.enabledBooks,
+    );
+    final markets = {for (final card in cards) card.market: card.marketLabel};
     final books = {
       for (final card in cards)
         for (final row in card.bookRows) row.quote.bookId: row.quote.book,
@@ -246,7 +308,27 @@ class _PropsScreenState extends State<PropsScreen> {
       builder: (context) =>
           _FilterSheet(filter: filter, markets: markets, books: books),
     );
-    if (next != null) setState(() => filter = next);
+    if (next != null && mounted) {
+      await _applyFilter(next);
+    }
+  }
+
+  Future<void> _applyFilter(PropFilter next) async {
+    filterRevision++;
+    setState(() {
+      filter = next;
+      preferenceNote = 'Filters remembered on this device.';
+    });
+    try {
+      await widget.store.savePropFilter(next);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => preferenceNote =
+              'Filters applied for this session; they could not be saved.',
+        );
+      }
+    }
   }
 }
 
@@ -277,8 +359,8 @@ class _FilterSheetState extends State<_FilterSheet> {
   late bool onlyEdge = widget.filter.onlyLongerThanTheBooks;
   late PropSort sort = widget.filter.sort;
   late RangeValues odds = RangeValues(
-    (widget.filter.minAmerican ?? -250).toDouble(),
-    (widget.filter.maxAmerican ?? 250).toDouble(),
+    (widget.filter.minAmerican ?? -250).clamp(-250, 250).toDouble(),
+    (widget.filter.maxAmerican ?? 250).clamp(-250, 250).toDouble(),
   );
 
   @override
@@ -304,6 +386,11 @@ class _FilterSheetState extends State<_FilterSheet> {
               value: null,
               child: Text('All stats in the snapshot'),
             ),
+            if (market != null && !widget.markets.containsKey(market))
+              DropdownMenuItem(
+                value: market,
+                child: const Text('Saved stat (unavailable)'),
+              ),
             for (final entry in widget.markets.entries)
               DropdownMenuItem(value: entry.key, child: Text(entry.value)),
           ],
@@ -315,6 +402,11 @@ class _FilterSheetState extends State<_FilterSheet> {
           decoration: const InputDecoration(labelText: 'Sportsbook'),
           items: [
             const DropdownMenuItem(value: null, child: Text('Any book')),
+            if (book != null && !widget.books.containsKey(book))
+              DropdownMenuItem(
+                value: book,
+                child: const Text('Saved book (unavailable)'),
+              ),
             for (final entry in widget.books.entries)
               DropdownMenuItem(value: entry.key, child: Text(entry.value)),
           ],

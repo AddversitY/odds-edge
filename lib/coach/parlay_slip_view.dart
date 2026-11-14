@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../data/research_store.dart';
 import '../domain/coach_board.dart';
 import '../domain/history.dart';
 import '../domain/injury_report.dart';
@@ -9,7 +8,6 @@ import '../domain/odds.dart';
 import '../domain/parlay_slip.dart';
 import '../domain/parlay_value.dart';
 import '../domain/prop_history.dart';
-import '../domain/saved_play.dart';
 import '../domain/value_check.dart';
 import '../theme/edge_theme.dart';
 import '../ui/value_check.dart';
@@ -27,7 +25,6 @@ class ParlaySlipView extends StatefulWidget {
     this.injuries,
     this.scores = const [],
     this.enabledBooks,
-    this.store,
     this.onAddLeg,
   });
 
@@ -39,7 +36,6 @@ class ParlaySlipView extends StatefulWidget {
   final InjuryReport? injuries;
   final List<HistoricalGame> scores;
   final Set<String>? enabledBooks;
-  final ResearchStore? store;
   final VoidCallback? onAddLeg;
 
   @override
@@ -247,13 +243,6 @@ class _ParlaySlipViewState extends State<ParlaySlipView> {
             },
           ),
           const SizedBox(height: 12),
-          FilledButton(
-            key: const Key('save-slip'),
-            onPressed: widget.store == null
-                ? null
-                : () => _save(ticket!, legs, dollars),
-            child: const Text('Save this slip'),
-          ),
         ],
         const SizedBox(height: 8),
         Text(
@@ -269,34 +258,6 @@ class _ParlaySlipViewState extends State<ParlaySlipView> {
         ),
       ],
     );
-  }
-
-  Future<void> _save(
-    TicketValue ticket,
-    List<ShownProp> legs,
-    double? dollars,
-  ) async {
-    final store = widget.store;
-    if (store == null) return;
-    final names = legs.map((leg) => leg.card.player).join(', ');
-    await store.saveSavedPlay(
-      SavedPlay(
-        id: 'slip-${legs.map((leg) => leg.card.id).join('|')}',
-        savedAt: DateTime.now().toUtc(),
-        title:
-            '${ticket.wordLabel} · ${americanLabel(ticket.payoutDecimal)}${ticket.payoutEstimated ? ' estimated' : ''}',
-        detail: names,
-        book: ticket.bestBook ?? legs.first.card.best?.book ?? '',
-        decimal: ticket.payoutDecimal,
-        demo: widget.board.demo || legs.any((leg) => leg.card.demo),
-        priceNote: ticket.payoutEstimated
-            ? 'Estimated payout. Same-game prices are not a posted parlay number.'
-            : 'Multiplied leg prices${dollars == null ? '' : ', stake \$${dollars.toStringAsFixed(2)}'}.',
-      ),
-    );
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Saved to My Bets.')));
   }
 }
 

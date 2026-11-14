@@ -5,6 +5,7 @@ import '../domain/autopsy.dart';
 import '../domain/player_investigation.dart';
 import '../domain/bets.dart';
 import '../domain/saved_play.dart';
+import '../domain/coach_board.dart';
 import 'journal_stub.dart'
     if (dart.library.io) 'journal_io.dart'
     if (dart.library.html) 'journal_web.dart'
@@ -50,14 +51,19 @@ class ResearchStore {
   }
 
   Future<void> save(SavedResearch research) => _serial(() async {
-    await _journal.append('research.jsonl', '\n${jsonEncode(research.toJson())}\n');
+    await _journal.append(
+      'research.jsonl',
+      '\n${jsonEncode(research.toJson())}\n',
+    );
   });
 
   Future<void> saveDraft(SavedResearch record) =>
       _appendState('drafts.jsonl', record.toJson());
   Future<SavedResearch?> loadDraft({String? selectionKey}) async {
     await _writes;
-    for (final line in _lines(await _journal.readBytes('drafts.jsonl')).reversed) {
+    for (final line in _lines(
+      await _journal.readBytes('drafts.jsonl'),
+    ).reversed) {
       if (line.trim().isEmpty) continue;
       try {
         final record = SavedResearch.fromJson(jsonDecode(line));
@@ -75,6 +81,13 @@ class ResearchStore {
 
   Future<void> saveBooks(Set<String>? books) =>
       _appendState('preferences.jsonl', {'books': books?.toList()});
+  Future<void> savePropFilter(PropFilter filter) =>
+      _appendState('prop-preferences.jsonl', propFilterJson(filter));
+  Future<PropFilter?> loadPropFilter() async {
+    final json = await _lastState('prop-preferences.jsonl');
+    return json == null ? null : propFilterFromJson(json);
+  }
+
   Future<void> saveReview(ResearchReview review) =>
       _appendState('reviews.jsonl', review.toJson());
   Future<Map<String, ResearchReview>> loadReviews() async {
@@ -202,6 +215,7 @@ class ResearchStore {
         'player-investigation-reviews.jsonl',
         'bets.jsonl',
         'saved-plays.jsonl',
+        'prop-preferences.jsonl',
       ],
     ),
   );
@@ -216,7 +230,9 @@ class ResearchStore {
         .map((r) => r.toJson())
         .toList(),
     'bets': (await loadBets()).map((bet) => bet.toJson()).toList(),
-    'savedPlays': (await loadSavedPlays()).map((play) => play.toJson()).toList(),
+    'savedPlays': (await loadSavedPlays())
+        .map((play) => play.toJson())
+        .toList(),
   });
   Future<int> importJson(String text) async {
     if (text.length > 10000000) throw const FormatException('Backup too large');

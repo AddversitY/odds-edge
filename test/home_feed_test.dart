@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:odds_edge/coach/home_screen.dart';
@@ -11,6 +13,8 @@ import 'package:odds_edge/domain/parlay_slip.dart';
 import 'package:odds_edge/domain/player_stats.dart';
 import 'package:odds_edge/domain/prop_history.dart';
 import 'package:odds_edge/theme/edge_theme.dart';
+import 'package:odds_edge/ui/feed_card.dart';
+import 'package:odds_edge/coach/prop_pricing.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -26,6 +30,67 @@ void main() {
     date: DateTime.utc(2026, 9, week),
     seasonType: 'REG',
     stats: {'passing_yards': yards},
+  );
+
+  testWidgets('pending player data is loading, not a board of Skip verdicts', (
+    tester,
+  ) async {
+    final pending = Completer<PlayerStatsDataset>();
+    final now = DateTime.utc(2026, 11, 12);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: edgeTheme(),
+        home: HomeScreen(
+          board: demoBoard(now),
+          now: now,
+          stamp: (_) => 'now',
+          loadPlayers: () => pending.future,
+          loadMatchup: () async => throw StateError('no matchup'),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Loading saved player stats…'), findsOneWidget);
+    expect(find.byType(FeedPropCard), findsNothing);
+    pending.completeError(StateError('unavailable'));
+    await tester.pumpAndSettle();
+    expect(find.text('Loading saved player stats…'), findsNothing);
+    expect(find.textContaining('Box scores could not be read'), findsOneWidget);
+  });
+
+  test(
+    'a shared pricing pass preserves every independently priced verdict',
+    () {
+      final now = DateTime.utc(2026, 11, 12);
+      final board = demoBoard(now);
+      final cards = propCards(board, now);
+      final directory = PlayerDirectory(
+        PlayerStatsDataset(
+          rows: [for (var week = 1; week <= 8; week++) allen(week, 280)],
+        ),
+      );
+      final shared = showProps(
+        cards: cards,
+        directory: directory,
+        context: null,
+        board: board,
+        now: now,
+      );
+      for (var i = 0; i < cards.length; i++) {
+        final single = showProp(
+          card: cards[i],
+          cards: cards,
+          directory: directory,
+          context: null,
+          board: board,
+          now: now,
+        );
+        expect(shared[i].verdict.ourChance, single.verdict.ourChance);
+        expect(shared[i].verdict.word, single.verdict.word);
+        expect(shared[i].verdict.alternative, single.verdict.alternative);
+        expect(shared[i].projection?.mean, single.projection?.mean);
+      }
+    },
   );
 
   testWidgets('an empty snapshot does not invent prop numbers', (tester) async {
@@ -53,9 +118,6 @@ void main() {
     expect(find.textContaining('No player-prop prices'), findsOneWidget);
     expect(find.textContaining('%'), findsNothing);
     expect(find.text('EXAMPLE'), findsNothing);
-    await tester.tap(find.text('Games'));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('No games'), findsOneWidget);
   });
 
   testWidgets('the value feed shows the value check on example props', (
@@ -83,8 +145,8 @@ void main() {
     expect(find.text('Josh Allen'), findsWidgets);
     expect(find.text('Our chance'.toUpperCase()), findsWidgets);
     expect(find.textContaining('NO-VIG'), findsWidgets);
-    expect(find.text('Bet'), findsWidgets);
-    await tester.tap(find.text('Trending'));
+    expect(find.text('Review'), findsWidgets);
+    await tester.tap(find.text('Recent'));
     await tester.pumpAndSettle();
     expect(find.text('Josh Allen'), findsWidgets);
     await tester.scrollUntilVisible(find.textContaining('not a pick'), 400);
@@ -92,7 +154,7 @@ void main() {
     final scrollable = tester.state<ScrollableState>(find.byType(Scrollable));
     scrollable.position.jumpTo(0);
     await tester.pumpAndSettle();
-    await tester.tap(find.text("Don't"));
+    await tester.tap(find.text('Pass'));
     await tester.pumpAndSettle();
     expect(find.textContaining('pts too high'), findsWidgets);
     expect(find.text('FEE-FREE'), findsWidgets);

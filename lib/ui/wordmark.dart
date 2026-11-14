@@ -51,7 +51,7 @@ class OddsWordmark extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = TextStyle(
-      fontFamily: EdgeFont.display,
+      fontFamily: EdgeFont.brand,
       fontSize: height,
       fontWeight: FontWeight.w600,
       letterSpacing: -0.6,

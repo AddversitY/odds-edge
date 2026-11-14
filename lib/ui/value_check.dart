@@ -123,9 +123,9 @@ class ValueCheck extends StatelessWidget {
   }
 
   static String _word(ValueWord word) => switch (word) {
-    ValueWord.bet => 'Bet',
-    ValueWord.lean => 'Lean',
-    ValueWord.skip => 'Skip',
+    ValueWord.bet => 'Review',
+    ValueWord.lean => 'Thin margin',
+    ValueWord.skip => 'Pass',
   };
 }
 
