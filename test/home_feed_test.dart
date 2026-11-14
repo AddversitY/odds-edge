@@ -115,7 +115,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.textContaining('No player-prop prices'), findsOneWidget);
+    expect(find.textContaining('Sportsbook prices are not connected'), findsOneWidget);
     expect(find.textContaining('%'), findsNothing);
     expect(find.text('EXAMPLE'), findsNothing);
   });

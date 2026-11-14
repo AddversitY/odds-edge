@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/nfl_assets.dart';
 import '../domain/coach_board.dart';
 import '../domain/history.dart';
+import '../domain/eastern.dart';
 import '../domain/injury_report.dart';
 import '../domain/matchup.dart';
 import '../domain/odds.dart';
@@ -36,10 +37,12 @@ class HomeScreen extends StatefulWidget {
     this.onSave,
     this.onOpenReport,
     this.onOpenStale,
+    this.sourceReady = true,
   });
 
   /// Prices for the prop feed. In sample mode this is the same board as the games.
   final OddsBoard board;
+  final bool sourceReady;
   final DateTime now;
   final String Function(DateTime time) stamp;
 
@@ -144,7 +147,7 @@ class _HomeScreenState extends State<HomeScreen> {
           key: const Key('home-feed'),
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
           children: [
-            EdgeSegments(
+            if (widget.board.demo || widget.board.quotes.isNotEmpty) EdgeSegments(
               labels: const ['Value', 'Recent', 'Pass'],
               index: segment,
               onChanged: (index) => setState(() => segment = index),
@@ -155,7 +158,9 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    segment == 2
+                    !widget.board.demo && widget.board.quotes.isEmpty
+                        ? 'Upcoming NFL games'
+                        : segment == 2
                         ? 'Pass on price'
                         : segment == 1
                         ? 'Recent clear rates'
@@ -171,7 +176,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   slateDate(kickoffs),
                   style: EdgeType.label.copyWith(fontSize: 12),
                 ),
-                IconButton(
+                if (widget.board.demo || widget.board.quotes.isNotEmpty) IconButton(
                   tooltip: 'Search',
                   visualDensity: VisualDensity.compact,
                   onPressed: () => setState(() {
@@ -189,13 +194,14 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 6),
               const ExamplePill(),
             ],
-            Text(
-              'Snapshot as of ${widget.stamp(widget.board.fetchedAt)}',
-              style: EdgeType.label.copyWith(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
+            if (widget.sourceReady)
+              Text(
+                'Snapshot as of ${widget.stamp(widget.board.fetchedAt)}',
+                style: EdgeType.label.copyWith(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-            ),
             if (widget.onOpenReport != null)
               Align(
                 alignment: Alignment.centerLeft,
@@ -225,14 +231,22 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
             const SizedBox(height: 12),
             if (widget.board.demo)
-              const Text('Invented prices and matchups · historical box scores', style: EdgeType.label),
-            if (directory?.data.metadata['cutoff'] != null)
-              Text('Box scores through ${directory!.data.metadata['cutoff']} · not live', style: EdgeType.label.copyWith(fontSize: 12)),
+              const Text(
+                'Invented prices and matchups · historical box scores',
+                style: EdgeType.label,
+              ),
+            if ((widget.board.demo || widget.board.quotes.isNotEmpty) && directory?.data.metadata['cutoff'] != null)
+              Text(
+                'Box scores through ${directory!.data.metadata['cutoff']} · not live',
+                style: EdgeType.label.copyWith(fontSize: 12),
+              ),
             if (statsNote != null) ...[
               Text(statsNote!, style: EdgeType.label),
               const SizedBox(height: 8),
             ],
-            if (statsLoading)
+            if (!widget.board.demo && widget.board.quotes.isEmpty)
+              ..._scheduledGames()
+            else if (statsLoading)
               const CoachCard(
                 child: Row(
                   children: [
@@ -248,7 +262,9 @@ class _HomeScreenState extends State<HomeScreen> {
               ..._props(filtered, trending: segment == 1),
             const SizedBox(height: 8),
             Text(
-              segment == 2
+              !widget.board.demo && widget.board.quotes.isEmpty
+                  ? 'Schedule: nflverse · CC BY 4.0 · prices unavailable'
+                  : segment == 2
                   ? 'Comparison, not a pick.'
                   : widget.board.demo
                   ? 'Example data · our chance versus the book\'s fee-free chance · not a pick'
@@ -272,6 +288,53 @@ class _HomeScreenState extends State<HomeScreen> {
     return [
       for (final prop in shown)
         if (_haystack(prop).contains(q)) prop,
+    ];
+  }
+
+  List<Widget> _scheduledGames() {
+    final upcoming =
+        gamesBoard.events.where((e) => e.startsAt.isAfter(widget.now)).toList()
+          ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+    return [
+      const EmptyNote(
+        'Sportsbook prices are not connected. Browse the schedule or use Sample props to explore the research tools.',
+      ),
+      const SizedBox(height: 12),
+      if (widget.sourceReady && upcoming.isEmpty)
+        const EmptyNote(
+          'No upcoming games in the published 14-day window. Check the schedule timestamp above.',
+        ),
+      for (final event in upcoming)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Material(
+            color: EdgeColors.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+              side: const BorderSide(color: EdgeColors.border),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 10,
+              ),
+              title: Text(
+                '${event.away} at ${event.home}',
+                style: EdgeType.body,
+              ),
+              subtitle: Text(
+                '${formatEastern(event.startsAt)}\nPrices unavailable',
+                style: EdgeType.label,
+              ),
+              isThreeLine: true,
+              trailing: const Icon(Icons.chevron_right),
+              onTap: widget.onOpenGame == null
+                  ? null
+                  : () => widget.onOpenGame!(event.id),
+            ),
+          ),
+        ),
     ];
   }
 

@@ -210,3 +210,17 @@ Run `.venv\Scripts\python.exe model/parlay_simulation.py` to reproduce `assets/p
 The simulator supports 2–8 projected player-yard/reception legs and half-point lines. It is an experimental statistical script, not a physical football simulation or a validated profitability model. Whole-number push handling and other prop metrics are excluded explicitly. Report-card scoring is a dependence-layer comparison, not a test of live sportsbook offers.
 
 Phone verification: `.\tools\flutter.ps1 test --no-pub test/simulator_flow_test.dart`. Optional visual checks: set `SCREENSHOT=1` and run `test/screen_shots_test.dart`; review `build/review/simulation-390.png` and `build/review/parlay-validation-390.png` as well as the existing research screenshots. The screenshots are gitignored.
+
+## Hosted research prototype
+
+Public preview: https://addversity.github.io/odds-edge/ . `.github/workflows/publish-preview.yml` builds and publishes from `main` and twice daily (10:20 and 22:20 UTC). It uploads only `build/web`, never backend storage or credentials. A failed schedule fetch/build leaves the previous deployment intact. `version.json` records the deployed commit/run. This is a noncommercial prototype preview; a commercial service needs an appropriate production host and data plan. GitHub Pages is static hosting, not the existing Dart backend.
+
+Hosted builds use `--base-href /odds-edge/ --dart-define=ODDS_SNAPSHOT_PATH=data/snapshot.json`. Local desktop and default builds retain sample mode. Never use this define for a secret or put a provider key in Flutter. The hosted app does not call the optional loopback backend.
+
+`tools/publish_snapshot.py --output build/web/data/snapshot.json` retrieves the public, attributed nflverse schedule and exports known kickoffs in the next 14 days. It translates Eastern game time to UTC, excludes completed games and unknown kickoffs, and exports no historical closing lines as current prices. There are no odds calls or odds credits. The browser checks the published snapshot at most every five minutes, validates its schema/provenance, rejects mixed demonstration/price data, and labels a schedule older than 24 hours. Failed requests retain the last loaded real schedule with an update warning; they never switch to examples automatically.
+
+Public mode starts on actual scheduled games with prices explicitly unavailable. Sample props is a separate, user-selected mode for reviewing the existing research UI and simulator. Historical player/model files keep their own cutoffs. Source, license and refresh explanations are in About this data.
+
+No Odds API credential was found in the supported local environment scopes or GitHub Actions secrets during setup. Real sportsbook quotes are not activated by this release. A provider credential and a separately tested, quota-controlled quote publication/backend integration are still required. Do not add raw keys to commits, chat, browser storage or public data files. The current schedule-only schema deliberately rejects quotes until that integration is implemented.
+
+Checks: 284 Flutter tests, 43 model tests, 4 schedule-export tests; clean analyzer. The public deployment workflow repeats app checks and schedule tests before publishing. Official hosting references: https://docs.github.com/en/get-started/start-your-journey/deploying-your-website-automatically and https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits .

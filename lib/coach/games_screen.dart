@@ -138,6 +138,8 @@ class _GamesScreenState extends State<GamesScreen> {
         Text(
           widget.board.demo
               ? 'Example games. The comparison is not a pick.'
+              : widget.board.quotes.isEmpty
+              ? 'Published NFL schedule. Sportsbook prices are unavailable.'
               : 'A comparison with the books. It is not a pick.',
           style: EdgeType.label,
         ),

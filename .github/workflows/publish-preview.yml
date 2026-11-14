@@ -1,0 +1,64 @@
+name: Publish research preview
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '20 10,22 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-preview
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.7'
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - name: Test schedule normalization
+        run: python -m unittest discover -s tools -p 'test_publish_snapshot.py'
+      - name: Build hosted preview
+        run: flutter build web --release --base-href /odds-edge/ --dart-define=ODDS_SNAPSHOT_PATH=data/snapshot.json
+      - name: Fetch attributed public NFL schedule
+        run: python tools/publish_snapshot.py --output build/web/data/snapshot.json
+      - name: Record the deployed source version
+        run: |
+          python -c "import json,os,pathlib; pathlib.Path('build/web/version.json').write_text(json.dumps({'commit':os.environ['GITHUB_SHA'],'run':os.environ['GITHUB_RUN_ID']}))"
+          touch build/web/.nojekyll
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: build/web
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publish the preview
+        id: deployment
+        uses: actions/deploy-pages@v4

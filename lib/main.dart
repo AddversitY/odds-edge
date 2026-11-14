@@ -16,6 +16,7 @@ import 'coach/props_screen.dart';
 import 'data/demo.dart';
 import 'data/demo_lines.dart';
 import 'data/repository.dart';
+import 'data/published_snapshot.dart';
 import 'domain/coach_board.dart';
 import 'domain/coach_model.dart';
 import 'domain/eastern.dart';
@@ -33,25 +34,31 @@ import 'domain/player_stats.dart';
 import 'tools_page.dart';
 import 'theme/edge_theme.dart';
 import 'ui/wordmark.dart';
+import 'ui/snapshot_source_bar.dart';
 import 'ui/value_check.dart' show EdgeSegments;
 
 void main() => runApp(const OddsEdgeApp());
 
 class OddsEdgeApp extends StatelessWidget {
-  const OddsEdgeApp({super.key, this.researchStore});
+  const OddsEdgeApp({super.key, this.researchStore, this.snapshotLoader});
   final ResearchStore? researchStore;
+  final Future<PublishedSnapshot> Function()? snapshotLoader;
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'Odds Edge',
     debugShowCheckedModeBanner: false,
     theme: edgeTheme(),
-    home: EdgeWorkspace(researchStore: researchStore),
+    home: EdgeWorkspace(
+      researchStore: researchStore,
+      snapshotLoader: snapshotLoader,
+    ),
   );
 }
 
 class EdgeWorkspace extends StatefulWidget {
-  const EdgeWorkspace({super.key, this.researchStore});
+  const EdgeWorkspace({super.key, this.researchStore, this.snapshotLoader});
   final ResearchStore? researchStore;
+  final Future<PublishedSnapshot> Function()? snapshotLoader;
   @override
   State<EdgeWorkspace> createState() => _EdgeWorkspaceState();
 }
@@ -76,6 +83,13 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
   String market = 'h2h';
   Set<String>? enabledBooks;
   bool backend = false, loading = false, scenario = false;
+  static const snapshotPath = String.fromEnvironment('ODDS_SNAPSHOT_PATH');
+  bool get hosted => widget.snapshotLoader != null || snapshotPath.isNotEmpty;
+  bool published = false;
+  PublishedSnapshot? publishedSnapshot;
+  DateTime? lastSnapshotAttempt;
+  String? snapshotError;
+  int snapshotRequest = 0;
   CoachModel? coachModel;
   bool edgeEdited = false;
   EdgeSettings edgeSettings = const EdgeSettings(
@@ -203,7 +217,11 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
             children: [
               ListTile(
                 title: Text(
-                  board.demo ? 'DEMO' : 'FEED',
+                  published
+                      ? 'SCHEDULE'
+                      : board.demo
+                      ? 'DEMO'
+                      : 'FEED',
                   style: EdgeType.label.copyWith(
                     color: board.demo ? EdgeColors.warn : EdgeColors.accent,
                     fontWeight: FontWeight.w700,
@@ -212,6 +230,8 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                 subtitle: Text(
                   board.demo
                       ? 'Example board. Prices here are not a sportsbook.'
+                      : published
+                      ? 'Published NFL games. Sportsbook prices are unavailable.'
                       : 'Prices are the saved snapshot.',
                   style: EdgeType.label,
                 ),
@@ -237,7 +257,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.refresh),
-                title: const Text('Refresh odds'),
+                title: Text(published ? 'Refresh schedule' : 'Refresh odds'),
                 onTap: loading
                     ? null
                     : () {
@@ -306,9 +326,10 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
   @override
   void initState() {
     super.initState();
-    board = demoBoard(DateTime.now().toUtc());
-    lineHistory = demoLineHistory(board);
-    eventId = board.events.first.id;
+    published = hosted;
+    board = hosted ? _emptyPublishedBoard() : demoBoard(DateTime.now().toUtc());
+    lineHistory = hosted ? const {} : demoLineHistory(board);
+    eventId = board.events.firstOrNull?.id;
     researchStore
         .loadBooks()
         .then((books) {
@@ -324,17 +345,26 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
         });
     unawaited(loadCoachModel());
     unawaited(loadInjuries());
-    injuryTimer = Timer.periodic(const Duration(seconds: 60), (_) {
-      unawaited(loadInjuries());
-    });
+    if (!hosted) {
+      injuryTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+        unawaited(loadInjuries());
+      });
+    }
     // Re-evaluate freshness even if no successful network request arrives.
     timer = Timer.periodic(const Duration(seconds: 15), (_) {
-      if (backend && !loading) {
+      if (published &&
+          !loading &&
+          (lastSnapshotAttempt == null ||
+              now.difference(lastSnapshotAttempt!) >=
+                  const Duration(minutes: 5))) {
+        refresh();
+      } else if (backend && !loading) {
         refresh();
       } else {
         setState(() {});
       }
     });
+    if (published) unawaited(refresh());
   }
 
   @override
@@ -347,6 +377,15 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
   }
 
   Future<void> loadInjuries() async {
+    if (hosted) {
+      try {
+        final stored = await loadStoredInjuryReport();
+        if (mounted) setState(() => injuryReport = stored);
+      } catch (_) {
+        /* Availability remains explicitly unknown. */
+      }
+      return;
+    }
     try {
       final live = await repository.injuries();
       if (!mounted) return;
@@ -373,6 +412,10 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
   }
 
   Future<void> refresh({bool onDemand = false}) async {
+    if (published) {
+      await _refreshPublished();
+      return;
+    }
     if (loading) return;
     setState(() {
       loading = true;
@@ -409,6 +452,76 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
       }
     } finally {
       if (mounted) setState(() => loading = false);
+    }
+  }
+
+  OddsBoard _emptyPublishedBoard() => OddsBoard(
+    events: const [],
+    quotes: const [],
+    fetchedAt: DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+  );
+
+  void _switchPublishedMode() {
+    setState(() {
+      snapshotRequest++;
+      published = !published;
+      backend = false;
+      loading = false;
+      error = null;
+      snapshotError = null;
+      sharpBoard = null;
+      if (published) {
+        board = publishedSnapshot?.board ?? _emptyPublishedBoard();
+        propBoard = publishedSnapshot?.props;
+        lineHistory = const {};
+      } else {
+        board = demoBoard(now);
+        propBoard = null;
+        lineHistory = demoLineHistory(board);
+      }
+      eventId = board.events.firstOrNull?.id;
+      selectionKey = null;
+      openGameId = null;
+      publicFeed = PublicFeed.unavailable;
+    });
+    if (published) unawaited(refresh());
+  }
+
+  Future<void> _refreshPublished() async {
+    if (loading) return;
+    final request = snapshotRequest;
+    setState(() {
+      loading = true;
+      snapshotError = null;
+      lastSnapshotAttempt = now;
+    });
+    try {
+      final next =
+          await (widget.snapshotLoader?.call() ??
+              loadPublishedSnapshot(Uri.base.resolve(snapshotPath)));
+      if (!mounted || !published || request != snapshotRequest) return;
+      setState(() {
+        publishedSnapshot = next;
+        board = next.board;
+        propBoard = next.props;
+        sharpBoard = null;
+        lineHistory = const {};
+        error = null;
+        if (!board.events.any((e) => e.id == eventId)) {
+          eventId = board.events.firstOrNull?.id;
+        }
+      });
+    } catch (_) {
+      if (mounted && published && request == snapshotRequest) {
+        setState(() {
+          snapshotError = 'Schedule snapshot could not be updated.';
+          error = snapshotError;
+        });
+      }
+    } finally {
+      if (mounted && request == snapshotRequest) {
+        setState(() => loading = false);
+      }
     }
   }
 
@@ -700,6 +813,16 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
                       ),
                     ),
                     const Divider(height: 1),
+                    if (hosted)
+                      SnapshotSourceBar(
+                        published: published,
+                        loading: loading,
+                        snapshot: publishedSnapshot,
+                        error: snapshotError,
+                        now: now,
+                        onSwitch: _switchPublishedMode,
+                        onRefresh: () => refresh(),
+                      ),
                     if (shell == 5 && inResearch) researchTabs(),
                     if (shell == 1 || shell == 2) marketResearchTabs(),
                     Expanded(child: workspaceBody(wide)),
@@ -748,6 +871,7 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
   Widget coachPage(int destination) => switch (destination) {
     0 => HomeScreen(
       board: propSource,
+      sourceReady: !published || publishedSnapshot != null,
       games: pricedBoard,
       now: now,
       stamp: stamp,
@@ -1102,35 +1226,38 @@ class _EdgeWorkspaceState extends State<EdgeWorkspace> {
             Text(
               board.demo
                   ? 'Sample prices. Real comparison logic.'
+                  : published
+                  ? 'Published NFL schedule · prices unavailable'
                   : 'Connected to the odds backend',
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
-            TextButton(
-              onPressed: loading
-                  ? null
-                  : () async {
-                      setState(() {
-                        backend = !backend;
-                        error = null;
-                        selectionKey = null;
-                        // Clear old data when changing sources; never mix demo and real quotes.
-                        board = OddsBoard(
-                          events: [],
-                          quotes: [],
-                          fetchedAt: now,
-                          demo: !backend,
-                        );
-                        propBoard = null;
-                        sharpBoard = null;
-                        lineHistory = const {};
-                        publicFeed = PublicFeed.unavailable;
-                      });
-                      await refresh();
-                    },
-              child: Text(
-                backend ? 'Use demonstration' : 'Connect local backend',
+            if (!hosted)
+              TextButton(
+                onPressed: loading
+                    ? null
+                    : () async {
+                        setState(() {
+                          backend = !backend;
+                          error = null;
+                          selectionKey = null;
+                          // Clear old data when changing sources; never mix demo and real quotes.
+                          board = OddsBoard(
+                            events: [],
+                            quotes: [],
+                            fetchedAt: now,
+                            demo: !backend,
+                          );
+                          propBoard = null;
+                          sharpBoard = null;
+                          lineHistory = const {};
+                          publicFeed = PublicFeed.unavailable;
+                        });
+                        await refresh();
+                      },
+                child: Text(
+                  backend ? 'Use demonstration' : 'Connect local backend',
+                ),
               ),
-            ),
           ],
         ),
         const SizedBox(height: 8),
