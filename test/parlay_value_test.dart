@@ -221,6 +221,53 @@ void main() {
       ],
     );
     expect(ticket.bestBook, 'Hard Rock Bet');
+    expect(ticket.payoutDecimal, closeTo(1.98 * 1.95, 1e-9));
     expect(ticket.math, contains('Hard Rock Bet'));
+  });
+  test('primary builder requires empirical joint and does not score illustrative prices', () {
+    final legs = [
+      leg(
+        label: 'One',
+        eventId: 'g',
+        market: 'player_pass_yds',
+        outcome: 'Over',
+        decimal: 1.91,
+        chance: .6,
+        point: 200.5,
+      ),
+      leg(
+        label: 'Two',
+        eventId: 'g',
+        market: 'player_reception_yds',
+        outcome: 'Over',
+        decimal: 1.91,
+        chance: .6,
+        point: 50.5,
+      ),
+    ];
+    expect(priceTicket(legs, requireSimulation: true).joint, isNull);
+    final simulated = priceTicket(
+      legs,
+      requireSimulation: true,
+      simulatedJoint: .4,
+    );
+    expect(simulated.joint, .4);
+    expect(simulated.expectedValue, isNull);
+    final quoted = priceTicket(
+      legs,
+      requireSimulation: true,
+      simulatedJoint: .4,
+      pastedDecimal: 3.5,
+    );
+    expect(quoted.payoutEstimated, isFalse);
+    expect(quoted.payoutDecimal, 3.5);
+    expect(
+      () => priceTicket(legs, pastedDecimal: double.infinity),
+      throwsArgumentError,
+    );
+    expect(
+      () => priceTicket(legs, simulatedJoint: double.nan),
+      throwsArgumentError,
+    );
   });
 }

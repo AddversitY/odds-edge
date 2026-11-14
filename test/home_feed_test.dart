@@ -198,6 +198,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('value-check')), findsWidgets);
+    await tester.scrollUntilVisible(find.text('Hit rate'), 250);
     expect(find.text('Hit rate'), findsOneWidget);
     expect(find.text('Add to parlay'), findsOneWidget);
     expect(find.textContaining('No recorded stat'), findsNothing);
@@ -207,14 +208,22 @@ void main() {
     await tester.pump();
     expect(slip.slip.length, 1);
     expect(find.text('Remove from parlay'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Under'), -250);
     await tester.tap(find.text('Under'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Add to parlay'));
     await tester.pump();
     expect(slip.slip.length, 1);
     expect(find.textContaining('already on the slip'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('H2H'), 250);
+    await tester.drag(find.byType(ListView), const Offset(0, -350));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('H2H'));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.textContaining('No recorded stat'),
+      200,
+    );
     expect(find.textContaining('No recorded stat'), findsOneWidget);
   });
 
@@ -264,7 +273,8 @@ void main() {
       expect(find.text('EXAMPLE'), findsOneWidget);
       expect(find.textContaining('Estimated payout'), findsWidgets);
       expect(find.textContaining('Same game'), findsWidgets);
-      expect(find.text('Our combined chance'.toUpperCase()), findsOneWidget);
+      expect(find.text('Combined estimate'.toUpperCase()), findsOneWidget);
+      expect(find.text('Run simulation'), findsOneWidget);
       expect(find.byTooltip('Remove leg'), findsNWidgets(2));
       await tester.tap(find.byTooltip('Remove leg').first);
       await tester.pumpAndSettle();

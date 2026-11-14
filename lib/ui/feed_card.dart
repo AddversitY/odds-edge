@@ -102,6 +102,8 @@ class FeedPropCard extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               const Divider(height: 1),
+              if (shown.dataWarning != null)
+                Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(shown.dataWarning!, style: EdgeType.label.copyWith(color: EdgeColors.warn, fontSize: 12))),
               const SizedBox(height: 10),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,

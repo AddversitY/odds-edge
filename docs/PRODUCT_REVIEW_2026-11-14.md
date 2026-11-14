@@ -195,3 +195,7 @@ No signups, purchases, paid feeds, public deployment or additional live-odds
 credits were used for this review. The current differentiator is transparent
 NFL research and price comparison; real-time multi-sport parity remains outside the
 current free-snapshot architecture.
+
+## Implemented research follow-up
+
+The subsequent milestone adds corrected sample-team fixtures, historical input cutoffs, fuller prop evidence, exact-line price consequences, large-text layout fixes, and an experimental empirical parlay simulator. Its historical dependence report is secondary and explicitly below the adoption gate: 903 cases / 575 games, with no demonstrated betting edge. See HANDOFF.md for method, limitations and completed checks. No personal bet tracking, paid feed, signup or public backend exposure was introduced. A matching light appearance, user interviews and a broader device/assistive-technology study remain future work.

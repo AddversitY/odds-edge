@@ -7,7 +7,7 @@ OddsBoard demoBoard(DateTime now) {
   final monday = nextEasternKickoff(now, DateTime.monday, 20, 15);
   final events = [
     NflEvent('demo-buf-kc', 'Buffalo Bills', 'Kansas City Chiefs', sunday),
-    NflEvent('demo-min-gb', 'Minnesota Vikings', 'Green Bay Packers', sunday),
+    NflEvent('demo-min-gb', 'Detroit Lions', 'Green Bay Packers', sunday),
     NflEvent('demo-bal-cin', 'Baltimore Ravens', 'Cincinnati Bengals', night),
     NflEvent('demo-phi-dal', 'Philadelphia Eagles', 'Dallas Cowboys', monday),
   ];
@@ -192,7 +192,7 @@ OddsBoard demoBoard(DateTime now) {
     fetchedAt: now,
     demo: true,
     notices: [
-      'All games, prices, and market states here are synthetic examples. No sportsbook feed is connected.',
+      'Example matchups and invented prices, not the actual NFL schedule. Player clubs follow the bundled box scores through 2026-11-09; these are not live roster confirmations. No sportsbook feed is connected.',
     ],
   );
 }
@@ -209,7 +209,7 @@ class _ExampleProp {
   final double line, over, under;
 }
 
-/// One line per player. Both sides are priced so the no-vig chance exists.
+/// Main and selected alternate lines. Both sides allow a no-vig comparison.
 /// Hit rates still come from the bundled box scores, not from these prices.
 const _exampleProps = <List<_ExampleProp>>[
   [
@@ -222,7 +222,9 @@ const _exampleProps = <List<_ExampleProp>>[
   [
     _ExampleProp('player_pass_tds', 'Jared Goff', 1.5, 1.80, 2.00),
     _ExampleProp('player_reception_yds', 'Amon-Ra St. Brown', 76.5, 1.87, 1.91),
+    _ExampleProp('player_reception_yds', 'Amon-Ra St. Brown', 49.5, 1.35, 3.10),
     _ExampleProp('player_rush_yds', 'Jahmyr Gibbs', 64.5, 1.83, 1.95),
+    _ExampleProp('player_rush_yds', 'Jahmyr Gibbs', 39.5, 1.30, 3.30),
     _ExampleProp('player_rush_yds', 'Josh Jacobs', 68.5, 1.91, 1.87),
   ],
   [

@@ -44,7 +44,10 @@ class ValueCheck extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (!compact) ...[
-          Row(
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            spacing: 12,
+            runSpacing: 8,
             children: [
               Text(
                 'VALUE CHECK',
@@ -54,7 +57,6 @@ class ValueCheck extends StatelessWidget {
                   color: EdgeColors.textTertiary,
                 ),
               ),
-              const Spacer(),
               _GapChip(label: edgePointsLabel(gap), color: color),
             ],
           ),

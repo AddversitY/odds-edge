@@ -2,7 +2,7 @@
 
 Odds Edge is an NFL odds app. It compares a price with the app's own chance. It does not tell the user to bet. The footer line is **Comparison, not a pick.**
 
-The correlated parlay simulator is still unimplemented. Owner direction on
+The empirical parlay research simulator is implemented and explicitly experimental. Owner direction on
 14 November: personal bet logging, outcome entry and a record-led experience
 are not product priorities. The new automatic observation journal was removed,
 along with the Bets navigation destination, My bets tool and save-to-bet-log
@@ -16,7 +16,7 @@ the primary destinations. Research groups Props/Games and preserves search
 and list state across navigation. Filters persist locally. Prop details lead
 with price and evidence; Performance, Matchup, Prices and Model/math disclose
 depth progressively. Assessment labels are Review, Thin margin and Pass;
-legacy value enums and calculations are unchanged. Nothing unfinished is
+legacy value enums remain compatible. Prop pricing enforces historical cutoffs and current availability. Nothing unfinished is
 hidden behind a flag.
 
 ## Architecture
@@ -24,7 +24,7 @@ hidden behind a flag.
 - **Flutter app** (`lib/`). Today, Research (Props/Games), and Tools, with a parlay builder and older research tools underneath. Web, Windows, and iOS share one codebase. `lib/main.dart` sets `debugShowCheckedModeBanner: false`.
 - **Dart backend** (`backend/server.dart`). Loopback only, port 8787. The Flutter app never holds an API key. `BackendRepository` talks to `ODDS_API_BASE_URL` (default `http://127.0.0.1:8787`; a remote host must be HTTPS).
 - **Python model** (`model/train.py`, `model/nfl_model.py`, `model/nfl_model_v2.py`, `model/build_features.py`). Downloads nflverse into `model/.cache/` (gitignored), fits Coach's Line, and writes `assets/nfl-model.json`. The Dart file `lib/domain/coach_line_v2.dart` must stay in step with the Python formulas. No Odds API call.
-- **Bundled data** (committed, keep it small): `assets/nfl-model.json`, `assets/nfl-history.json`, `assets/nfl-player-stats.json`, `assets/nfl-matchup.json`. nflverse, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). License copy: `assets/NFLVERSE-LICENSE.md`. Odds Edge is not affiliated with nflverse.
+- **Bundled data** (committed, keep it small): `assets/nfl-model.json`, `assets/nfl-history.json`, `assets/nfl-player-stats.json`, `assets/nfl-matchup.json`, `assets/parlay-calibration.json`. nflverse, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). License copy: `assets/NFLVERSE-LICENSE.md`. Odds Edge is not affiliated with nflverse.
 - **Caches, not committed:** `backend/data/` (odds snapshots, `line-history.jsonl`, `props-snapshot.json`, `sharp-snapshot.json`, `credits.json`, `injuries.json`) and `model/.cache/` (nflverse downloads and the Open-Meteo archive). The app's own notes (research, bets, saved plays) are a local journal, file on VM/desktop and local storage on web. No account and no paid database.
 
 Odds come from The Odds API when the server is in live mode. Injuries: ESPN's public file, checked against the NFL.com injury page, with the nflverse season file as backup. Weather for version 2: Open-Meteo archive at the kickoff hour for the backtest; live US forecasts try the National Weather Service, then Open-Meteo. No key for weather.
@@ -130,21 +130,26 @@ iPhone width is the layout that matters (390px). One idea on the card, the math 
 - Do not call a past loss an edge. The 16-game slice is not an edge. A prop test without sportsbook prices is not an edge.
 - Same-game parlay prices the app builds are estimated. A payout the user pastes is the real price.
 
-## What this branch did not ship
+## November research and simulator milestone
 
-Left out, not flagged off:
+Implemented in this milestone:
 
-1. **Correlated parlay simulator.** Today `lib/domain/parlay_value.dart` uses a fixed same-game correlation (about 0.15, 0.30 for a quarterback and a receiver on the same team, -0.95 for the two sides of one line) and a closed-form joint. There is no Monte Carlo game script, no empirical correlation from nflverse, no shrink-and-cap of those correlations, no weakest-leg, no "most likely way this loses," and no backtest of joint chance against the independent product. Same-game payouts are already labeled estimated.
-2. **Personal bet tracking.** Intentionally omitted from product flows per owner direction. No manual outcome journal or automatic shown-suggestion record is exposed. Old storage formats and legacy tests remain compatible; no existing files are deleted.
-3. **Parlay simulator screenshots** of a simulated ticket, the weakest leg and parlay calibration remain outstanding. Current Home, Props, Games, prop-detail and existing parlay screenshots are available from the optional screenshot test.
+- Sample matchups use clubs confirmed in the bundled box scores through 2026-11-09; fixtures and prices remain invented, and do not represent the actual schedule or live rosters. The old demo-min-gb ID is retained for selection compatibility; its teams are Detroit and Green Bay.
+- Player histories are indexed by stable player ID rather than rescanning the whole dataset for each window. Historical identity and projection inputs respect the Eastern game-date cutoff (including Sunday night UTC crossover); a recorded club outside the selected matchup disables the usage projection. Stale/stored/future injury reports do not add current teammate-out adjustments. Historical player positions use the last allowed observation.
+- Prop details explain workload, opponent, game-script, availability, supporting and opposing inputs. The compact summary leads into full context under Matchup. Weather is explicitly not a prop-model input. Exact-line book rows show freshness, break-even probability, hypothetical return and model EV; alternate lines remain separate.
+- `game_script_simulation.dart` fits rank-normal correlations from strictly earlier seasons. Minimum 12 paired observations, shrink n/(n+40), cap at ±0.65, then covariance repair. Seed 1729, 10,000 draws. Latent draw order is margin/total, team pass/rush, player stats. This is a statistical copula, **not** a physically constrained or play-by-play football simulation. Receptions use a nonnegative negative-binomial curve; quantile transforms preserve displayed, market-shrunk marginal chances. Supported player yards and receptions only; whole-number push lines, duplicate exposures and inconsistent alternate lines are rejected.
+- The builder shows joint versus product, a Wilson Monte Carlo interval (excluding model uncertainty), lowest individual chance, the most common complete losing pattern, and a higher-chance alternate replacement when available. Book quote entry is optional decimal odds for the exact ticket. Changed ticket/model inputs invalidate the old result and quote; clock ticks and identical quote refreshes preserve them. No wager or outcome is recorded.
+- Primary-builder same-game probabilities no longer fall back to fixed correlation coefficients. Unsupported spread/total joint estimates in legacy game-ticket comparisons are blank. The old math helpers remain for compatibility. Same-game illustrative payouts disclose their assumed 4.5% hold and product cap; they are not scored as an available edge without a user-entered quote. Cross-game payout comparisons use a common book's actual leg-price product when available.
+- `model/parlay_simulation.py` evaluates the dependence layer with prior-season QB/leading-target-receiver pairs and median half-lines, on identical cases for joint and product. It uses analytical two-leg copula integration to avoid Monte Carlo noise in scores. Live usage marginals, availability selection and sportsbook profitability are **not** validated by this exercise.
+- Committed report: 903 cases / 575 unique games. Joint Brier 0.19955 vs product 0.19960; log loss 0.58894 vs 0.58908. Below the 1,000-unique-game gate: adopted false, hasEdge false. Season splits, bins, cutoff and source hashes are reproducible in `assets/parlay-calibration.json`, shown on the report card and beneath simulator methodology. CI regenerates it after data refreshes. Zero odds credits.
+- Phone checks cover 390×844, text scaling to 1.8, reduced motion, labeled semantic tap targets and keyboard activation. Large-text price headers, summary rows and section headings now wrap. Optional screenshot checks include simulation and validation views. These are automated checks, not a human assistive-technology usability study or a guarantee of performance on every device.
+- Personal bet tracking remains intentionally absent. Legacy data compatibility is preserved.
+
+Verification: 277 Flutter tests and 43 Python tests passed; Flutter analyzer clean; web and Windows release builds passed. Phone screenshot review includes simulation and calibration. Validation and preview instructions are in DEVELOPMENT.md. The local preview is http://127.0.0.1:8765/; it is only accessible on this computer. No public deployment or new account was created.
 
 ## Next
 
-The newer product review supersedes the old self-tracking proposal below.
-Do not reintroduce personal bet journals, outcome entry, or record-based
-engagement. Focus the next milestone on research and price comparison before
-the remaining simulator and ensemble work.
+Collect owner feedback on the research flow and data freshness. A public preview and a production data/deployment plan are the next product priorities. The proposed ensemble below is separate future work, not part of this milestone. Do not add bet journals or outcome-based engagement.
 
-1. **Finish the correlated parlay simulator as a complete feature.** A solid cut is: walk-forward correlations from earlier seasons only, shrunk toward zero and capped; a seeded simulation (on the order of 10,000 draws) of margin and total, then team pass and rush, then each player's stat from the prop projection; joint chance versus the product of the legs versus the book's implied chance, with same-game prices labeled estimated; weakest leg and the usual swap (same line at another book, an alternate line, or another leg); a historical Brier and log loss of the joint against the independent product, shown on the report card, with no claim of an edge and no extra Odds API credits. Tests before UI. No sportsbook scraping.
 2. **Elo plus a gradient-boosted ensemble** (XGBoost or LightGBM) for the game residual, with the anti-overfit rules fixed before any run: week-based walk-forward, shallow trees, regularization, early stopping, a stable feature set, permutation importance and a noise-feature check, monotone constraints where the direction is known, and one locked holdout season that is not used to pick anything. Same adoption rule as version 2: both Brier and log loss strictly better on at least 1,000 games, and no "edge" unless the -110 test clears the existing profit bar. Keep `coach_line_v2.dart` matched to whatever the trainer ships. Do not search the ridge, the caps, or the tree depth after seeing the holdout.
 3. **A stable public link and edge alerts.** Free permanent hosting, and a ping when a price is ahead of our chance. This needs the owner's approval before any signup, host account, or paid tier. The loopback server has no auth and should not be put on the public internet as it is.

@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:odds_edge/domain/value_check.dart';
 import 'package:odds_edge/main.dart';
 import 'package:odds_edge/ui/feed_card.dart';
 
@@ -50,7 +49,7 @@ void main() {
     );
     await tester.pumpAndSettle(const Duration(milliseconds: 50));
     await _save(tester, 'build/review/home-390.png');
-    final legs = _crossGameLegs(tester);
+    final legs = _scriptLegs(tester);
 
     await tester.tap(find.widgetWithText(NavigationDestination, 'Research'));
     await tester.pumpAndSettle();
@@ -73,29 +72,64 @@ void main() {
     await tester.tap(find.byKey(const Key('open-parlay-builder')));
     await tester.pumpAndSettle(const Duration(milliseconds: 100));
     await _save(tester, 'build/review/parlay-390.png');
+    await tester.scrollUntilVisible(
+      find.text('Run simulation').hitTestable(),
+      250,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(find.text('Run simulation'));
+    await tester.pump();
+    for (
+      var i = 0;
+      i < 20 && find.textContaining('Together ').evaluate().isEmpty;
+      i++
+    ) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 500)),
+      );
+      await tester.pump();
+    }
+    expect(find.textContaining('Together '), findsOneWidget);
+    await tester.ensureVisible(find.textContaining('Together '));
+    await tester.pumpAndSettle();
+    await _save(tester, 'build/review/simulation-390.png');
+    await tester.ensureVisible(find.text('Parlay validation · experimental'));
+    await tester.tap(find.text('Parlay validation · experimental'));
+    await tester.pumpAndSettle();
+    await _save(tester, 'build/review/parlay-validation-390.png');
   });
 }
 
-/// The two strongest Bet or Lean cards that are not in the same game.
-List<String> _crossGameLegs(WidgetTester tester) {
+/// Prefer a same-game pair with supported workload projections.
+List<String> _scriptLegs(WidgetTester tester) {
   final cards =
       tester.widgetList<FeedPropCard>(find.byType(FeedPropCard)).where((card) {
-        final word = card.shown.verdict.word;
-        return word == ValueWord.bet || word == ValueWord.lean;
+        return [
+          'passing_yards',
+          'rushing_yards',
+          'receiving_yards',
+          'receptions',
+        ].contains(card.shown.projection?.metric);
       }).toList()..sort(
         (a, b) => (b.shown.edge ?? -999).compareTo(a.shown.edge ?? -999),
       );
   final ids = <String>[];
   final events = <String>{};
+  for (final a in cards) {
+    for (final b in cards) {
+      if (a.shown.card.player != b.shown.card.player &&
+          a.shown.card.event?.id == b.shown.card.event?.id) {
+        return [a.shown.card.id, b.shown.card.id];
+      }
+    }
+  }
   for (final card in cards) {
     final event = card.shown.card.event?.id ?? '';
     if (!events.add(event)) continue;
     ids.add(card.shown.card.id);
     if (ids.length == 2) return ids;
   }
-  throw StateError(
-    'The example board has no cross-game pair of Bet or Lean legs.',
-  );
+  throw StateError('The example board has no supported two-leg script.');
 }
 
 Future<void> _addLeg(

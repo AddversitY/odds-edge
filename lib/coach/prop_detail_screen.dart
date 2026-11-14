@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../domain/coach_board.dart';
 import '../domain/edge_gap.dart';
+import '../domain/prop_evidence.dart';
 import '../domain/history.dart';
 import '../domain/hit_rate.dart';
 import '../domain/injury_report.dart';
@@ -107,6 +108,17 @@ class _PropDetailScreenState extends State<PropDetailScreen> {
       selected?.samples.map((sample) => sample.value) ?? const [],
     );
     final injuries = _injuries(face);
+    final evidence = explainPropEvidence(
+      side: card.lineSide,
+      projection: face.projection,
+      windows: windows,
+      injuries: widget.injuries,
+      now: widget.now,
+      spread: face.teamSpread,
+      total: face.total,
+      example: card.demo || widget.board.demo,
+      dataWarning: face.dataWarning,
+    );
     final held = widget.slip?.slip.contains(card.id) ?? false;
     return Scaffold(
       key: const Key('prop-detail'),
@@ -157,6 +169,16 @@ class _PropDetailScreenState extends State<PropDetailScreen> {
         children: [
           if (propMeta(face).isNotEmpty)
             Text(propMeta(face), style: EdgeType.label),
+          if (widget.directory != null)
+            Text(
+              'Historical box scores through ${widget.directory!.data.metadata['cutoff'] ?? 'the bundled file cutoff'} · not live stats',
+              style: EdgeType.label.copyWith(fontSize: 12),
+            ),
+          if (face.dataWarning != null)
+            Text(
+              face.dataWarning!,
+              style: EdgeType.label.copyWith(color: EdgeColors.warn),
+            ),
           if (card.otherSide != null) ...[
             const SizedBox(height: 10),
             _SideSwitch(
@@ -214,6 +236,7 @@ class _PropDetailScreenState extends State<PropDetailScreen> {
             face: face,
             average: stats.average,
             observed: stats.count,
+            evidence: evidence,
           ),
           const SizedBox(height: 12),
           _ResearchSection(
@@ -234,12 +257,13 @@ class _PropDetailScreenState extends State<PropDetailScreen> {
                 onChanged: (index) => setState(() => window = index),
               ),
               const SizedBox(height: 12),
-              Row(
+              Wrap(
+                spacing: 16,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.end,
                 children: [
                   _StatReadout('Avg', stats.average),
-                  const SizedBox(width: 16),
                   _StatReadout('Median', stats.median),
-                  const Spacer(),
                   Text(
                     stats.count == 0
                         ? 'No games'
@@ -276,6 +300,15 @@ class _PropDetailScreenState extends State<PropDetailScreen> {
           _ResearchSection(
             title: 'Matchup and availability',
             children: [
+              for (final input in evidence.context) ...[
+                Text(input, style: EdgeType.body),
+                const SizedBox(height: 8),
+              ],
+              for (final caution in evidence.cautions)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(caution, style: EdgeType.label),
+                ),
               const SizedBox(height: 18),
               const _SectionHead(title: 'Matchup'),
               const SizedBox(height: 8),
@@ -309,6 +342,11 @@ class _PropDetailScreenState extends State<PropDetailScreen> {
             title: 'Price comparison',
             children: [
               Text(
+                'Same player, stat, side and line: ${card.player} · ${shortPropLine(card)}. Alternate lines are separate selections.',
+                style: EdgeType.body,
+              ),
+              const SizedBox(height: 8),
+              Text(
                 verdict.fairChance == null
                     ? "Market no-vig chance unavailable."
                     : "Market no-vig chance: ${(verdict.fairChance! * 100).toStringAsFixed(1)}%",
@@ -325,6 +363,8 @@ class _PropDetailScreenState extends State<PropDetailScreen> {
                     row: card.bookRows[i],
                     best: i == 0,
                     now: widget.now,
+                    bestDecimal: card.best!.decimal,
+                    chance: verdict.ourChance,
                   ),
               const SizedBox(height: 16),
               const _SectionHead(title: 'Odds over time'),
@@ -559,23 +599,25 @@ class _PriceHero extends StatelessWidget {
               ),
             ),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                quote == null ? '—' : americanLabel(quote!.decimal),
-                style: EdgeType.number.copyWith(fontSize: 22),
-              ),
-              Text(
-                priceBlurb(card),
-                style: EdgeType.label.copyWith(fontSize: 11),
-              ),
-              if (quote != null)
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
                 Text(
-                  '${quote!.demo ? 'Example' : 'Saved'} · ${priceAge(quote!.sourceAt, now)}',
+                  quote == null ? '—' : americanLabel(quote!.decimal),
+                  style: EdgeType.number.copyWith(fontSize: 22),
+                ),
+                Text(
+                  priceBlurb(card),
                   style: EdgeType.label.copyWith(fontSize: 11),
                 ),
-            ],
+                if (quote != null)
+                  Text(
+                    '${quote!.demo ? 'Example' : 'Saved'} · ${priceAge(quote!.sourceAt, now)}',
+                    style: EdgeType.label.copyWith(fontSize: 11),
+                  ),
+              ],
+            ),
           ),
         ],
       ),
@@ -623,10 +665,12 @@ class _EvidenceSummary extends StatelessWidget {
     required this.face,
     required this.average,
     required this.observed,
+    required this.evidence,
   });
   final ShownProp face;
   final double? average;
   final int observed;
+  final PropEvidence evidence;
 
   @override
   Widget build(BuildContext context) {
@@ -657,6 +701,11 @@ class _EvidenceSummary extends StatelessWidget {
             style: EdgeType.label,
           ),
           Text(support, style: EdgeType.body),
+          for (final input in evidence.support.take(1))
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(input.split(' (').first, style: EdgeType.body),
+            ),
           const SizedBox(height: 12),
           Text('Reasons for caution', style: EdgeType.label),
           Text(
@@ -675,6 +724,18 @@ class _EvidenceSummary extends StatelessWidget {
               'Check player availability before relying on a projection.',
               style: EdgeType.body,
             ),
+          for (final caution
+              in evidence.cautions
+                  .where(
+                    (c) =>
+                        !c.startsWith('Prices and matchups') &&
+                        !c.startsWith('The market shrink'),
+                  )
+                  .take(1))
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(caution.split(' (').first, style: EdgeType.label),
+            ),
         ],
       ),
     );
@@ -690,14 +751,15 @@ class _SectionHead extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text(
-          title,
-          style: EdgeType.title.copyWith(
-            fontFamily: EdgeFont.display,
-            fontSize: 20,
+        Expanded(
+          child: Text(
+            title,
+            style: EdgeType.title.copyWith(
+              fontFamily: EdgeFont.display,
+              fontSize: 20,
+            ),
           ),
         ),
-        const Spacer(),
         if (trailing != null)
           Flexible(
             child: Text(
@@ -933,10 +995,18 @@ class _InjuryRow extends StatelessWidget {
 }
 
 class _BookRow extends StatelessWidget {
-  const _BookRow({required this.row, required this.best, required this.now});
+  const _BookRow({
+    required this.row,
+    required this.best,
+    required this.now,
+    required this.bestDecimal,
+    this.chance,
+  });
   final BookPriceRow row;
   final bool best;
   final DateTime now;
+  final double bestDecimal;
+  final double? chance;
 
   @override
   Widget build(BuildContext context) {
@@ -976,6 +1046,19 @@ class _BookRow extends StatelessWidget {
                   '${row.quote.demo ? 'Sample' : 'Saved'} · ${priceAge(row.quote.sourceAt, now)}',
                   style: EdgeType.label.copyWith(fontSize: 12),
                 ),
+                Text(
+                  'Requires ${(100 / row.quote.decimal).toStringAsFixed(1)}% to break even',
+                  style: EdgeType.label,
+                ),
+                Text(
+                  'Hypothetical \$10 returns \$${(10 * row.quote.decimal).toStringAsFixed(2)} if it wins${best ? '' : '; \$${(10 * (bestDecimal - row.quote.decimal)).toStringAsFixed(2)} less than best'}.',
+                  style: EdgeType.label,
+                ),
+                if (chance != null)
+                  Text(
+                    'Model EV per \$10: ${chance! * row.quote.decimal >= 1 ? '+' : ''}\$${(10 * (chance! * row.quote.decimal - 1)).toStringAsFixed(2)} · unproven estimate',
+                    style: EdgeType.label,
+                  ),
               ],
             ),
           ),

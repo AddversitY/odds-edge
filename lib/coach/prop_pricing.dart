@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../domain/coach_board.dart';
+import '../domain/game_script_simulation.dart';
 import '../domain/eastern.dart';
 import '../domain/coach_model.dart';
 import '../domain/edge_gap.dart';
@@ -13,6 +14,7 @@ import '../domain/parlay_value.dart';
 import '../domain/injury_report.dart';
 import '../domain/prop_chance.dart';
 import '../domain/prop_history.dart';
+import '../domain/prop_evidence.dart';
 import '../domain/prop_model.dart';
 import '../domain/prop_projection.dart';
 import '../domain/prop_value.dart';
@@ -42,6 +44,7 @@ class ShownProp {
     required this.pairedBook,
     this.projection,
     this.usingProjection = false,
+    this.dataWarning,
   });
 
   final PropCardModel card;
@@ -63,6 +66,7 @@ class ShownProp {
 
   /// True when [projection] is the chance in [verdict].
   final bool usingProjection;
+  final String? dataWarning;
 
   ValueVerdict get verdict => value.verdict;
 
@@ -76,6 +80,30 @@ class ShownProp {
 class PropPricingMemo {
   final windows = <String, PropWindows>{};
   final projections = <String, PropProjection?>{};
+}
+
+ScriptLeg? scriptLegFor(ShownProp shown) {
+  final p = shown.projection, w = shown.windows;
+  final chance = shown.verdict.ourChance;
+  if (p == null ||
+      w?.playerId == null ||
+      w?.team == null ||
+      chance == null ||
+      shown.dataWarning != null) {
+    return null;
+  }
+  return ScriptLeg(
+    id: shown.card.id,
+    eventId: shown.card.side.eventId,
+    playerId: w!.playerId!,
+    team: w.team!,
+    metric: p.metric,
+    line: shown.card.line,
+    over: shown.card.lineSide == LineSide.over,
+    chance: chance,
+    mean: p.mean,
+    sd: p.sd,
+  );
 }
 
 ShownProp showProp({
@@ -100,6 +128,13 @@ ShownProp showProp({
   }
 
   final windows = windowsFor(card);
+  final eventTeams = card.event == null
+      ? <String?>{}
+      : {canonicalTeam(card.event!.home), canonicalTeam(card.event!.away)};
+  final teamMismatch =
+      windows?.team != null &&
+      eventTeams.isNotEmpty &&
+      !eventTeams.contains(canonicalTeam(windows!.team!));
   final opponent = opponentFor(card, windows);
   final spread = teamSpreadFor(card, windows, board);
   final total = card.event == null
@@ -110,11 +145,17 @@ ShownProp showProp({
       ? null
       : otherDecimalAtBook(card, cards, quote.bookId);
   final rows = directory?.data.rows;
-  final index = rows == null ? null : usageIndexFor(rows, matchup: context);
+  final index = rows == null
+      ? null
+      : usageIndexFor(rows, scores: scores, matchup: context);
   final calibrator = propLiveChance == PropLiveChance.calibrated && rows != null
       ? cachedPropComparison(rows, scores: scores, matchup: context).calibrator
       : null;
-  final outs = _teammateOuts(injuries, windows?.team, card.player);
+  final asOf = card.event != null && card.event!.startsAt.isBefore(now)
+      ? card.event!.startsAt
+      : now;
+  final currentInjuries = hasCurrentInjuries(injuries, asOf) ? injuries : null;
+  final outs = _teammateOuts(currentInjuries, windows?.team, card.player);
   PropProjection? project(PropCardModel item, double? market) {
     final key = jsonEncode([item.id, market]);
     if (cache.projections.containsKey(key)) return cache.projections[key];
@@ -125,6 +166,13 @@ ShownProp showProp({
     final looked = windowsFor(item);
     final id = looked?.playerId;
     if (id == null) return null;
+    final event = item.event;
+    final team = canonicalTeam(looked?.team ?? '');
+    if (event != null &&
+        team != canonicalTeam(event.home) &&
+        team != canonicalTeam(event.away)) {
+      return null;
+    }
     final projection = projectProp(
       index: usage,
       playerId: id,
@@ -133,6 +181,9 @@ ShownProp showProp({
       side: item.lineSide,
       beforeSeason: 10000,
       beforeWeek: 1,
+      beforeDate: easternWall(
+        event != null && event.startsAt.isBefore(now) ? event.startsAt : now,
+      ),
       team: looked?.team,
       opponent: item.id == card.id ? opponent : opponentFor(item, looked),
       teamSpread: item.id == card.id
@@ -144,7 +195,7 @@ ShownProp showProp({
       market: market,
       teammateOuts: item.id == card.id
           ? outs
-          : _teammateOuts(injuries, looked?.team, item.player),
+          : _teammateOuts(currentInjuries, looked?.team, item.player),
       calibrator: calibrator,
     );
     cache.projections[key] = projection;
@@ -161,7 +212,7 @@ ShownProp showProp({
       }
       return preferredRate(windowsFor(item));
     },
-    context: context,
+    context: teamMismatch ? null : context,
     rows: directory?.data.rows ?? const [],
     playerTeam: windows?.team,
     position: windows?.position,
@@ -197,6 +248,13 @@ ShownProp showProp({
     pairedBook: paired != null && value.verdict.fairChance != null,
     projection: shownProjection,
     usingProjection: propV2Adopted && shownProjection?.chance != null,
+    dataWarning: teamMismatch
+        ? 'The latest recorded club does not match this matchup. Player history is shown; matchup projection is unavailable.'
+        : directory == null
+        ? 'Player evidence is still loading.'
+        : windows?.playerId == null
+        ? 'Player identity could not be matched to the box scores.'
+        : null,
   );
 }
 
@@ -338,6 +396,16 @@ PropWindows propWindows(
   DateTime now,
 ) {
   final event = card.event;
+  // NFL box scores use game dates. A Sunday night kickoff can be Monday
+  // in UTC; use the Eastern calendar and exclude the entire research day.
+  final asOf = easternWall(
+    event != null && event.startsAt.isBefore(now) ? event.startsAt : now,
+  );
+  final historyThrough = DateTime.utc(
+    asOf.year,
+    asOf.month,
+    asOf.day,
+  ).subtract(const Duration(days: 1));
   String? opponent;
   if (event != null) {
     final away = canonicalTeam(event.away);
@@ -347,6 +415,7 @@ PropWindows propWindows(
       market: card.market,
       line: card.line,
       side: card.lineSide,
+      through: historyThrough,
     );
     final team = looked.team;
     if (team != null && boxScoreTeam(team) == boxScoreTeam(away ?? '')) {
@@ -361,7 +430,7 @@ PropWindows propWindows(
     line: card.line,
     side: card.lineSide,
     opponent: opponent,
-    through: now,
+    through: historyThrough,
   );
 }
 

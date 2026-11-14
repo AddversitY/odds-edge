@@ -224,6 +224,10 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
             const SizedBox(height: 12),
+            if (widget.board.demo)
+              const Text('Invented prices and matchups · historical box scores', style: EdgeType.label),
+            if (directory?.data.metadata['cutoff'] != null)
+              Text('Box scores through ${directory!.data.metadata['cutoff']} · not live', style: EdgeType.label.copyWith(fontSize: 12)),
             if (statsNote != null) ...[
               Text(statsNote!, style: EdgeType.label),
               const SizedBox(height: 8),

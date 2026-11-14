@@ -328,7 +328,7 @@ PropProjection? projectProp({
         game,
   ];
   if (prior.length < 4) return null;
-  final position = index.positionOf[playerId] ?? prior.last.position;
+  final position = prior.last.position;
   final club = (team == null || team.isEmpty) ? prior.last.team : team;
   final foe = (opponent == null || opponent.isEmpty)
       ? prior.last.opponent

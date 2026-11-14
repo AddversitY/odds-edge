@@ -202,3 +202,11 @@ folder, in the Flutter app, or in a message.
 More route detail is in `backend/README.md`. Copy `.env.example` only as a
 reminder of the names; do not commit a file that contains the real key.
 
+
+## Empirical parlay research
+
+Run `.venv\Scripts\python.exe model/parlay_simulation.py` to reproduce `assets/parlay-calibration.json` from the two bundled source datasets, without a network request or odds credits. The report records source SHA-256 hashes and season cutoffs. Python tests cover the analytical copula, sparse/capped correlations, covariance repair and future-season exclusion; Flutter tests cover seeded simulation, normal/count marginals, under-side direction, projection eligibility, ticket invalidation and quote correction.
+
+The simulator supports 2–8 projected player-yard/reception legs and half-point lines. It is an experimental statistical script, not a physical football simulation or a validated profitability model. Whole-number push handling and other prop metrics are excluded explicitly. Report-card scoring is a dependence-layer comparison, not a test of live sportsbook offers.
+
+Phone verification: `.\tools\flutter.ps1 test --no-pub test/simulator_flow_test.dart`. Optional visual checks: set `SCREENSHOT=1` and run `test/screen_shots_test.dart`; review `build/review/simulation-390.png` and `build/review/parlay-validation-390.png` as well as the existing research screenshots. The screenshots are gitignored.

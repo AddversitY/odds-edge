@@ -1,0 +1,147 @@
+{
+  "schema": 1,
+  "exercise": "Prior-season QB plus leading target receiver; previous-season median half-lines; record marginals with 32-game fair-50% prior.",
+  "method": "Rank-normal Gaussian copula; n/(n+40) shrink, 0.65 cap, 12-pair minimum, PSD repair. Two-leg validation integrates the fitted copula analytically; live simulation uses 10,000 seeded draws.",
+  "scope": "Dependence-layer test only, conditional on participants with recorded box scores. Not validation of live usage marginals or sportsbook profitability.",
+  "correlated": {
+    "count": 903,
+    "brier": 0.19954962532316567,
+    "logLoss": 0.588936858633712
+  },
+  "independent": {
+    "count": 903,
+    "brier": 0.19959631814759218,
+    "logLoss": 0.5890796913757859
+  },
+  "uniqueGames": 575,
+  "adopted": false,
+  "hasEdge": false,
+  "omitted": 1433,
+  "minimumEarlierPairedGames": 0,
+  "seasons": [
+    {
+      "season": 2024,
+      "trainedThrough": 2023,
+      "correlated": {
+        "count": 369,
+        "brier": 0.20232401704375177,
+        "logLoss": 0.5950539857530215
+      },
+      "independent": {
+        "count": 369,
+        "brier": 0.2024896781492757,
+        "logLoss": 0.5954749192743108
+      }
+    },
+    {
+      "season": 2025,
+      "trainedThrough": 2024,
+      "correlated": {
+        "count": 401,
+        "brier": 0.18439647084001098,
+        "logLoss": 0.5558691615765909
+      },
+      "independent": {
+        "count": 401,
+        "brier": 0.18330434519402092,
+        "logLoss": 0.5530555585406669
+      }
+    },
+    {
+      "season": 2026,
+      "trainedThrough": 2025,
+      "correlated": {
+        "count": 133,
+        "brier": 0.23753958323932153,
+        "logLoss": 0.6716656301591285
+      },
+      "independent": {
+        "count": 133,
+        "brier": 0.24068978667210997,
+        "logLoss": 0.6799506550774927
+      }
+    }
+  ],
+  "calibration": [
+    {
+      "from": 0,
+      "to": 0.1,
+      "count": 0,
+      "meanChance": null,
+      "observed": null
+    },
+    {
+      "from": 0.1,
+      "to": 0.2,
+      "count": 0,
+      "meanChance": null,
+      "observed": null
+    },
+    {
+      "from": 0.2,
+      "to": 0.30000000000000004,
+      "count": 903,
+      "meanChance": 0.25783991350776175,
+      "observed": 0.27353266888150607
+    },
+    {
+      "from": 0.3,
+      "to": 0.4,
+      "count": 0,
+      "meanChance": null,
+      "observed": null
+    },
+    {
+      "from": 0.4,
+      "to": 0.5,
+      "count": 0,
+      "meanChance": null,
+      "observed": null
+    },
+    {
+      "from": 0.5,
+      "to": 0.6,
+      "count": 0,
+      "meanChance": null,
+      "observed": null
+    },
+    {
+      "from": 0.6,
+      "to": 0.7,
+      "count": 0,
+      "meanChance": null,
+      "observed": null
+    },
+    {
+      "from": 0.7,
+      "to": 0.7999999999999999,
+      "count": 0,
+      "meanChance": null,
+      "observed": null
+    },
+    {
+      "from": 0.8,
+      "to": 0.9,
+      "count": 0,
+      "meanChance": null,
+      "observed": null
+    },
+    {
+      "from": 0.9,
+      "to": 1.0,
+      "count": 0,
+      "meanChance": null,
+      "observed": null
+    }
+  ],
+  "sources": [
+    "nflverse bundled player box scores",
+    "nflverse bundled final scores"
+  ],
+  "creditsUsed": 0,
+  "dataCutoff": "2026-11-09",
+  "sourceHashes": {
+    "nfl-player-stats.json": "4dc1157704d2fc39d6f3614eebf6cbb2ae8d9359eb6515e3b16f100bdc1d08a4",
+    "nfl-history.json": "045eaf44492e0980b879f2fad05ed745181da62c3bed3406fd433144003cf08f"
+  }
+}

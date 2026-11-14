@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../domain/coach_board.dart';
+import '../domain/eastern.dart';
 import '../domain/history.dart';
 import '../domain/injury_report.dart';
 import '../domain/matchup.dart';
@@ -13,6 +14,7 @@ import '../theme/edge_theme.dart';
 import '../ui/value_check.dart';
 import '../ui/wordmark.dart';
 import 'prop_pricing.dart';
+import 'script_research_panel.dart';
 
 class ParlaySlipView extends StatefulWidget {
   const ParlaySlipView({
@@ -47,6 +49,8 @@ class _ParlaySlipViewState extends State<ParlaySlipView> {
     text: widget.slip.slip.stake.toStringAsFixed(2),
   );
   String? stakeError;
+  String? simulationKey;
+  double? simulatedJoint, quotedDecimal;
 
   @override
   void initState() {
@@ -98,6 +102,7 @@ class _ParlaySlipViewState extends State<ParlaySlipView> {
     );
     final byId = {for (final card in cards) card.id: card};
     final legs = <ShownProp>[];
+    final memo = PropPricingMemo();
     final missing = <String>[];
     for (final key in widget.slip.slip.selectionKeys) {
       final card = byId[key];
@@ -115,10 +120,21 @@ class _ParlaySlipViewState extends State<ParlaySlipView> {
           now: widget.now,
           injuries: widget.injuries,
           scores: widget.scores,
+          memo: memo,
         ),
       );
     }
     final opposed = _hasOppositeSides(legs);
+    final day = easternWall(widget.now);
+    // A freshness clock tick must not discard a result or a typed quote.
+    // Recalculate only for changed research inputs or a new NFL game date.
+    final signature =
+        '${identityHashCode(widget.directory)}:${identityHashCode(widget.scores)}:${identityHashCode(widget.context)}:${day.year}-${day.month}-${day.day}:${legs.map((l) => '${l.card.id}:${l.card.event?.startsAt}:${l.card.event?.home}:${l.card.event?.away}:${l.card.best?.bookId}:${l.card.best?.decimal}:${l.verdict.ourChance}:${l.projection?.mean}:${l.projection?.sd}:${l.projection?.games}:${l.windows?.team}:${l.dataWarning}').join('|')}';
+    if (signature != simulationKey) {
+      simulationKey = signature;
+      simulatedJoint = null;
+      quotedDecimal = null;
+    }
     TicketValue? ticket;
     String? ticketError;
     if (opposed) {
@@ -127,6 +143,9 @@ class _ParlaySlipViewState extends State<ParlaySlipView> {
       try {
         ticket = priceTicket(
           [for (final leg in legs) ticketLegFor(leg)],
+          requireSimulation: true,
+          simulatedJoint: simulatedJoint,
+          pastedDecimal: quotedDecimal,
           booksByLeg: [
             for (final leg in legs)
               [
@@ -215,6 +234,23 @@ class _ParlaySlipViewState extends State<ParlaySlipView> {
               ),
             ),
           ],
+          if (legs.length >= 2 && missing.isEmpty && !opposed)
+            ScriptResearchPanel(
+              key: ValueKey(signature),
+              legs: legs,
+              cards: cards,
+              board: widget.board,
+              directory: widget.directory,
+              scores: widget.scores,
+              now: widget.now,
+              context: widget.context,
+              injuries: widget.injuries,
+              onResult: (joint) => setState(() => simulatedJoint = joint),
+              onQuote: (price) => setState(() => quotedDecimal = price),
+              onReplace: (old, replacement) => widget.slip.setSlip(
+                widget.slip.slip.remove(old).add(replacement),
+              ),
+            ),
         ],
         const SizedBox(height: 4),
         TextButton.icon(
@@ -313,12 +349,19 @@ class _TicketSummary extends StatelessWidget {
             '${stakeText == null || returnText == null ? '' : ' · $stakeText returns $returnText'}',
             style: EdgeType.label,
           ),
+          if (ticket.sameGame && ticket.payoutEstimated)
+            Text(
+              ticket.joint == null
+                  ? 'Unadjusted leg-price illustration. Run the simulation and enter the exact book ticket quote for a meaningful price comparison.'
+                  : 'Illustrative payout uses a 4.5% assumed hold, capped at multiplied leg prices. It is not a sportsbook quote; enter yours below.',
+              style: EdgeType.label,
+            ),
           const SizedBox(height: 14),
           ValueCheck(
             word: ticket.word,
             ourChance: ticket.joint,
             bookChance: implied,
-            ourLabel: 'Our combined chance',
+            ourLabel: 'Combined estimate',
             bookLabel: "Payout's implied chance",
             overpriced:
                 ticket.word == ValueWord.skip &&

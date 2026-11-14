@@ -142,7 +142,7 @@ class _ParlaysScreenState extends State<ParlaysScreen> {
         const SectionLabel('SAME GAME'),
         const SizedBox(height: 8),
         const Text(
-          'Same-game payouts below are estimated. They are not a price a book posted.',
+          'Game-ticket payouts below are unadjusted illustrations, not book offers. The empirical simulator currently supports player yards and receptions; spread/total joint chances are left blank.',
           style: EdgeType.body,
         ),
         const SizedBox(height: 12),
@@ -259,14 +259,14 @@ class _ParlaysScreenState extends State<ParlaysScreen> {
           priceTicket([
             _sideInput(event, spread, shared.$1, line),
             _sideInput(event, total, shared.$2, line),
-          ]),
+          ], requireSimulation: true),
         );
       } else {
         tickets.add(
           priceTicket([
             _sideInput(event, spread, spread.best!, line),
             _sideInput(event, total, total.best!, line),
-          ]),
+          ], requireSimulation: true),
         );
       }
       if (tickets.length == 4) break;

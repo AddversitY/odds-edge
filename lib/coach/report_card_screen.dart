@@ -18,6 +18,7 @@ import '../domain/public_sharp.dart';
 import '../explained_number.dart';
 import '../theme/edge_theme.dart';
 import '../ui/wordmark.dart';
+import '../ui/parlay_validation.dart';
 import 'coach_widgets.dart';
 
 class ReportCardScreen extends StatefulWidget {
@@ -86,11 +87,7 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
       final liveCalibrator = propLiveChance == PropLiveChance.calibrated
           ? next.calibrator
           : null;
-      final index = usageIndexFor(
-        data.rows,
-        scores: scores,
-        matchup: matchup,
-      );
+      final index = usageIndexFor(data.rows, scores: scores, matchup: matchup);
       final closing = propClosingValue(
         widget.lineHistory,
         overChance: (player, market, line, at, earlier) {
@@ -183,6 +180,8 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
               error: error,
               clv: clv,
             ),
+            const SizedBox(height: 22),
+            const ParlayValidation(),
             const SizedBox(height: 22),
             Text(
               'Closes',
@@ -644,8 +643,7 @@ class _VersionCompare extends StatelessWidget {
     final note = switch (live) {
       PropLiveChance.calibrated =>
         'Recalibration beat both on the fair line. Not a sportsbook test.',
-      PropLiveChance.usage =>
-        'Usage beat the record. Recalibration did not beat both. Not a sportsbook test.',
+      PropLiveChance.usage => 'Usage beat the record. Recalibration did not beat both. Not a sportsbook test.',
       PropLiveChance.record =>
         'Neither usage chance beat the record on the fair line.',
     };

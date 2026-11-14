@@ -43,12 +43,15 @@ jobs:
         if: github.event_name != 'pull_request'
         run: python tools/import_player_stats.py
 
+      - name: Validate the prior-season parlay dependence model
+        run: python model/parlay_simulation.py
+
       - name: Commit a refreshed model and player file
         if: github.event_name != 'pull_request'
         run: |
           git config user.name "odds-edge-model"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add assets/nfl-model.json assets/nfl-player-stats.json
+          git add assets/nfl-model.json assets/nfl-player-stats.json assets/parlay-calibration.json
           if git diff --cached --quiet; then
             echo "Model and player files unchanged."
           else

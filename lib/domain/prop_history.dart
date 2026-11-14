@@ -76,6 +76,7 @@ class PlayerDirectory {
     for (final game in data.rows) {
       final name = _normalize(game.name);
       if (name.isEmpty) continue;
+      (_rowsByPlayer[game.playerId] ??= []).add(game);
       (_idsByName[name] ??= {}).add(game.playerId);
       final identity = _players[game.playerId] ??= _Identity(game.playerId);
       final newer =
@@ -96,6 +97,7 @@ class PlayerDirectory {
   late final int currentSeason;
   final _idsByName = <String, Set<String>>{};
   final _players = <String, _Identity>{};
+  final _rowsByPlayer = <String, List<PlayerGame>>{};
 
   PropWindows lookup({
     required String playerName,
@@ -108,8 +110,7 @@ class PlayerDirectory {
     final metric = propStatMetrics[market];
     if (metric == null) {
       return const PropWindows(
-        note:
-            'This prop is not in the free NFL box scores, so the hit rate is left blank.',
+        note: 'This prop is not in the free NFL box scores, so the hit rate is left blank.',
       );
     }
     final ids = _idsByName[_normalize(playerName)];
@@ -126,8 +127,23 @@ class PlayerDirectory {
       );
     }
     final id = ids.single;
-    final identity = _players[id];
-    final games = data.rows;
+    final games = _rowsByPlayer[id] ?? const <PlayerGame>[];
+    var identity = _players[id];
+    if (through != null) {
+      identity = null;
+      for (final row in playerGames(games, id, through: through)) {
+        final current = identity;
+        if (current == null ||
+            row.season > current.season ||
+            (row.season == current.season && row.week >= current.week)) {
+          identity = _Identity(id)
+            ..team = row.team
+            ..position = row.position
+            ..season = row.season
+            ..week = row.week;
+        }
+      }
+    }
     HitRate window(String label, {int? limit, int? season, String? foe}) {
       final rows = propGames(
         games,
@@ -146,7 +162,7 @@ class PlayerDirectory {
       );
     }
 
-    final seasonYear = currentSeason > 0 ? currentSeason : null;
+    final seasonYear = identity?.season;
     final foe = opponent?.trim().toUpperCase();
     return PropWindows(
       playerId: id,
@@ -156,9 +172,7 @@ class PlayerDirectory {
       last5: window('Last 5', limit: 5),
       last10: window('Last 10', limit: 10),
       last20: window('Last 20', limit: 20),
-      season: seasonYear == null
-          ? null
-          : window('Season', season: seasonYear),
+      season: seasonYear == null ? null : window('Season', season: seasonYear),
       headToHead: foe == null || foe.isEmpty
           ? null
           : window('Head to head', foe: foe),
@@ -172,7 +186,7 @@ class PlayerDirectory {
     final role = identity.position.isEmpty ? 'player' : identity.position;
     final base =
         'Latest recorded game lists this player as $role for $team. '
-        'That is the newest box score in the file, not a confirmation they are starting. '
+        'That is the newest box score allowed by this history cutoff, not a confirmation they are starting. '
         'Last 5, 10, and 20 use regular-season games only and can cross seasons. '
         'A missing stat is skipped, not counted as a miss.';
     if (foe == null) return base;

@@ -190,9 +190,19 @@ TicketValue priceTicket(
   List<TicketLegInput> legs, {
   double? pastedDecimal,
   List<List<BookLegPrice>> booksByLeg = const [],
+  double? simulatedJoint,
+  bool requireSimulation = false,
 }) {
   if (legs.length < 2) {
     throw ArgumentError('A parlay needs at least two legs.');
+  }
+  if (pastedDecimal != null &&
+      (!pastedDecimal.isFinite || pastedDecimal <= 1)) {
+    throw ArgumentError('Ticket odds must be a finite decimal greater than 1.');
+  }
+  if (simulatedJoint != null &&
+      (!simulatedJoint.isFinite || simulatedJoint < 0 || simulatedJoint > 1)) {
+    throw ArgumentError('The simulated joint chance must be between 0 and 1.');
   }
   final judged = [
     for (final leg in legs)
@@ -210,10 +220,15 @@ TicketValue priceTicket(
   if (complete) {
     final values = chances.cast<double>();
     independent = values.reduce((a, b) => a * b);
-    joint = jointChance(values, _correlation(legs));
+    joint =
+        simulatedJoint ??
+        (requireSimulation
+            ? (sameGame ? null : independent)
+            : jointChance(values, _correlation(legs)));
   }
   final multiplied = legs.fold<double>(1, (total, leg) => total * leg.decimal);
   final pasted = pastedDecimal != null;
+  final best = _bestBook(booksByLeg);
   double payout = multiplied;
   var estimated = false;
   if (pasted) {
@@ -224,8 +239,11 @@ TicketValue priceTicket(
   } else if (sameGame) {
     payout = multiplied;
     estimated = true;
+  } else if (best != null) {
+    payout = best.decimal;
+  } else if (booksByLeg.isNotEmpty) {
+    estimated = true;
   }
-  final best = _bestBook(booksByLeg);
   TicketLegValue? skippedLeg;
   for (final leg in judged) {
     if (leg.verdict.word == ValueWord.skip) {
@@ -235,7 +253,9 @@ TicketValue priceTicket(
   }
   double? profit;
   ValueWord word;
-  if (skippedLeg != null || joint == null) {
+  if (skippedLeg != null ||
+      joint == null ||
+      (requireSimulation && sameGame && !pasted)) {
     word = ValueWord.skip;
   } else {
     profit = expectedValue(payout, joint);
@@ -273,7 +293,7 @@ TicketValue priceTicket(
     sameGame: sameGame,
     joint: joint,
     independent: independent,
-    bestBook: best?.book,
+    bestBook: sameGame || pasted ? null : best?.book,
     expectedValue: profit,
   );
 }
