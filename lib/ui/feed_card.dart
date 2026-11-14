@@ -163,40 +163,6 @@ class FeedPropCard extends StatelessWidget {
                   if (samples.isNotEmpty) _Sparkline(samples: samples),
                 ],
               ),
-              if (shown.note != null) ...[
-                const SizedBox(height: 8),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(top: 5),
-                      child: Container(
-                        width: 6,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: switch (shown.note!.tone) {
-                            MatchupTone.favorable => EdgeColors.good,
-                            MatchupTone.tough => EdgeColors.bad,
-                            MatchupTone.even => EdgeColors.textTertiary,
-                          },
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        shown.note!.text,
-                        style: EdgeType.label.copyWith(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          height: 1.3,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
             ],
           ),
         ),
